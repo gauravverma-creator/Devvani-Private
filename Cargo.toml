@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "crates/devvani-lexer",
+    "crates/devvani-parser", 
+    "crates/devvani-ast",
+    "crates/devvani-number",
+    "crates/devvani-codegen",
+    "crates/devvani-compiler",
+    "crates/devvani-cli",
+]
+resolver = "2"

@@ -1,0 +1,355 @@
+{
+  "sandhi_rules": [
+    {
+      "name": "Savarna Dirgha",
+      "sutra": "6.1.101",
+      "description": "When two similar vowels (savarna) meet, they merge into a single long vowel.",
+      "compiler_relevance": "Lexer must handle vowel merging; Parser must treat combined vowels as single tokens or handle them in the semantic analysis phase.",
+      "devvani_syntax": "a + a = ā, i + i = ī, u + u = ū",
+      "sanskrit_example": {
+        "input": "vidyā + ālayah",
+        "output": "vidyālayah",
+        "transliteration": "vidyālayah",
+        "meaning": "school"
+      },
+      "equivalent_in": {
+        "python": "string concatenation and normalization",
+        "rust": "String::push_str() and unicode normalization"
+      }
+    },
+
+    
+    {
+      "name": "Guna",
+      "sutra": "1.1.2",
+      "description": "A vowel (i, u, r, l) is transformed into its Guna equivalent (e, o, ar, al).",
+      "compiler_relevance": "Requires a mapping table for vowel transformations in the lexer.",
+      "devvani_syntax": "i -> e, u -> o, r -> ar",
+      "sanskrit_example": {
+        "input": "upa + indrah",
+        "output": "upendrah",
+        "transliteration": "upendrah",
+        "meaning": "Upendra (name)"
+      },
+      "equivalent_in": {
+        "python": "mapping dict lookup",
+        "rust": "HashMap<char, char> lookup"
+      }
+    },
+    {
+      "name": "Vrddhi",
+      "sutra": "1.1.1",
+      "description": "A vowel (i, u, r, l) or its Guna equivalent is transformed into its Vrddhi equivalent (ai, au, ār, āl).",
+      "compiler_relevance": "Lexer transformation similar to Guna.",
+      "devvani_syntax": "a + e = ai, a + o = au",
+      "sanskrit_example": {
+        "input": "ava + eti",
+        "output": "avaiti",
+        "transliteration": "avaiti",
+        "meaning": "he knows"
+      },
+      "equivalent_in": {
+        "python": "mapping dict lookup",
+        "rust": "HashMap<char, char> lookup"
+      }
+    },
+    {
+      "name": "Yan Sandhi",
+      "sutra": "6.1.77",
+      "description": "Vowels (i, u, r, l) before a different vowel are replaced by their semi-vowels (y, v, r, l).",
+      "compiler_relevance": "Parser requires lookahead to determine if a vowel should be replaced.",
+      "devvani_syntax": "i -> y, u -> v, r -> r",
+      "sanskrit_example": {
+        "input": "iti + ādi",
+        "output": "ityādi",
+        "transliteration": "ityādi",
+        "meaning": "etcetera"
+      },
+      "equivalent_in": {
+        "python": "regex substitution",
+        "rust": "regex::Regex::replace()"
+      }
+    },
+    {
+      "name": "Visarga Sandhi",
+      "sutra": "8.3.15",
+      "description": "Visarga (h) is modified or dropped based on the following sound.",
+      "compiler_relevance": "Visarga needs to be treated as a special character in tokenization.",
+      "devvani_syntax": "h + c = ś, h + t = s",
+      "sanskrit_example": {
+        "input": "namah + te",
+        "output": "namaste",
+        "transliteration": "namaste",
+        "meaning": "salutations to you"
+      },
+      "equivalent_in": {
+        "python": "conditional string modification",
+        "rust": "match statement on Visarga token"
+      }
+    }
+  ],
+  "karaka_system": [
+    {
+      "karaka": "Kartā (Subject)",
+      "sutra": "1.4.54",
+      "role_in_devvani": "Function caller / Main execution thread",
+      "vibhakti": "Prathamā (Nominative)",
+      "syntax_position": "Primary actor at start of expression",
+      "example": {
+        "sanskrit": "rāmah phalam khādati",
+        "transliteration": "rāmaH phalaM khādati",
+        "devvani_equivalent": "Rāmah.khādati(phalam)",
+        "meaning": "Rama eats fruit"
+      }
+    },
+    {
+      "karaka": "Karma (Object)",
+      "sutra": "1.4.49",
+      "role_in_devvani": "Function parameter / Data being processed",
+      "vibhakti": "Dvitīyā (Accusative)",
+      "syntax_position": "Directly before verb",
+      "example": {
+        "sanskrit": "rāmah phalam khādati",
+        "transliteration": "rāmaH phalaM khādati",
+        "devvani_equivalent": "Rāmah.khādati(phalam)",
+        "meaning": "Rama eats fruit"
+      }
+    },
+    {
+      "karaka": "Karana (Instrument)",
+      "sutra": "1.4.42",
+      "role_in_devvani": "Library / Helper function",
+      "vibhakti": "Tr̥tīyā (Instrumental)",
+      "syntax_position": "Used for operational context",
+      "example": {
+        "sanskrit": "sa kalomena likhati",
+        "transliteration": "sa kalomena likhati",
+        "devvani_equivalent": "Sa.likhati(kalomena)",
+        "meaning": "He writes with a pen"
+      }
+    },
+    {
+      "karaka": "Sampradāna (Dative)",
+      "sutra": "1.4.32",
+      "role_in_devvani": "Return target / Receiver",
+      "vibhakti": "Caturthī (Dative)",
+      "syntax_position": "Recipient context",
+      "example": {
+        "sanskrit": "dhanam brāhmanāya dadāti",
+        "transliteration": "dhanam brāhmanāya dadāti",
+        "devvani_equivalent": "Danam.dadāti(brāhmanāya)",
+        "meaning": "He gives wealth to the Brahmin"
+      }
+    },
+    {
+      "karaka": "Adhikarana (Locative)",
+      "sutra": "1.4.45",
+      "role_in_devvani": "Namespace / Module / Scope",
+      "vibhakti": "Saptamī (Locative)",
+      "syntax_position": "Scope context definition",
+      "example": {
+        "sanskrit": "ghate jalam asti",
+        "transliteration": "ghate jalam asti",
+        "devvani_equivalent": "Ghate.jalam()",
+        "meaning": "In the pot is water"
+      }
+    }
+  ],
+  "dhatu_list": [
+    {
+      "dhatu": "Gam",
+      "meaning": "To go",
+      "gana": "1",
+      "devvani_keyword": "gacchati",
+      "usage_example": {
+        "sanskrit": "sa gacchati",
+        "devvani": "Sa.gacchati()",
+        "meaning": "He goes"
+      }
+    },
+    {
+      "dhatu": "Path",
+      "meaning": "To read",
+      "gana": "1",
+      "devvani_keyword": "pathati",
+      "usage_example": {
+        "sanskrit": "aham pathāmi",
+        "devvani": "Aham.pathāmi()",
+        "meaning": "I read"
+      }
+    },
+    {
+      "dhatu": "Bhū",
+      "meaning": "To be",
+      "gana": "1",
+      "devvani_keyword": "bhavati",
+      "usage_example": {
+        "sanskrit": "idam bhavati",
+        "devvani": "Idam.bhavati()",
+        "meaning": "This happens"
+      }
+    },
+    {
+      "dhatu": "Kr",
+      "meaning": "To do",
+      "gana": "8",
+      "devvani_keyword": "karoti",
+      "usage_example": {
+        "sanskrit": "sa karoti",
+        "devvani": "Sa.karoti()",
+        "meaning": "He does"
+      }
+    },
+    {
+      "dhatu": "Sthā",
+      "meaning": "To stand",
+      "gana": "1",
+      "devvani_keyword": "tisthati",
+      "usage_example": {
+        "sanskrit": "sa tisthati",
+        "devvani": "Sa.tisthati()",
+        "meaning": "He stands"
+      }
+    }
+  ],
+  "pratyaya_rules": [
+    {
+      "pratyaya": "Sup",
+      "type": "Vibhakti (Case ending)",
+      "attaches_to": "Prātipadika (Noun base)",
+      "devvani_effect": "Sets noun type/scope",
+      "example": {
+        "base": "Rāma",
+        "with_pratyaya": "Rāmah",
+        "devvani_syntax": "Rāmah::Type",
+        "meaning": "Rama (Nom. Sing.)"
+      }
+    },
+    {
+      "pratyaya": "Tin",
+      "type": "Verb ending",
+      "attaches_to": "Dhātu (Root)",
+      "devvani_effect": "Defines function behavior (tense/mood)",
+      "example": {
+        "base": "Gam",
+        "with_pratyaya": "Gacchati",
+        "devvani_syntax": "Gam.gacchati()",
+        "meaning": "He goes (Present)"
+      }
+    },
+    {
+      "pratyaya": "Ktva",
+      "type": "Krit (Participle)",
+      "attaches_to": "Dhātu (Root)",
+      "devvani_effect": "Creates conjunctive verb / async chain",
+      "example": {
+        "base": "Gam",
+        "with_pratyaya": "Gatvā",
+        "devvani_syntax": "Gam.gatvā().next()",
+        "meaning": "Having gone"
+      }
+    },
+    {
+      "pratyaya": "Tumun",
+      "type": "Krit (Infinitive)",
+      "attaches_to": "Dhātu (Root)",
+      "devvani_effect": "Defines purpose / callback",
+      "example": {
+        "base": "Path",
+        "with_pratyaya": "Pathitum",
+        "devvani_syntax": "Path.pathitum()",
+        "meaning": "To read"
+      }
+    },
+    {
+      "pratyaya": "Taddhita",
+      "type": "Taddhita (Derivative)",
+      "attaches_to": "Prātipadika (Noun base)",
+      "devvani_effect": "Inheritance/Derivation mechanism",
+      "example": {
+        "base": "Dāśarathi",
+        "with_pratyaya": "Dāśarathi",
+        "devvani_syntax": "class Dāśarathi extends Rāma",
+        "meaning": "Son of Dasharatha"
+      }
+    }
+  ],
+  "samasa_rules": [
+    {
+      "type": "Tatpurusha",
+      "description": "Second word dominant",
+      "devvani_use": "Sub-property / Child class",
+      "example": {
+        "words": ["Rāma", "Putra"],
+        "compound": "Rāmaputra",
+        "transliteration": "Rāmaputra",
+        "meaning": "Rama's son",
+        "devvani_identifier": "Rāma.Putra"
+      }
+    },
+    {
+      "type": "Dvandva",
+      "description": "Both words equal",
+      "devvani_use": "Tuple or multiple return type",
+      "example": {
+        "words": ["Rāma", "Lakshmana"],
+        "compound": "Rāmalakshmanau",
+        "transliteration": "Rāmalakshmanau",
+        "meaning": "Rama and Lakshmana",
+        "devvani_identifier": "tuple(Rāma, Lakshmana)"
+      }
+    },
+    {
+      "type": "Bahuvrīhi",
+      "description": "Third object implied",
+      "devvani_use": "Alias / Mapping interface",
+      "example": {
+        "words": ["Pīta", "Ambar"],
+        
+        "compound": "Pītāmbara",
+        "transliteration": "Pītāmbara",
+        "meaning": "One wearing yellow clothes",
+        "devvani_identifier": "mapping(Pīta, Ambar)"
+      }
+    },
+    {
+      "type": "Avyayībhāva",
+      "description": "First word dominant",
+      "devvani_use": "Modifier / Constant definition",
+      "example": {
+        "words": ["Yatha", "Śakti"],
+        "compound": "Yathaśakti",
+        "transliteration": "Yathaśakti",
+        "meaning": "According to strength",
+        "devvani_identifier": "const YATHA_SAKTI"
+      }
+    },
+    {
+      "type": "Karmadhāraya",
+      "description": "Adjective-noun",
+      "devvani_use": "Type annotation / Typed variable",
+      "example": {
+        "words": ["Nīla", "Utpala"],
+        "compound": "Nīlotpala",
+        "transliteration": "Nīlotpala",
+        "meaning": "Blue lotus",
+        "devvani_identifier": "var Nīla_Utpala"
+      }
+    }
+  ],
+  "vibhakti_to_syntax": {
+    "prathama": { "case": "nominative", "devvani_role": "Subject", "example": "Rāmah" },
+    "dvitiya":  { "case": "accusative", "devvani_role": "Object", "example": "Rāmam" },
+    "tritiya":  { "case": "instrumental", "devvani_role": "Helper", "example": "Rāmena" },
+    "chaturthi":{ "case": "dative", "devvani_role": "ReturnTarget", "example": "Rāmāya" },
+    "panchami": { "case": "ablative", "devvani_role": "Source", "example": "Rāmāt" },
+    "shashthi": { "case": "genitive", "devvani_role": "Parent", "example": "Rāmasya" },
+    "saptami":  { "case": "locative", "devvani_role": "Scope", "example": "Rāme" }
+  },
+  "compiler_architecture": {
+    "lexer_notes": "The lexer must support Unicode for IAST transliteration, handle sandhi-based token merging, and treat special characters like Visarga (h) and Anusvara (m) as distinct semantic modifiers.",
+    "parser_notes": "The parser should be SOV-oriented (Subject-Object-Verb). Karaka mapping dictates AST node relationship: Karta -> Kriya node, Karma -> Kriya input. Samasa-based compounds form nested identifier structures.",
+    "type_system_notes": "Sanskrit's gender/number/case system maps to type inference: Vibhakti indicates Type Category (e.g., Nominative = Type/Class), while Samasa acts as structural typing or composition.",
+    "recommended_rust_structures": "Enum `Vibhakti` (Prathama, Dvitīyā...), Struct `Dhatu` (Root, Gana), Enum `SamasaType` (Tatpurusha...), Struct `ASTNode` (Subject, Object, Verb, Modifier)."
+  }
+}

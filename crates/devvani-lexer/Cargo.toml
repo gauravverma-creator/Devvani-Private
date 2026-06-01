@@ -1,0 +1,11 @@
+[package]
+name = "devvani-lexer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+devvani-number = { path = "../devvani-number" }
+unicode-segmentation = "1.10.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "1.0"

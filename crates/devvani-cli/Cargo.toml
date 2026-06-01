@@ -1,0 +1,13 @@
+[package]
+name = "devvani-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+devvani-lexer = { path = "../devvani-lexer" }
+devvani-ast = { path = "../devvani-ast" }
+devvani-parser = { path = "../devvani-parser" }
+devvani-number = { path = "../devvani-number" }
+clap = { version = "4.0", features = ["derive"] }
+colored = "2.0"
+serde_json = "1.0"

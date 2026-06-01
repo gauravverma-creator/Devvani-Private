@@ -1,0 +1,9 @@
+[package]
+name = "devvani-codegen"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+devvani-ast = { path = "../devvani-ast" }
+devvani-number = { path = "../devvani-number" }
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm17-0"] }

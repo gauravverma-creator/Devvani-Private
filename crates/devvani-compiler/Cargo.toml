@@ -1,0 +1,12 @@
+[package]
+name = "devvani-compiler"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+devvani-lexer = { path = "../devvani-lexer" }
+devvani-parser = { path = "../devvani-parser" }
+devvani-ast = { path = "../devvani-ast" }
+devvani-number = { path = "../devvani-number" }
+devvani-codegen = { path = "../devvani-codegen" }
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm17-0"] }

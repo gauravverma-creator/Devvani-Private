@@ -1,0 +1,8 @@
+[package]
+name = "devvani-ast"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+devvani-lexer = { path = "../devvani-lexer" }
+serde = { version = "1.0", features = ["derive"] }

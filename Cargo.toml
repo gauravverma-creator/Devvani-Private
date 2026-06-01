@@ -7,5 +7,6 @@ members = [
     "crates/devvani-codegen",
     "crates/devvani-compiler",
     "crates/devvani-cli",
+    "crates/devvani-typesystem",
 ]
 resolver = "2"

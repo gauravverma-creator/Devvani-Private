@@ -1,0 +1,7 @@
+[package]
+name = "devvani-typesystem"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+devvani-ast = { path = "../devvani-ast" }

@@ -1,380 +1,280 @@
-use inkwell::context::Context;
-use inkwell::builder::Builder;
-use inkwell::module::Module;
-use inkwell::values::*;
-use inkwell::types::*;
-use inkwell::AddressSpace;
-use inkwell::IntPredicate;
-use std::collections::HashMap;
-use devvani_ast::*;
+use devvani_ast::ASTNode;
+use devvani_typesystem::{
+    TypeChecker, Lakara,
+    lakara_to_scope, lakara_from_str,
+};
 
-pub struct DevvaniCodegen<'ctx> {
-    pub context: &'ctx Context,
-    pub builder: Builder<'ctx>,
-    pub module: Module<'ctx>,
-    variables: HashMap<String, PointerValue<'ctx>>,
-    functions: HashMap<String, FunctionValue<'ctx>>,
-}
-
+// ── Error type ──────────────────────────────────────────────
 #[derive(Debug)]
 pub enum CodegenError {
-    UndefinedVariable(String),
-    UndefinedFunction(String),
-    TypeMismatch(String),
-    LLVMError(String),
     UnsupportedNode(String),
+    TypeCheckFailed(String),
+    IoError(String),
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum TargetArch {
-    Native,
-    X86_64,
-    Arm64,
-    Wasm32,
+impl std::fmt::Display for CodegenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CodegenError::UnsupportedNode(s) => write!(f, "Unsupported node: {}", s),
+            CodegenError::TypeCheckFailed(s) => write!(f, "Type check failed: {}", s),
+            CodegenError::IoError(s) => write!(f, "IO error: {}", s),
+        }
+    }
 }
 
-impl<'ctx> DevvaniCodegen<'ctx> {
-    pub fn new(context: &'ctx Context, module_name: &str) -> Self {
-        let builder = context.create_builder();
-        let module = context.create_module(module_name);
+impl std::error::Error for CodegenError {}
+
+// ── Output target ────────────────────────────────────────────
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CodegenTarget {
+    RustSource,   // emit .rs source
+    Bytecode,     // emit simple bytecode (Vec<Instruction>)
+}
+
+// ── Simple bytecode instructions ─────────────────────────────
+#[derive(Debug, Clone, PartialEq)]
+pub enum Instruction {
+    Bind { name: String, rust_type: String, mutable: bool },
+    Call { subject: String, verb: String, args: Vec<String> },
+    EnterScope { name: String, is_async: bool },
+    ExitScope,
+    Return { value: String },
+    Comment(String),
+}
+
+// ── Main codegen struct ───────────────────────────────────────
+pub struct Codegen {
+    pub target: CodegenTarget,
+    pub type_checker: TypeChecker,
+    pub instructions: Vec<Instruction>,
+    pub rust_output: String,
+    indent: usize,
+}
+
+impl Codegen {
+    pub fn new(target: CodegenTarget) -> Self {
         Self {
-            context,
-            builder,
-            module,
-            variables: HashMap::new(),
-            functions: HashMap::new(),
+            target,
+            type_checker: TypeChecker::new(),
+            instructions: Vec::new(),
+            rust_output: String::new(),
+            indent: 0,
         }
     }
 
-    pub fn compile_program(&mut self, program: &ASTNode) -> Result<(), CodegenError> {
-        self.declare_builtins();
-        
-        let i32_type = self.context.i32_type();
-        let main_fn_type = i32_type.fn_type(&[], false);
-        let main_fn = self.module.add_function("main", main_fn_type, None);
-        let entry_bb = self.context.append_basic_block(main_fn, "entry");
-        self.builder.position_at_end(entry_bb);
+    pub fn generate(&mut self, node: &ASTNode) -> Result<(), CodegenError> {
+        // 1. Run type checker first
+        let errors = self.type_checker.check_program(node);
+        if !errors.is_empty() {
+            return Err(CodegenError::TypeCheckFailed(format!("{:?}", errors)));
+        }
 
-        if let ASTNode::Program { statements, .. } = program {
-            for stmt in statements {
-                self.generate_statement(stmt)?;
-            }
-        }
-        
-        let exit_fn = self.module.get_function("exit").unwrap();
-        self.builder.build_call(exit_fn, &[i32_type.const_int(0, false).into()], "callexit").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-        
-        if entry_bb.get_terminator().is_none() {
-            self.builder.build_return(Some(&i32_type.const_int(0, false))).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-        } else if let Some(term) = entry_bb.get_terminator() {
-            if term.get_opcode() != inkwell::values::InstructionOpcode::Return {
-                 self.builder.build_return(Some(&i32_type.const_int(0, false))).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-            }
-        }
-        
-        Ok(())
+        // 2. Then call emit(node)
+        self.emit(node)
     }
 
-    fn generate_statement(&mut self, node: &ASTNode) -> Result<(), CodegenError> {
+    fn emit(&mut self, node: &ASTNode) -> Result<(), CodegenError> {
         match node {
-            ASTNode::DhatuDef { name, params, body, .. } => {
-                let param_names: Vec<String> = params.iter().map(|p| p.name.clone()).collect();
-                self.compile_function(name, &param_names, body)?;
-                Ok(())
-            }
-            ASTNode::Return { value, .. } => {
-                if let Some(val) = value {
-                    let ret_val = self.generate_expression(val)?;
-                    self.builder.build_return(Some(&ret_val)).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                } else {
-                    self.builder.build_return(None).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
+            ASTNode::Program { statements, .. } => {
+                for stmt in statements {
+                    self.emit(stmt)?;
                 }
-                Ok(())
             }
-            ASTNode::Conditional { condition, then_branch, else_branch, .. } => {
-                self.compile_if(condition, then_branch, else_branch)
-            }
-            ASTNode::Loop { condition, body, .. } => {
-                self.compile_while(condition, body)
-            }
-            ASTNode::KriyaCall { .. } | ASTNode::BinaryExpr { .. } | ASTNode::UnaryExpr { .. } |
-            ASTNode::Nama { .. } | ASTNode::Samasa { .. } | ASTNode::IntLiteral { .. } |
-            ASTNode::FloatLiteral { .. } | ASTNode::StringLiteral { .. } | ASTNode::BoolLiteral { .. } |
-            ASTNode::Dvandva { .. } | ASTNode::KritChain { .. } => {
-                self.generate_expression(node)?;
-                Ok(())
-            }
-            ASTNode::Comment { .. } => Ok(()),
-            _ => Err(CodegenError::UnsupportedNode(format!("{:?}", node))),
-        }
-    }
-
-    fn generate_expression(&mut self, expr: &ASTNode) -> Result<BasicValueEnum<'ctx>, CodegenError> {
-        match expr {
             ASTNode::Nama { base, .. } => {
-                let ptr = self.variables.get(base).ok_or_else(|| CodegenError::UndefinedVariable(base.clone()))?;
-                let val = self.builder.build_load(self.context.i64_type(), *ptr, base).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(val)
+                if let Some(symbol) = self.type_checker.env.lookup(base) {
+                    self.instructions.push(Instruction::Bind {
+                        name: symbol.name.clone(),
+                        rust_type: symbol.rust_type_hint.clone(),
+                        mutable: symbol.mutability.is_mutable,
+                    });
+                    
+                    let line = format!("{}let {}: {};\n", 
+                        self.indent_str(),
+                        if symbol.mutability.is_mutable { format!("mut {}", symbol.name) } else { symbol.name.clone() },
+                        symbol.rust_type_hint
+                    );
+                    self.rust_output.push_str(&line);
+                }
+            }
+            ASTNode::KriyaCall { karta, kriya, karma, .. } => {
+                let subject = if let Some(k) = karta {
+                    if let ASTNode::Nama { base, .. } = &**k {
+                        base.clone()
+                    } else {
+                        "self".to_string()
+                    }
+                } else {
+                    "self".to_string()
+                };
+
+                let mut arg_names = Vec::new();
+                for arg in karma {
+                    if let ASTNode::Nama { base, .. } = arg {
+                        arg_names.push(base.clone());
+                    } else if let ASTNode::IntLiteral { value, .. } = arg {
+                        arg_names.push(value.to_string());
+                    }
+                }
+
+                self.instructions.push(Instruction::Call {
+                    subject: subject.clone(),
+                    verb: kriya.clone(),
+                    args: arg_names.clone(),
+                });
+
+                let line = format!("{}.{}({});\n", subject, kriya, arg_names.join(", "));
+                self.rust_output.push_str(&self.indent_str());
+                self.rust_output.push_str(&line);
+            }
+            ASTNode::DhatuDef { name, params, body, lakara, .. } => {
+                let ts_lakara = lakara_from_str(&format!("{:?}", lakara)).unwrap_or(Lakara::Lat);
+                let scope = lakara_to_scope(&ts_lakara);
+                
+                self.instructions.push(Instruction::EnterScope {
+                    name: name.clone(),
+                    is_async: scope.is_async,
+                });
+
+                let mut rust_params = Vec::new();
+                for param in params {
+                    // For params, we can lookup their types in the current env (after entering scope)
+                    // But we are currently at the definition site.
+                    // Let's just use a placeholder for now as full param type mapping is Phase 4.
+                    rust_params.push(format!("{}: i64", param.name));
+                    self.instructions.push(Instruction::Bind {
+                        name: param.name.clone(),
+                        rust_type: "i64".to_string(),
+                        mutable: false,
+                    });
+                }
+
+                let async_kw = if scope.is_async { "async " } else { "" };
+                let line = format!("{}pub {}fn {}({}) {{\n", self.indent_str(), async_kw, name, rust_params.join(", "));
+                self.rust_output.push_str(&line);
+                
+                self.indent += 1;
+                for stmt in body {
+                    self.emit(stmt)?;
+                }
+                self.indent -= 1;
+                
+                self.rust_output.push_str(&self.indent_str());
+                self.rust_output.push_str("}\n");
+                
+                self.instructions.push(Instruction::ExitScope);
             }
             ASTNode::IntLiteral { value, .. } => {
-                Ok(self.context.i64_type().const_int(*value as u64, false).into())
+                self.rust_output.push_str(&value.to_string());
             }
             ASTNode::FloatLiteral { value, .. } => {
-                Ok(self.context.f64_type().const_float(*value).into())
+                self.rust_output.push_str(&value.to_string());
             }
-            ASTNode::BoolLiteral { value, .. } => {
-                Ok(self.context.bool_type().const_int(if *value { 1 } else { 0 }, false).into())
-            }
-            ASTNode::StringLiteral { value, .. } => {
-                let global = self.builder.build_global_string_ptr(value, "str").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(global.as_basic_value_enum())
-            }
-            ASTNode::BinaryExpr { left, op, right, .. } => {
-                self.compile_binary_op(left, op, right)
-            }
-            ASTNode::KriyaCall { kriya, karma, .. } => {
-                let mut args = Vec::new();
-                if !karma.is_empty() {
-                    args.push(&karma[0]);
-                }
-                self.compile_function_call(kriya, &args)
-            }
-            _ => Err(CodegenError::UnsupportedNode(format!("{:?}", expr))),
-        }
-    }
-
-    pub fn compile_function(&mut self, name: &str, params: &[String], body: &[ASTNode]) -> Result<FunctionValue<'ctx>, CodegenError> {
-        let current_bb = self.builder.get_insert_block();
-
-        let i64_type = self.context.i64_type();
-        let param_types: Vec<BasicMetadataTypeEnum> = params.iter().map(|_| i64_type.into()).collect();
-        let fn_type = i64_type.fn_type(&param_types, false);
-        let function = self.module.add_function(name, fn_type, None);
-
-        let basic_block = self.context.append_basic_block(function, "entry");
-        self.builder.position_at_end(basic_block);
-
-        let old_vars = self.variables.clone();
-        self.variables.clear();
-        for (i, arg) in function.get_param_iter().enumerate() {
-            let param_name = &params[i];
-            let alloca = self.builder.build_alloca(i64_type, param_name).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-            self.builder.build_store(alloca, arg).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-            self.variables.insert(param_name.clone(), alloca);
-        }
-
-        for stmt in body {
-            self.generate_statement(stmt)?;
-        }
-
-        if basic_block.get_terminator().is_none() {
-            self.builder.build_return(Some(&i64_type.const_int(0, false))).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-        }
-
-        self.variables = old_vars;
-        self.functions.insert(name.to_string(), function);
-
-        if let Some(bb) = current_bb {
-            self.builder.position_at_end(bb);
-        }
-
-        Ok(function)
-    }
-
-    pub fn compile_if(&mut self, cond: &ASTNode, then: &[ASTNode], else_: &Option<Vec<ASTNode>>) -> Result<(), CodegenError> {
-        let cond_val = self.generate_expression(cond)?;
-        let cond_bool = self.builder.build_int_compare(IntPredicate::NE, cond_val.into_int_value(), self.context.i64_type().const_int(0, false), "ifcond").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-
-        let function = self.builder.get_insert_block().unwrap().get_parent().unwrap();
-        let then_bb = self.context.append_basic_block(function, "then");
-        let else_bb = self.context.append_basic_block(function, "else");
-        let merge_bb = self.context.append_basic_block(function, "ifcont");
-
-        self.builder.build_conditional_branch(cond_bool, then_bb, else_bb).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-
-        self.builder.position_at_end(then_bb);
-        for stmt in then {
-            self.generate_statement(stmt)?;
-        }
-        self.builder.build_unconditional_branch(merge_bb).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-
-        self.builder.position_at_end(else_bb);
-        if let Some(else_stmts) = else_ {
-            for stmt in else_stmts {
-                self.generate_statement(stmt)?;
+            _ => {
+                let msg = format!("Unhandled node: {:?}", node);
+                self.instructions.push(Instruction::Comment(msg.clone()));
+                self.rust_output.push_str(&format!("{}// {}\n", self.indent_str(), msg));
             }
         }
-        self.builder.build_unconditional_branch(merge_bb).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-
-        self.builder.position_at_end(merge_bb);
         Ok(())
     }
 
-    pub fn compile_while(&mut self, cond: &Option<Box<ASTNode>>, body: &[ASTNode]) -> Result<(), CodegenError> {
-        let function = self.builder.get_insert_block().unwrap().get_parent().unwrap();
-        let cond_bb = self.context.append_basic_block(function, "loop_cond");
-        let body_bb = self.context.append_basic_block(function, "loop_body");
-        let exit_bb = self.context.append_basic_block(function, "loop_exit");
-
-        self.builder.build_unconditional_branch(cond_bb).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-
-        self.builder.position_at_end(cond_bb);
-        if let Some(c) = cond {
-            let cond_val = self.generate_expression(c)?;
-            let cond_bool = self.builder.build_int_compare(IntPredicate::NE, cond_val.into_int_value(), self.context.i64_type().const_int(0, false), "whilecond").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-            self.builder.build_conditional_branch(cond_bool, body_bb, exit_bb).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-        } else {
-            self.builder.build_unconditional_branch(body_bb).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-        }
-
-        self.builder.position_at_end(body_bb);
-        for stmt in body {
-            self.generate_statement(stmt)?;
-        }
-        self.builder.build_unconditional_branch(cond_bb).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-
-        self.builder.position_at_end(exit_bb);
-        Ok(())
+    fn indent_str(&self) -> String {
+        "    ".repeat(self.indent)
     }
 
-    pub fn compile_binary_op(&mut self, left: &ASTNode, op: &BinaryOp, right: &ASTNode) -> Result<BasicValueEnum<'ctx>, CodegenError> {
-        let l = self.generate_expression(left)?;
-        let r = self.generate_expression(right)?;
-
-        match op {
-            BinaryOp::Add => {
-                let res = self.builder.build_int_add(l.into_int_value(), r.into_int_value(), "tmpadd").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(res.into())
-            }
-            BinaryOp::Sub => {
-                let res = self.builder.build_int_sub(l.into_int_value(), r.into_int_value(), "tmpsub").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(res.into())
-            }
-            BinaryOp::Mul => {
-                let res = self.builder.build_int_mul(l.into_int_value(), r.into_int_value(), "tmpmul").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(res.into())
-            }
-            BinaryOp::Div => {
-                let res = self.builder.build_int_signed_div(l.into_int_value(), r.into_int_value(), "tmpdiv").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(res.into())
-            }
-            BinaryOp::Mod => {
-                let res = self.builder.build_int_signed_rem(l.into_int_value(), r.into_int_value(), "tmprem").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(res.into())
-            }
-            BinaryOp::Eq => {
-                let res = self.builder.build_int_compare(IntPredicate::EQ, l.into_int_value(), r.into_int_value(), "tmpeq").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmpeqext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::Neq | BinaryOp::NotEq => {
-                let res = self.builder.build_int_compare(IntPredicate::NE, l.into_int_value(), r.into_int_value(), "tmpne").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmpneext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::Gt => {
-                let res = self.builder.build_int_compare(IntPredicate::SGT, l.into_int_value(), r.into_int_value(), "tmpsgt").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmpsgtext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::GtEq => {
-                let res = self.builder.build_int_compare(IntPredicate::SGE, l.into_int_value(), r.into_int_value(), "tmpsge").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmpsgeext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::LtEq => {
-                let res = self.builder.build_int_compare(IntPredicate::SLE, l.into_int_value(), r.into_int_value(), "tmpsle").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmpsleext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::Lt => {
-                let res = self.builder.build_int_compare(IntPredicate::SLT, l.into_int_value(), r.into_int_value(), "tmpslt").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmpsltext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::And => {
-                let l_bool = self.builder.build_int_compare(IntPredicate::NE, l.into_int_value(), self.context.i64_type().const_int(0, false), "land_l").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let r_bool = self.builder.build_int_compare(IntPredicate::NE, r.into_int_value(), self.context.i64_type().const_int(0, false), "land_r").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let res = self.builder.build_and(l_bool, r_bool, "tmpand").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmpandext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::Or => {
-                let l_bool = self.builder.build_int_compare(IntPredicate::NE, l.into_int_value(), self.context.i64_type().const_int(0, false), "lor_l").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let r_bool = self.builder.build_int_compare(IntPredicate::NE, r.into_int_value(), self.context.i64_type().const_int(0, false), "lor_r").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let res = self.builder.build_or(l_bool, r_bool, "tmpor").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                let extended = self.builder.build_int_z_extend(res, self.context.i64_type(), "tmporext").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                Ok(extended.into())
-            }
-            BinaryOp::Not => {
-                 let res = self.builder.build_not(l.into_int_value(), "tmpnot").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                 Ok(res.into())
-            }
-        }
+    pub fn rust_source(&self) -> &str {
+        &self.rust_output
     }
 
-    fn compile_function_call(&mut self, name: &str, args: &[&ASTNode]) -> Result<BasicValueEnum<'ctx>, CodegenError> {
-        if name == "मुद्रण" {
-            let mut compiled_args = Vec::new();
-            for arg in args {
-                compiled_args.push(self.generate_expression(arg)?);
-            }
-            
-            let printf = self.module.get_function("printf").unwrap();
-            let fflush = self.module.get_function("fflush").unwrap();
-            for arg in compiled_args {
-                let format_str = if arg.is_pointer_value() {
-                    self.builder.build_global_string_ptr("%s\n", "fmt_s").unwrap()
-                } else {
-                    self.builder.build_global_string_ptr("%lld\n", "fmt_d").unwrap()
-                };
-                self.builder.build_call(printf, &[format_str.as_pointer_value().into(), arg.into()], "callprintf").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-                self.builder.build_call(fflush, &[self.context.ptr_type(AddressSpace::default()).const_null().into()], "callfflush").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-            }
-            return Ok(self.context.i64_type().const_int(0, false).into());
-        }
+    pub fn bytecode(&self) -> &[Instruction] {
+        &self.instructions
+    }
+}
 
-        let function = self.module.get_function(name).ok_or_else(|| CodegenError::UndefinedFunction(name.to_string()))?;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use devvani_ast::{ASTNode, Vibhakti, Linga as AstLinga, Vacana as AstVacana, Lakara as AstLakara, Span};
 
-        let mut compiled_args = Vec::new();
-        for arg in args {
-            compiled_args.push(self.generate_expression(arg)?.into());
-        }
-        let call = self.builder.build_call(function, &compiled_args, "tmpcall").map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
+    fn dummy_span() -> Span {
+        Span { line: 0, col: 0, len: 0 }
+    }
+
+    #[test]
+    fn test_empty_program() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::Program { statements: vec![], span: dummy_span() };
+        assert!(codegen.generate(&node).is_ok());
+    }
+
+    #[test]
+    fn test_nama_node() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::Nama {
+            base: "Ramah".to_string(),
+            vibhakti: Vibhakti::Prathama,
+            linga: AstLinga::Pullinga,
+            vacana: AstVacana::Eka,
+            span: dummy_span(),
+        };
+        let program = ASTNode::Program { statements: vec![node], span: dummy_span() };
+        assert!(codegen.generate(&program).is_ok());
+        assert!(codegen.rust_source().contains("let Ramah"));
+    }
+
+    #[test]
+    fn test_kriyacall_bytecode() {
+        let mut codegen = Codegen::new(CodegenTarget::Bytecode);
+        let nama = ASTNode::Nama {
+            base: "Ramah".to_string(),
+            vibhakti: Vibhakti::Prathama,
+            linga: AstLinga::Pullinga,
+            vacana: AstVacana::Eka,
+            span: dummy_span(),
+        };
+        let call = ASTNode::KriyaCall {
+            karta: Some(Box::new(nama.clone())),
+            kriya: "pathati".to_string(),
+            karma: vec![],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        let program = ASTNode::Program { statements: vec![nama, call], span: dummy_span() };
+        assert!(codegen.generate(&program).is_ok());
         
-        Ok(call.try_as_basic_value().basic().unwrap_or(self.context.i64_type().const_int(0, false).into()))
+        let found = codegen.bytecode().iter().any(|ins| matches!(ins, Instruction::Call { verb, .. } if verb == "pathati"));
+        assert!(found);
     }
 
-    pub fn declare_builtins(&mut self) {
-        let i32_type = self.context.i32_type();
-        let ptr_type = self.context.ptr_type(AddressSpace::default());
-        
-        let printf_type = i32_type.fn_type(&[ptr_type.into()], true);
-        self.module.add_function("printf", printf_type, None);
-        
-        let fflush_type = i32_type.fn_type(&[ptr_type.into()], false);
-        self.module.add_function("fflush", fflush_type, None);
-        
-        let exit_type = self.context.void_type().fn_type(&[i32_type.into()], false);
-        self.module.add_function("exit", exit_type, None);
-
-        let mudran_type = self.context.i64_type().fn_type(&[self.context.i64_type().into()], false);
-        let mudran_fn = self.module.add_function("मुद्रण", mudran_type, None);
-        let bb = self.context.append_basic_block(mudran_fn, "entry");
-        self.builder.position_at_end(bb);
-        let format_str = self.builder.build_global_string_ptr("%lld\n", "fmt").unwrap();
-        let arg = mudran_fn.get_first_param().unwrap();
-        self.builder.build_call(self.module.get_function("printf").unwrap(), &[format_str.as_pointer_value().into(), arg.into()], "callprintf").unwrap();
-        self.builder.build_call(self.module.get_function("fflush").unwrap(), &[ptr_type.const_null().into()], "callfflush").unwrap();
-        self.builder.build_return(Some(&self.context.i64_type().const_int(0, false))).unwrap();
+    #[test]
+    fn test_async_dhatu_def() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::DhatuDef {
+            name: "gacchati".to_string(),
+            lakara: AstLakara::Lrt, // Async
+            gana: devvani_ast::Gana::Bhvadi,
+            linga: AstLinga::Pullinga,
+            vacana: AstVacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            body: vec![],
+            span: dummy_span(),
+        };
+        let program = ASTNode::Program { statements: vec![node], span: dummy_span() };
+        assert!(codegen.generate(&program).is_ok());
+        assert!(codegen.rust_source().contains("async fn gacchati"));
     }
 
-    pub fn get_ir(&self) -> String {
-        self.module.print_to_string().to_string()
-    }
-
-    pub fn write_binary(&self, output_path: &str, _target: TargetArch) -> Result<(), CodegenError> {
-        self.module.print_to_file(std::path::Path::new(output_path)).map_err(|e| CodegenError::LLVMError(format!("{:?}", e)))?;
-        Ok(())
+    #[test]
+    fn test_unknown_node_graceful() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::Comment { text: "hello".to_string(), span: dummy_span() };
+        let program = ASTNode::Program { statements: vec![node], span: dummy_span() };
+        assert!(codegen.generate(&program).is_ok());
+        assert!(codegen.bytecode().iter().any(|ins| matches!(ins, Instruction::Comment(_))));
     }
 }

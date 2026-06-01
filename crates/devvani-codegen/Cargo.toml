@@ -5,5 +5,4 @@ edition = "2021"
 
 [dependencies]
 devvani-ast = { path = "../devvani-ast" }
-devvani-number = { path = "../devvani-number" }
-inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm17-0"] }
+devvani-typesystem = { path = "../devvani-typesystem" }

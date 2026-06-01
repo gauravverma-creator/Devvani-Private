@@ -7,5 +7,5 @@ edition = "2021"
 devvani-lexer = { path = "../devvani-lexer" }
 devvani-parser = { path = "../devvani-parser" }
 devvani-ast = { path = "../devvani-ast" }
-devvani-number = { path = "../devvani-number" }
 devvani-codegen = { path = "../devvani-codegen" }
+devvani-typesystem = { path = "../devvani-typesystem" }

@@ -5,6 +5,7 @@ pub mod lakara;
 pub mod vacana;
 pub mod linga;
 pub mod symbol;
+pub mod samasa;
 
 pub use vibhakti::*;
 pub use type_env::*;
@@ -13,3 +14,4 @@ pub use lakara::*;
 pub use vacana::*;
 pub use linga::*;
 pub use symbol::*;
+pub use samasa::*;

@@ -1,7 +1,7 @@
 use devvani_ast::ASTNode;
 use devvani_typesystem::{
-    TypeChecker, Lakara,
-    lakara_to_scope, lakara_from_str,
+    TypeChecker, Lakara, SamasaKind,
+    lakara_to_scope, lakara_from_str, samasa_from_str, resolve_samasa,
 };
 
 // ── Error type ──────────────────────────────────────────────
@@ -98,10 +98,10 @@ impl Codegen {
             }
             ASTNode::KriyaCall { karta, kriya, karma, .. } => {
                 let subject = if let Some(k) = karta {
-                    if let ASTNode::Nama { base, .. } = &**k {
-                        base.clone()
-                    } else {
-                        "self".to_string()
+                    match &**k {
+                        ASTNode::Nama { base, .. } => base.clone(),
+                        ASTNode::Samasa { resolved, .. } => resolved.clone(),
+                        _ => "self".to_string(),
                     }
                 } else {
                     "self".to_string()
@@ -113,6 +113,8 @@ impl Codegen {
                         arg_names.push(base.clone());
                     } else if let ASTNode::IntLiteral { value, .. } = arg {
                         arg_names.push(value.to_string());
+                    } else if let ASTNode::Samasa { resolved, .. } = arg {
+                        arg_names.push(resolved.clone());
                     }
                 }
 
@@ -137,9 +139,6 @@ impl Codegen {
 
                 let mut rust_params = Vec::new();
                 for param in params {
-                    // For params, we can lookup their types in the current env (after entering scope)
-                    // But we are currently at the definition site.
-                    // Let's just use a placeholder for now as full param type mapping is Phase 4.
                     rust_params.push(format!("{}: i64", param.name));
                     self.instructions.push(Instruction::Bind {
                         name: param.name.clone(),
@@ -162,6 +161,17 @@ impl Codegen {
                 self.rust_output.push_str("}\n");
                 
                 self.instructions.push(Instruction::ExitScope);
+            }
+            ASTNode::Samasa { samasa_type, components, .. } => {
+                let kind = samasa_from_str(&format!("{:?}", samasa_type)).unwrap_or(SamasaKind::Tatpurusha);
+                let comps_refs: Vec<&str> = components.iter().map(|s| s.as_str()).collect();
+                let resolved_node = resolve_samasa(&kind, &comps_refs);
+                
+                self.rust_output.push_str(&self.indent_str());
+                self.rust_output.push_str(&resolved_node.rust_repr);
+                self.rust_output.push_str("\n");
+                
+                self.instructions.push(Instruction::Comment(format!("samasa: {}", resolved_node.resolved)));
             }
             ASTNode::IntLiteral { value, .. } => {
                 self.rust_output.push_str(&value.to_string());
@@ -194,7 +204,7 @@ impl Codegen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devvani_ast::{ASTNode, Vibhakti, Linga as AstLinga, Vacana as AstVacana, Lakara as AstLakara, Span};
+    use devvani_ast::{ASTNode, Vibhakti, Linga as AstLinga, Vacana as AstVacana, Lakara as AstLakara, SamasaType, Span};
 
     fn dummy_span() -> Span {
         Span { line: 0, col: 0, len: 0 }
@@ -267,6 +277,21 @@ mod tests {
         let program = ASTNode::Program { statements: vec![node], span: dummy_span() };
         assert!(codegen.generate(&program).is_ok());
         assert!(codegen.rust_source().contains("async fn gacchati"));
+    }
+
+    #[test]
+    fn test_samasa_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::Samasa {
+            samasa_type: SamasaType::Tatpurusha,
+            parts: vec![],
+            components: vec!["Rama".to_string(), "Putra".to_string()],
+            resolved: "rama.putra".to_string(),
+            span: dummy_span(),
+        };
+        let program = ASTNode::Program { statements: vec![node], span: dummy_span() };
+        assert!(codegen.generate(&program).is_ok());
+        assert!(codegen.rust_source().contains("rama.putra"));
     }
 
     #[test]

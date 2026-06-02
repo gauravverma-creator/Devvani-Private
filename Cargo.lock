@@ -176,6 +176,7 @@ dependencies = [
  "devvani-codegen",
  "devvani-lexer",
  "devvani-parser",
+ "devvani-stdlib",
  "devvani-typesystem",
 ]
 
@@ -217,6 +218,15 @@ dependencies = [
  "devvani-lexer",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "devvani-stdlib"
+version = "0.1.0"
+dependencies = [
+ "devvani-ast",
+ "devvani-typesystem",
  "thiserror 1.0.69",
 ]
 

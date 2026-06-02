@@ -1,0 +1,9 @@
+[package]
+name = "devvani-stdlib"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+devvani-ast       = { path = "../devvani-ast" }
+devvani-typesystem = { path = "../devvani-typesystem" }
+thiserror = "1.0"

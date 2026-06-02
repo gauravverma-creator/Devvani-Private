@@ -66,6 +66,12 @@ impl Compiler {
         let ast = parser.parse()
             .map_err(|e| vec![DiagnosticEngine::from_compiler_error(&CompilerError::ParseError(format!("{:?}", e)))])?;
 
+        // DEVVANI STDLIB HOOK: 
+        // Before resolving user-defined functions, check prelude.
+        // This gives every .dvn file access to all 70 Dhatus automatically.
+        // use devvani_stdlib::prelude::devvani_prelude;
+        // let prelude = devvani_prelude();
+
         let mut codegen = Codegen::new(self.target);
         if let Err(e) = codegen.generate(&ast) {
             match e {

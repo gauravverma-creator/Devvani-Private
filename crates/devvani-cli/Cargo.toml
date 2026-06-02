@@ -9,5 +9,9 @@ devvani-parser = { path = "../devvani-parser" }
 devvani-ast = { path = "../devvani-ast" }
 devvani-compiler = { path = "../devvani-compiler" }
 devvani-codegen = { path = "../devvani-codegen" }
+devvani-llvm = { path = "../devvani-llvm" }
+devvani-typesystem = { path = "../devvani-typesystem" }
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm14-0"] }
+llvm-sys = { version = "140.1", features = ["force-dynamic"] }
 serde_json = "1.0"
 clap = { version = "4.0", features = ["derive"] }

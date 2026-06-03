@@ -31,6 +31,7 @@ pub struct Compiler {
     pub source_path: String,
     pub output_path: Option<String>,
     pub target: CodegenTarget,
+    pub module_pipeline: devvani_module::ModulePipeline,
 }
 
 impl Compiler {
@@ -39,7 +40,13 @@ impl Compiler {
             source_path: source_path.to_string(),
             output_path: None,
             target: CodegenTarget::RustSource,
+            module_pipeline: devvani_module::ModulePipeline::new(),
         }
+    }
+
+    pub fn load_module(&mut self, manifest: devvani_module::KoshaManifest) 
+        -> Result<(), devvani_module::ModuleError> {
+        self.module_pipeline.process_manifest(manifest)
     }
 
     pub fn with_output(mut self, path: &str) -> Self {

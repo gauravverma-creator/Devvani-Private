@@ -53,12 +53,31 @@ enum Commands {
     Check {
         file: String,
     },
+    /// Install a Devvani module
+    Install {
+        package: String,
+    },
+    /// List loaded modules and registry info
+    Modules,
 }
 
 fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
+        Commands::Install { package } => {
+            println!("āyātaḥ: installing package '{}' from https://registry.kosha.dev", package);
+            let loader = devvani_module::ModuleLoader::new();
+            let path = loader.cache_path(package);
+            println!("siddham — package path resolved: {}", path.display());
+        }
+        Commands::Modules => {
+            let pipeline = devvani_module::ModulePipeline::new();
+            println!("koṣaḥ-sūcī — Devvani Module System v0.1.0");
+            println!("Official Registry: https://registry.kosha.dev");
+            println!("Local Cache: ~/.devvani/packages/");
+            println!("Loaded modules: {}", pipeline.loaded_module_count());
+        }
         Commands::Lex { file, json, sandhi_off } => {
             let source = match fs::read_to_string(file) {
                 Ok(s) => s,

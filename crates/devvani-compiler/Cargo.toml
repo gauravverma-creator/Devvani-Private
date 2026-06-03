@@ -10,3 +10,4 @@ devvani-ast = { path = "../devvani-ast" }
 devvani-codegen = { path = "../devvani-codegen" }
 devvani-typesystem = { path = "../devvani-typesystem" }
 devvani-stdlib = { path = "../devvani-stdlib" }
+devvani-module = { path = "../devvani-module" }

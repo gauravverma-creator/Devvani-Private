@@ -10,6 +10,7 @@ members = [
     "crates/devvani-typesystem",
     "crates/devvani-llvm",
     "crates/devvani-stdlib",
+    "crates/devvani-module",
 ]
 resolver = "2"
 

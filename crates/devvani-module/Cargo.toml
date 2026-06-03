@@ -1,0 +1,11 @@
+[package]
+name = "devvani-module"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+ed25519-dalek = "2"
+thiserror = "1"
+dirs = "5"

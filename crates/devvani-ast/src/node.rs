@@ -1,3 +1,4 @@
+
 use serde::{Deserialize, Serialize};
 
 pub use devvani_lexer::token::Span;
@@ -22,18 +23,6 @@ pub enum Lakara {
 pub enum SamasaType {
     Tatpurusha, Dvandva, Bahuvrihi, Avyayibhava, Karmadhaaraya,
 }
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum BinaryOp {
-    Add, Sub, Mul, Div,
-    Eq, Neq, NotEq,
-    Lt, Gt, LtEq, GtEq,
-    And, Or,
-    Mod,
-    Not,
-}
-
-pub type UnaryOp = BinaryOp;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum KarakaRole {
@@ -83,9 +72,8 @@ pub struct KarakaParam {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ASTNode {
-    Program {
-        statements: Vec<ASTNode>,
-        span: Span,
+    KaryakramNode {
+        shareera: Vec<ASTNode>,
     },
     DhatuDef {
         name: String,
@@ -116,48 +104,79 @@ pub enum ASTNode {
         vacana: Vacana,
         span: Span,
     },
-    Conditional {
-        condition: Box<ASTNode>,
-        then_body: Vec<ASTNode>,
-        then_branch: Vec<ASTNode>,
-        else_body: Option<Vec<ASTNode>>,
-        else_branch: Option<Vec<ASTNode>>,
-        span: Span,
+    AstiNode {
+        naama: String,
+        mulya: Box<ASTNode>,
     },
-    Loop {
-        condition: Option<Box<ASTNode>>,
-        body: Vec<ASTNode>,
-        span: Span,
+    BhavatiNode {
+        naama: String,
+        mulya: Box<ASTNode>,
     },
-    BinaryExpr {
-        op: BinaryOp,
-        left: Box<ASTNode>,
-        right: Box<ASTNode>,
-        span: Span,
+    YogaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
     },
-    UnaryExpr {
-        op: BinaryOp,
-        operand: Box<ASTNode>,
-        span: Span,
+    ViyogaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+    },
+    GunaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+    },
+    BhagaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+    },
+    SamaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+    },
+    AsamaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+    },
+    NyuunaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+    },
+    AdhikaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+    },
+    VadatiNode {
+        mulya: Box<ASTNode>,
+    },
+    PathatiNode {
+        naama: String,
+    },
+    YadiNode {
+        sthiti: Box<ASTNode>,
+        tarhi: Vec<ASTNode>,
+        anyatha: Option<Vec<ASTNode>>,
+    },
+    YavatNode {
+        sthiti: Box<ASTNode>,
+        shareera: Vec<ASTNode>,
+    },
+    PunahNode {
+        varam: Box<ASTNode>,
+        shareera: Vec<ASTNode>,
     },
     Dvandva {
         members: Vec<ASTNode>,
         span: Span,
     },
-    IntLiteral {
+    PurnaankLiteral {
         value: i64,
         span: Span,
     },
-    FloatLiteral {
+    DashaamshaLiteral {
         value: f64,
         span: Span,
     },
-    StringLiteral {
+    VaakLiteral {
         value: String,
-        span: Span,
-    },
-    BoolLiteral {
-        value: bool,
         span: Span,
     },
     Samasa {
@@ -169,14 +188,6 @@ pub enum ASTNode {
     },
     KritChain {
         steps: Vec<ASTNode>,
-        span: Span,
-    },
-    Return {
-        value: Option<Box<ASTNode>>,
-        span: Span,
-    },
-    Comment {
-        text: String,
         span: Span,
     },
 }

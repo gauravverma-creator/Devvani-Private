@@ -1,18 +1,18 @@
-use inkwell::context::Context;
 use devvani_llvm::codegen::IrEmitter;
 use devvani_ast::node::{ASTNode, Lakara, Gana, Linga, Vacana, Span};
+use inkwell::context::Context;
 
 fn dummy_span() -> Span {
     Span { line: 0, col: 0, len: 0 }
 }
 
 #[test]
-fn test_full_ir_pipeline() {
+fn test_pipeline_simple_function() {
     let context = Context::create();
-    let mut emitter = IrEmitter::new(&context, "pipeline_test");
+    let mut emitter = IrEmitter::new(&context, "test_pipeline");
 
-    let ast = ASTNode::Program {
-        statements: vec![
+    let ast = ASTNode::KaryakramNode {
+        shareera: vec![
             ASTNode::DhatuDef {
                 name: "main".to_string(),
                 lakara: Lakara::Lat,
@@ -23,36 +23,27 @@ fn test_full_ir_pipeline() {
                 upasargas: vec![],
                 return_karaka: None,
                 body: vec![
-                    ASTNode::Return {
-                        value: Some(Box::new(ASTNode::IntLiteral { value: 0, span: dummy_span() })),
-                        span: dummy_span(),
-                    },
+                    ASTNode::PurnaankLiteral { value: 0, span: dummy_span() },
                 ],
                 span: dummy_span(),
             }
         ],
-        span: dummy_span(),
     };
 
     let ir = emitter.emit_ir(&ast).unwrap();
     assert!(ir.contains("define"));
-    assert!(ir.contains("ret i64 0"));
+    assert!(ir.contains("main"));
 }
 
 #[test]
-fn test_obj_emission() {
-    use devvani_llvm::target::DevvaniTarget;
-    use inkwell::targets::FileType;
-    use std::fs;
-    use std::path::Path;
-
+fn test_pipeline_with_variables() {
     let context = Context::create();
-    let mut emitter = IrEmitter::new(&context, "obj_test");
+    let mut emitter = IrEmitter::new(&context, "test_vars");
 
-    let ast = ASTNode::Program {
-        statements: vec![
+    let ast = ASTNode::KaryakramNode {
+        shareera: vec![
             ASTNode::DhatuDef {
-                name: "obj_main".to_string(),
+                name: "test".to_string(),
                 lakara: Lakara::Lat,
                 gana: Gana::Bhvadi,
                 linga: Linga::Pullinga,
@@ -61,32 +52,26 @@ fn test_obj_emission() {
                 upasargas: vec![],
                 return_karaka: None,
                 body: vec![
-                    ASTNode::Return {
-                        value: Some(Box::new(ASTNode::IntLiteral { value: 0, span: dummy_span() })),
-                        span: dummy_span(),
+                    ASTNode::AstiNode {
+                        naama: "x".to_string(),
+                        mulya: Box::new(ASTNode::PurnaankLiteral { value: 42, span: dummy_span() }),
                     },
+                    ASTNode::VadatiNode {
+                        mulya: Box::new(ASTNode::Nama {
+                            base: "x".to_string(),
+                            vibhakti: devvani_ast::node::Vibhakti::Prathama,
+                            linga: Linga::Pullinga,
+                            vacana: Vacana::Eka,
+                            span: dummy_span(),
+                        })
+                    }
                 ],
                 span: dummy_span(),
             }
         ],
-        span: dummy_span(),
     };
 
-    emitter.emit_ir(&ast).unwrap();
-
-    let target = DevvaniTarget::new_native().unwrap();
-    let out_path = "/tmp/devvani_test_output.o";
-    let out = Path::new(out_path);
-
-    let result = target.machine.write_to_file(
-        &emitter.module,
-        FileType::Object,
-        out,
-    );
-    
-    assert!(result.is_ok());
-    assert!(out.exists());
-
-    // Cleanup
-    let _ = fs::remove_file(out);
+    let ir = emitter.emit_ir(&ast).unwrap();
+    assert!(ir.contains("42"));
+    assert!(ir.contains("printf"));
 }

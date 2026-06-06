@@ -33,7 +33,8 @@ impl<'ctx> CodeGen<'ctx> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::type_map::{TypeMapper, Vibhakti};
+    use devvani_ast::node::Vibhakti;
+    use crate::type_map::TypeMapper;
 
     #[test]
     fn test_codegen_init() {

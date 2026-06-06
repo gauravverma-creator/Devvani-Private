@@ -55,7 +55,7 @@ pub struct DiagnosticEngine;
 impl DiagnosticEngine {
     pub fn from_type_error(err: &TypeCheckError) -> Diagnostic {
         match err {
-            TypeCheckError::UndefinedName(name) => Diagnostic {
+            TypeCheckError::NaamaApraapta(name) => Diagnostic {
                 severity: Severity::Dosha,
                 code: "D001".to_string(),
                 sanskrit_title: "अपरिचित नाम".to_string(),
@@ -66,7 +66,7 @@ impl DiagnosticEngine {
                 sutra_ref: Some("1.4.54 (Kartā — svatantraḥ kartā)".to_string()),
                 hint: Some(format!("'{}' ko pehle declare karo: rāmaḥ", name)),
             },
-            TypeCheckError::TypeMismatch { expected, found } => Diagnostic {
+            TypeCheckError::PrakaaraVaisamya { expected, found } => Diagnostic {
                 severity: Severity::Dosha,
                 code: "D002".to_string(),
                 sanskrit_title: "विभक्ति-भेद".to_string(),
@@ -77,14 +77,23 @@ impl DiagnosticEngine {
                 sutra_ref: Some("1.1.2".to_string()),
                 hint: Some("Sahi Vibhakti pratyaya lagao.".to_string()),
             },
-            TypeCheckError::InvalidVibhaktiUsage(msg) => Diagnostic {
+            TypeCheckError::SatyaasatyaApekshita(msg) => Diagnostic {
                 severity: Severity::Dosha,
                 code: "D003".to_string(),
-                sanskrit_title: "अशुद्ध विभक्ति".to_string(),
-                roman_title: "Ashuddha Vibhakti".to_string(),
-                message: format!("Vibhakti ka galat prayog: {}", msg),
-                sutra_ref: Some("2.3.1".to_string()),
-                hint: Some("Karaka aur Vibhakti ka mel check karo.".to_string()),
+                sanskrit_title: "सत्यासत्य-अपेक्षित".to_string(),
+                roman_title: "Satyaasatya Apeksita".to_string(),
+                message: format!("Satyasatya (Bool) अपेक्षित है: {}", msg),
+                sutra_ref: Some("1.1.3".to_string()),
+                hint: Some("Yadi/Yavat ki sthiti Satyasatya honi chahiye.".to_string()),
+            },
+            TypeCheckError::PrakaaraAsangata(msg) => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D011".to_string(),
+                sanskrit_title: "असंगत प्रकार".to_string(),
+                roman_title: "Prakara Asangata".to_string(),
+                message: format!("Yaha prakara asangata hai: {}", msg),
+                sutra_ref: None,
+                hint: None,
             },
         }
     }
@@ -186,8 +195,8 @@ mod tests {
     use devvani_typesystem::TypeCheckError;
 
     #[test]
-    fn test_from_type_error_undefined() {
-        let err = TypeCheckError::UndefinedName("ramah".to_string());
+    fn test_from_type_error_naama_apraapta() {
+        let err = TypeCheckError::NaamaApraapta("ramah".to_string());
         let diag = DiagnosticEngine::from_type_error(&err);
         assert_eq!(diag.code, "D001");
         assert!(diag.display().contains("Aparicita Nama"));
@@ -209,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_report_with_diagnostics() {
-        let err1 = TypeCheckError::UndefinedName("ramah".to_string());
+        let err1 = TypeCheckError::NaamaApraapta("ramah".to_string());
         let diag1 = DiagnosticEngine::from_type_error(&err1);
         let err2 = CompilerError::ParseError("test".to_string());
         let diag2 = DiagnosticEngine::from_compiler_error(&err2);

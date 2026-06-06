@@ -1,10 +1,8 @@
-pub mod diagnostics;
-
 use devvani_lexer::{Lexer, SandhiMode};
 use devvani_parser::Parser;
 use devvani_codegen::{Codegen, CodegenTarget};
-use diagnostics::{Diagnostic, DiagnosticEngine};
-use std::fmt;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub enum CompilerError {
@@ -14,97 +12,52 @@ pub enum CompilerError {
     CodegenError(String),
 }
 
-impl fmt::Display for CompilerError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CompilerError::IoError(s) => write!(f, "IO Error: {}", s),
-            CompilerError::LexError(s) => write!(f, "Lex Error: {}", s),
-            CompilerError::ParseError(s) => write!(f, "Parse Error: {}", s),
-            CompilerError::CodegenError(s) => write!(f, "Codegen Error: {}", s),
-        }
-    }
-}
-
-impl std::error::Error for CompilerError {}
-
 pub struct Compiler {
-    pub source_path: String,
-    pub output_path: Option<String>,
-    pub target: CodegenTarget,
-    pub module_pipeline: devvani_module::ModulePipeline,
+    input_file: PathBuf,
+    output_file: Option<PathBuf>,
 }
 
 impl Compiler {
-    pub fn new(source_path: &str) -> Self {
-        Compiler {
-            source_path: source_path.to_string(),
-            output_path: None,
-            target: CodegenTarget::RustSource,
-            module_pipeline: devvani_module::ModulePipeline::new(),
+    pub fn new<P: AsRef<Path>>(input: P) -> Self {
+        Self {
+            input_file: input.as_ref().to_path_buf(),
+            output_file: None,
         }
     }
 
-    pub fn load_module(&mut self, manifest: devvani_module::KoshaManifest) 
-        -> Result<(), devvani_module::ModuleError> {
-        self.module_pipeline.process_manifest(manifest)
-    }
-
-    pub fn with_output(mut self, path: &str) -> Self {
-        self.output_path = Some(path.to_string());
+    pub fn with_output<P: AsRef<Path>>(mut self, output: P) -> Self {
+        self.output_file = Some(output.as_ref().to_path_buf());
         self
     }
 
     pub fn compile(&self) -> Result<String, String> {
-        match self.compile_with_diagnostics() {
-            Ok(s) => Ok(s),
-            Err(diags) => Err(DiagnosticEngine::report(&diags)),
-        }
-    }
-
-    pub fn compile_with_diagnostics(&self) -> Result<String, Vec<Diagnostic>> {
-        let source = std::fs::read_to_string(&self.source_path)
-            .map_err(|e| vec![DiagnosticEngine::from_compiler_error(&CompilerError::IoError(e.to_string()))])?;
+        let source = fs::read_to_string(&self.input_file)
+            .map_err(|e| format!("D007: {}", e))?;
 
         let mut lexer = Lexer::new(&source);
         let tokens = lexer.tokenize(SandhiMode::Auto)
-            .map_err(|e| vec![DiagnosticEngine::from_compiler_error(&CompilerError::LexError(format!("{:?}", e)))])?;
+            .map_err(|e| format!("D008: {:?}", e))?;
 
         let mut parser = Parser::new(tokens);
         let ast = parser.parse()
-            .map_err(|e| vec![DiagnosticEngine::from_compiler_error(&CompilerError::ParseError(format!("{:?}", e)))])?;
+            .map_err(|e| format!("D009: {:?}", e))?;
 
-        // DEVVANI STDLIB HOOK: 
-        // Before resolving user-defined functions, check prelude.
-        // This gives every .dvn file access to all 70 Dhatus automatically.
-        // use devvani_stdlib::prelude::devvani_prelude;
-        // let prelude = devvani_prelude();
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.generate(&ast)
+            .map_err(|e| format!("D010: {:?}", e))?;
 
-        let mut codegen = Codegen::new(self.target);
-        if let Err(e) = codegen.generate(&ast) {
-            match e {
-                devvani_codegen::CodegenError::TypeCheckFailed(_) => {
-                    // TypeCheckFailed contains the list of errors. 
-                    // Let's re-run type checker to get the actual TypeCheckErrors.
-                    // This is slightly inefficient but keeps the API clean for now.
-                    let errors = codegen.type_checker.errors.iter()
-                        .map(|te| DiagnosticEngine::from_type_error(te))
-                        .collect();
-                    return Err(errors);
-                }
-                _ => return Err(vec![DiagnosticEngine::from_codegen_error(&e)]),
-            }
+        let rust_code = codegen.rust_source().to_string();
+
+        if let Some(out_path) = &self.output_file {
+            fs::write(out_path, &rust_code)
+                .map_err(|e| format!("D006: {}", e))?;
         }
 
-        let output = codegen.rust_source().to_string();
-
-        if let Some(ref out) = self.output_path {
-            std::fs::write(out, &output)
-                .map_err(|e| vec![DiagnosticEngine::from_compiler_error(&CompilerError::IoError(e.to_string()))])?;
-        }
-
-        Ok(output)
+        Ok(rust_code)
     }
 }
+
+pub mod diagnostics;
 
 #[cfg(test)]
 mod tests {
@@ -122,24 +75,26 @@ mod tests {
     #[test]
     fn test_compile_hello() {
         let _ = fs::create_dir_all("examples");
-        let _ = fs::write("examples/hello_test.dvn", "rāmaḥ karoti phalam.");
+        let _ = fs::write("examples/hello_test.dvn", "phalam asti 5 ।");
         
         let compiler = Compiler::new("examples/hello_test.dvn");
         let result = compiler.compile();
+        if let Err(ref e) = result { println!("Error: {}", e); }
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_compile_ganana() {
-        let _ = fs::write("examples/ganana_test.dvn", "ekaḥ. yogaḥ karoti dvitiīyaḥ.");
+        let _ = fs::write("examples/ganana_test.dvn", "eka asti 1 । 1 yoga 2 vadati ।");
         let compiler = Compiler::new("examples/ganana_test.dvn");
         let result = compiler.compile();
+        if let Err(ref e) = result { println!("Error: {}", e); }
         assert!(result.is_ok());
     }
 
     #[test]
     fn test_with_output_writes_file() {
-        let _ = fs::write("examples/output_test.dvn", "rāmaḥ.");
+        let _ = fs::write("examples/output_test.dvn", "x asti 10 ।");
         let out_file = "examples/output_test.rs";
         if fs::metadata(out_file).is_ok() {
             let _ = fs::remove_file(out_file);
@@ -147,8 +102,8 @@ mod tests {
 
         let compiler = Compiler::new("examples/output_test.dvn").with_output(out_file);
         let result = compiler.compile();
+        if let Err(ref e) = result { println!("Error: {}", e); }
         assert!(result.is_ok());
         assert!(fs::metadata(out_file).is_ok());
-        let _ = fs::remove_file(out_file);
     }
 }

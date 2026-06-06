@@ -26,6 +26,11 @@ pub fn is_iast_identifier_continue(c: char) -> bool {
 }
 
 pub fn is_iast_special(c: char) -> bool {
+    // Check if character is within Devanagari block (U+0900 to U+097F)
+    if (c as u32) >= 0x0900 && (c as u32) <= 0x097F {
+        return true;
+    }
+
     match c {
         '\u{0101}' | '\u{012B}' | '\u{016B}' | // ā, ī, ū
         '\u{1E6D}' | '\u{1E0D}' | '\u{1E47}' | // ṭ, ḍ, ṇ

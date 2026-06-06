@@ -1,18 +1,7 @@
 use inkwell::context::Context;
 use inkwell::types::BasicTypeEnum;
 use crate::error::DevvaniLLVMError;
-
-/// Vibhakti cases from Sanskrit grammar mapped to LLVM types
-#[derive(Debug, Clone, PartialEq)]
-pub enum Vibhakti {
-    Prathama,   // Nominative  → Subject   → i64
-    Dvitiya,    // Accusative  → Object    → i64
-    Tritiya,    // Instrumental→ Helper    → ptr (i8*)
-    Chaturthi,  // Dative      → Return    → i64
-    Panchami,   // Ablative    → Source    → ptr (i8*)
-    Shashthi,   // Genitive    → Parent    → ptr (i8*)
-    Saptami,    // Locative    → Scope     → ptr (i8*)
-}
+use devvani_ast::node::Vibhakti;
 
 pub struct TypeMapper<'ctx> {
     context: &'ctx Context,

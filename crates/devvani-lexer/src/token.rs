@@ -17,10 +17,10 @@ pub struct Token {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum TokenKind {
     // --- IDENTIFIERS & LITERALS ---
-    Identifier(String),        // IAST unicode identifiers
-    IntLiteral(i64),
-    FloatLiteral(f64),
-    StringLiteral(String),
+    Naama(String),            // IAST unicode identifiers (Identifier)
+    PurnaankLiteral(i64),     // IntLiteral
+    DashaamshaLiteral(f64),   // FloatLiteral
+    VaakLiteral(String),      // StringLiteral
     
     // --- VIBHAKTI (Case markers as type annotations) ---
     Prathama,    // -h / -ḥ suffix  → Subject/Type
@@ -72,56 +72,50 @@ pub enum TokenKind {
     Ati,    Su,     Ud,    Abhi,  Prati,
     Pari,   Upa,
     
-    // --- NIPATA (Particles → Keywords/Operators) ---
-    Ca,        // and (&&)
-    Va,        // or (||)
-    Na,        // not (!)
-    Iti,       // end-of-statement / quote marker (like semicolon or closing quote)
-    Eva,       // only/exactly (type assertion)
-    Api,       // also/even (append)
-    Tu,        // but (else)
-    Yadi,      // if
-    Tarhi,     // then
-    Anyatha,   // otherwise (else)
-    Kintu,     // however (break)
-    Punah,     // again (continue)
-    Atha,      // now/begin (block start)
-    Alam,      // enough (return/stop)
+    // --- NIPATA & SANSKRIT KEYWORDS ---
+    Ca,        // and
+    Va,        // or
+    Na,        // not
+    Iti,       // end marker (इति)
+    Eva,       // only/exactly
+    Api,       // also/even
+    Tu,        // but
+    Yadi,      // if (यदि)
+    Tarhi,     // then (तर्हि)
+    Anyatha,   // otherwise/else (अन्यथा)
+    Kintu,     // however
+    Punah,     // again/repeat (पुनः)
+    Atha,      // now/begin
+    Alam,      // enough/return
     
+    // --- NEW SANSKRIT SYNTAX TOKENS ---
+    Danda,          // । — statement terminator
+    Asti,           // अस्ति — assignment (fixed)
+    Bhavati,        // भवति — assignment (mutable)
+    Vadati,         // वदति — output
+    Pathati,        // पठति — input
+    Yavat,          // यावत् — while condition
+    Tavat,          // तावत् — while body start
+    Varam,          // वारम् — times
+    Arambhah,       // आरम्भः — program start
+    Samaptih,       // समाप्तिः — program end
+    Yoga,           // योग — addition
+    Viyoga,         // वियोग — subtraction
+    Guna,           // गुण — multiplication
+    Bhaga,          // भाग — division
+    Sama,           // सम — equals
+    AsamaH,         // असमः — not equals
+    NyuunaH,        // न्यूनः — less than
+    AdhikaH,        // अधिकः — greater than
+
     // --- SANDHI SPECIAL TOKENS ---
     Visarga,   // ḥ character standalone
     Anusvara,  // ṃ character standalone
     
-    // --- PUNCTUATION & STRUCTURE ---
-    Dot,           // .  (method call / samasa separator)
-    DoubleColon,   // :: (type/namespace separator)
-    LeftParen,     // (
-    RightParen,    // )
-    LeftBrace,     // {
-    RightBrace,    // }
-    LeftBracket,   // [
-    RightBracket,  // ]
-    Comma,         // ,
-    Semicolon,     // ;
-    Equals,        // =
-    Arrow,         // ->
-    FatArrow,      // =>
-    Plus,          // +
-    Minus,         // -
-    Star,          // *
-    Slash,         // /
-    Percent,       // %
-    EqualEqual,    // ==
-    BangEqual,     // !=
-    Less,          // <
-    LessEqual,     // <=
-    Greater,       // >
-    GreaterEqual,  // >=
-    
     // --- META ---
-    Newline,
-    Whitespace,
-    Comment,       // /* */ and //
-    EOF,
+    NavaPankti,    // Newline
+    Aavakaasha,    // Whitespace
+    Tippani,       // Comment
+    Samaapti,      // EOF
     Unknown(char),
 }

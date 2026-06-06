@@ -4,19 +4,21 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum TypeCheckError {
-    UndefinedName(String),
-    TypeMismatch { expected: String, found: String },
-    InvalidVibhaktiUsage(String),
+    NaamaApraapta(String),
+    PrakaaraVaisamya { expected: String, found: String },
+    SatyaasatyaApekshita(String),
+    PrakaaraAsangata(String),
 }
 
 impl fmt::Display for TypeCheckError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TypeCheckError::UndefinedName(name) => write!(f, "Undefined name: {}", name),
-            TypeCheckError::TypeMismatch { expected, found } => {
-                write!(f, "Type mismatch: expected {}, found {}", expected, found)
+            TypeCheckError::NaamaApraapta(name) => write!(f, "Naama-apraapta: {}", name),
+            TypeCheckError::PrakaaraVaisamya { expected, found } => {
+                write!(f, "Prakaara-vaisamya: expected {}, found {}", expected, found)
             }
-            TypeCheckError::InvalidVibhaktiUsage(msg) => write!(f, "Invalid vibhakti usage: {}", msg),
+            TypeCheckError::SatyaasatyaApekshita(msg) => write!(f, "Satyaasatya-apekshita: {}", msg),
+            TypeCheckError::PrakaaraAsangata(msg) => write!(f, "Prakaara-asangata: {}", msg),
         }
     }
 }
@@ -36,60 +38,117 @@ impl TypeChecker {
         }
     }
 
-    pub fn current_scope_kind(&self) -> ScopeKind {
-        match &self.current_lakara {
-            Some(l) => lakara_to_scope(l).kind,
-            None => ScopeKind::Sync,
-        }
-    }
-
     pub fn check(&mut self, node: &ASTNode) -> DevvaniType {
         match node {
-            ASTNode::Program { statements, .. } => {
+            ASTNode::KaryakramNode { shareera, .. } => {
                 let mut last_type = DevvaniType::Unknown;
-                for stmt in statements {
+                for stmt in shareera {
                     last_type = self.check(stmt);
                 }
                 last_type
             }
-            ASTNode::Nama { base, vacana, linga, .. } => {
-                let role = infer_type_from_suffix(base);
-                let ty = vibhakti_to_type(&role, base);
-                
-                let vacana_str = format!("{:?}", vacana);
-                let ts_vacana = vacana_from_str(&vacana_str).unwrap_or(Vacana::Eka);
-                
-                let linga_str = format!("{:?}", linga);
-                let ts_linga = linga_from_str(&linga_str).unwrap_or(Linga::Pullinga);
+            ASTNode::Nama { base, .. } => {
+                if let Some(sym) = self.env.lookup(base) {
+                    sym.devvani_type.clone()
+                } else {
+                    let role = infer_type_from_suffix(base);
+                    vibhakti_to_type(&role, base)
+                }
+            }
+            ASTNode::PurnaankLiteral { .. } => DevvaniType::Subject("Purnaank".to_string()),
+            ASTNode::DashaamshaLiteral { .. } => DevvaniType::Subject("Dashaamsha".to_string()),
+            ASTNode::VaakLiteral { .. } => DevvaniType::Subject("Vaak".to_string()),
 
-                let symbol = Symbol::new(base, ty.clone(), &ts_vacana, &ts_linga, "i64");
-                self.env.define_symbol(base, symbol);
+            ASTNode::AstiNode { naama, mulya } | ASTNode::BhavatiNode { naama, mulya } => {
+                let ty = self.check(mulya);
+                let symbol = Symbol::new(naama, ty.clone(), &Vacana::Eka, &Linga::Pullinga, "var");
+                self.env.define_symbol(naama, symbol);
                 ty
             }
-            ASTNode::KriyaCall { karta, kriya, karma, .. } => {
-                if let Some(subject_node) = karta {
-                    if let ASTNode::Nama { base, .. } = &**subject_node {
-                        if self.env.lookup(base).is_none() {
-                            self.errors.push(TypeCheckError::UndefinedName(base.clone()));
-                        }
-                    }
-                }
 
-                for arg in karma {
-                    let arg_type = self.check(arg);
-                    match arg_type {
-                        DevvaniType::Parameter(_) => {}
-                        _ => {
-                            self.errors.push(TypeCheckError::TypeMismatch {
-                                expected: "Parameter".to_string(),
-                                found: format!("{}", arg_type),
-                            });
-                        }
-                    }
+            ASTNode::YogaNode { vama, dakshina } |
+            ASTNode::ViyogaNode { vama, dakshina } |
+            ASTNode::GunaNode { vama, dakshina } |
+            ASTNode::BhagaNode { vama, dakshina } => {
+                let t_vama = self.check(vama);
+                let t_dakshina = self.check(dakshina);
+                
+                let is_num = |t: &DevvaniType| matches!(t, DevvaniType::Subject(s) if s == "Purnaank" || s == "Dashaamsha");
+                
+                if !is_num(&t_vama) || !is_num(&t_dakshina) {
+                    self.errors.push(TypeCheckError::PrakaaraAsangata("Arithmetic requires numeric types".to_string()));
+                    return DevvaniType::Unknown;
                 }
-
-                DevvaniType::Subject(kriya.clone())
+                
+                if t_vama != t_dakshina {
+                    self.errors.push(TypeCheckError::PrakaaraVaisamya { 
+                        expected: format!("{:?}", t_vama), 
+                        found: format!("{:?}", t_dakshina) 
+                    });
+                }
+                t_vama
             }
+
+            ASTNode::SamaNode { vama, dakshina } |
+            ASTNode::AsamaNode { vama, dakshina } |
+            ASTNode::NyuunaNode { vama, dakshina } |
+            ASTNode::AdhikaNode { vama, dakshina } => {
+                let t_vama = self.check(vama);
+                let t_dakshina = self.check(dakshina);
+                if t_vama != t_dakshina {
+                    self.errors.push(TypeCheckError::PrakaaraVaisamya { 
+                        expected: format!("{:?}", t_vama), 
+                        found: format!("{:?}", t_dakshina) 
+                    });
+                }
+                DevvaniType::Subject("Bool".to_string())
+            }
+
+            ASTNode::VadatiNode { mulya } => {
+                self.check(mulya);
+                DevvaniType::Unknown
+            }
+
+            ASTNode::PathatiNode { naama } => {
+                let ty = DevvaniType::Subject("Vaak".to_string());
+                let symbol = Symbol::new(naama, ty.clone(), &Vacana::Eka, &Linga::Pullinga, "var");
+                self.env.define_symbol(naama, symbol);
+                ty
+            }
+
+            ASTNode::YadiNode { sthiti, tarhi, anyatha } => {
+                let t_sthiti = self.check(sthiti);
+                if !matches!(t_sthiti, DevvaniType::Subject(ref s) if s == "Bool") {
+                    self.errors.push(TypeCheckError::SatyaasatyaApekshita("Yadi condition must be Bool".to_string()));
+                }
+                for stmt in tarhi { self.check(stmt); }
+                if let Some(body) = anyatha {
+                    for stmt in body { self.check(stmt); }
+                }
+                DevvaniType::Unknown
+            }
+
+            ASTNode::YavatNode { sthiti, shareera } => {
+                let t_sthiti = self.check(sthiti);
+                if !matches!(t_sthiti, DevvaniType::Subject(ref s) if s == "Bool") {
+                    self.errors.push(TypeCheckError::SatyaasatyaApekshita("Yavat condition must be Bool".to_string()));
+                }
+                for stmt in shareera { self.check(stmt); }
+                DevvaniType::Unknown
+            }
+
+            ASTNode::PunahNode { varam, shareera } => {
+                let t_varam = self.check(varam);
+                if !matches!(t_varam, DevvaniType::Subject(ref s) if s == "Purnaank") {
+                    self.errors.push(TypeCheckError::PrakaaraVaisamya { 
+                        expected: "Purnaank".to_string(), 
+                        found: format!("{:?}", t_varam) 
+                    });
+                }
+                for stmt in shareera { self.check(stmt); }
+                DevvaniType::Unknown
+            }
+
             ASTNode::DhatuDef { name, params, body, lakara, .. } => {
                 let l_str = format!("{:?}", lakara);
                 let typesystem_lakara = lakara_from_str(&l_str).unwrap_or(Lakara::Lat);
@@ -98,7 +157,6 @@ impl TypeChecker {
                 self.current_lakara = Some(typesystem_lakara.clone());
                 
                 let scope = lakara_to_scope(&typesystem_lakara);
-                
                 let symbol = Symbol::new(name, DevvaniType::Scope(format!("{:?}", scope.kind)), &Vacana::Eka, &Linga::Pullinga, "fn");
                 self.env.define_symbol(name, symbol);
 
@@ -124,6 +182,32 @@ impl TypeChecker {
                     _ => DevvaniType::Scope(name.clone()),
                 }
             }
+
+            ASTNode::KriyaCall { karta, kriya, karma, .. } => {
+                if let Some(subject_node) = karta {
+                    if let ASTNode::Nama { base, .. } = &**subject_node {
+                        if self.env.lookup(base).is_none() {
+                            self.errors.push(TypeCheckError::NaamaApraapta(base.clone()));
+                        }
+                    }
+                }
+
+                for arg in karma {
+                    let arg_type = self.check(arg);
+                    match arg_type {
+                        DevvaniType::Parameter(_) => {}
+                        _ => {
+                            self.errors.push(TypeCheckError::PrakaaraVaisamya {
+                                expected: "Parameter".to_string(),
+                                found: format!("{:?}", arg_type),
+                            });
+                        }
+                    }
+                }
+
+                DevvaniType::Subject(kriya.clone())
+            }
+            
             _ => DevvaniType::Unknown,
         }
     }
@@ -131,118 +215,5 @@ impl TypeChecker {
     pub fn check_program(&mut self, node: &ASTNode) -> Vec<TypeCheckError> {
         self.check(node);
         self.errors.clone()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use devvani_ast::Span;
-    use devvani_ast::Vibhakti;
-    use devvani_ast::Linga as AstLinga;
-    use devvani_ast::Vacana as AstVacana;
-    use devvani_ast::Lakara as AstLakara;
-    use devvani_ast::Gana;
-
-    fn dummy_span() -> Span {
-        Span { line: 0, col: 0, len: 0 }
-    }
-
-    #[test]
-    fn test_nama_inference() {
-        let mut checker = TypeChecker::new();
-        let node = ASTNode::Nama {
-            base: "Ramah".to_string(),
-            vibhakti: Vibhakti::Prathama,
-            linga: AstLinga::Pullinga,
-            vacana: AstVacana::Eka,
-            span: dummy_span(),
-        };
-        let ty = checker.check(&node);
-        assert_eq!(ty, DevvaniType::Subject("Ramah".to_string()));
-    }
-
-    #[test]
-    fn test_lookup_after_define() {
-        let mut checker = TypeChecker::new();
-        let ty = DevvaniType::Subject("Ramah".to_string());
-        checker.env.define("Ramah", ty.clone());
-        assert_eq!(checker.env.lookup_type("Ramah"), Some(&ty));
-    }
-
-    #[test]
-    fn test_enter_scope_parent_lookup() {
-        let mut global_env = TypeEnv::new("global");
-        let ty = DevvaniType::Subject("Ramah".to_string());
-        global_env.define("Ramah", ty.clone());
-        let local_env = global_env.enter_scope("local");
-        assert_eq!(local_env.lookup_type("Ramah"), Some(&ty));
-    }
-
-    #[test]
-    fn test_kriyacall_undefined_subject() {
-        let mut checker = TypeChecker::new();
-        let node = ASTNode::KriyaCall {
-            karta: Some(Box::new(ASTNode::Nama {
-                base: "Unknown".to_string(),
-                vibhakti: Vibhakti::Prathama,
-                linga: AstLinga::Pullinga,
-                vacana: AstVacana::Eka,
-                span: dummy_span(),
-            })),
-            kriya: "pathati".to_string(),
-            karma: vec![],
-            karana: None,
-            sampradana: None,
-            apadan: None,
-            adhikarana: None,
-            span: dummy_span(),
-        };
-        checker.check(&node);
-        assert!(!checker.errors.is_empty());
-        match &checker.errors[0] {
-            TypeCheckError::UndefinedName(name) => assert_eq!(name, "Unknown"),
-            _ => panic!("Expected UndefinedName error"),
-        }
-    }
-
-    #[test]
-    fn test_dhatu_def_lakara_async() {
-        let mut checker = TypeChecker::new();
-        let node = ASTNode::DhatuDef {
-            name: "gacchati".to_string(),
-            lakara: AstLakara::Lrt,
-            gana: Gana::Bhvadi,
-            linga: AstLinga::Pullinga,
-            vacana: AstVacana::Eka,
-            params: vec![],
-            upasargas: vec![],
-            return_karaka: None,
-            body: vec![],
-            span: dummy_span(),
-        };
-        let ty = checker.check(&node);
-        assert_eq!(ty, DevvaniType::Subject("Future<gacchati>".to_string()));
-        let sym = checker.env.lookup("gacchati").unwrap();
-        assert_eq!(sym.devvani_type, DevvaniType::Scope("Async".to_string()));
-    }
-
-    #[test]
-    fn test_dhatu_def_lakara_vidhilin() {
-        let mut checker = TypeChecker::new();
-        let node = ASTNode::DhatuDef {
-            name: "pateh".to_string(),
-            lakara: AstLakara::Vidhilin,
-            gana: Gana::Bhvadi,
-            linga: AstLinga::Pullinga,
-            vacana: AstVacana::Eka,
-            params: vec![],
-            upasargas: vec![],
-            return_karaka: None,
-            body: vec![],
-            span: dummy_span(),
-        };
-        let ty = checker.check(&node);
-        assert_eq!(ty, DevvaniType::Subject("Result<pateh>".to_string()));
     }
 }

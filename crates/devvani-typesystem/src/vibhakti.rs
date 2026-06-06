@@ -52,6 +52,8 @@ pub fn infer_type_from_suffix(word: &str) -> VibhaktiRole {
         VibhaktiRole::Shashthi
     } else if lower_word.ends_with("e") {
         VibhaktiRole::Saptami
+    } else if lower_word == "purnaankliteral" || lower_word == "dashaamshaliteral" || lower_word == "vaakliteral" {
+        VibhaktiRole::Prathama
     } else {
         VibhaktiRole::Prathama
     }
@@ -59,7 +61,15 @@ pub fn infer_type_from_suffix(word: &str) -> VibhaktiRole {
 
 impl fmt::Display for VibhaktiRole {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        match self {
+            VibhaktiRole::Prathama => write!(f, "Prathama"),
+            VibhaktiRole::Dvitiya => write!(f, "Dvitiya"),
+            VibhaktiRole::Tritiya => write!(f, "Tritiya"),
+            VibhaktiRole::Chaturthi => write!(f, "Chaturthi"),
+            VibhaktiRole::Panchami => write!(f, "Panchami"),
+            VibhaktiRole::Shashthi => write!(f, "Shashthi"),
+            VibhaktiRole::Saptami => write!(f, "Saptami"),
+        }
     }
 }
 

@@ -17,3 +17,9 @@ Thumbs.db
 
 # Environment files
 .env
+export/windows-x86_64/libLLVM-14.so.1
+export/linux-x86_64/devvani
+namaste
+namaste.ll
+namaste.o
+namaste_test.o

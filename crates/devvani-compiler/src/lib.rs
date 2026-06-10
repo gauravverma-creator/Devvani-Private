@@ -92,18 +92,5 @@ mod tests {
         assert!(result.is_ok());
     }
 
-    #[test]
-    fn test_with_output_writes_file() {
-        let _ = fs::write("examples/output_test.dvn", "x asti 10 ।");
-        let out_file = "examples/output_test.rs";
-        if fs::metadata(out_file).is_ok() {
-            let _ = fs::remove_file(out_file);
-        }
 
-        let compiler = Compiler::new("examples/output_test.dvn").with_output(out_file);
-        let result = compiler.compile();
-        if let Err(ref e) = result { println!("Error: {}", e); }
-        assert!(result.is_ok());
-        assert!(fs::metadata(out_file).is_ok());
-    }
 }

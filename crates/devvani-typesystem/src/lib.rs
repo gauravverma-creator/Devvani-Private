@@ -6,6 +6,9 @@ pub mod vacana;
 pub mod linga;
 pub mod symbol;
 pub mod samasa;
+pub mod krit;
+pub mod taddhita;
+pub mod upasarga;
 
 pub use vibhakti::*;
 pub use type_env::*;
@@ -15,3 +18,6 @@ pub use vacana::*;
 pub use linga::*;
 pub use symbol::*;
 pub use samasa::*;
+pub use krit::*;
+pub use taddhita::*;
+pub use upasarga::*;

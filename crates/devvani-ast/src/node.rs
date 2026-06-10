@@ -4,6 +4,21 @@ use serde::{Deserialize, Serialize};
 pub use devvani_lexer::token::Span;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum UpasargaDirective {
+    Export,
+    Private,
+    Inline,
+    Override,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UpasargaNode {
+    pub directives: Vec<UpasargaDirective>,
+    pub target: Box<ASTNode>,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Vibhakti {
     Prathama,
     Dvitiya,
@@ -188,6 +203,14 @@ pub enum ASTNode {
     },
     KritChain {
         steps: Vec<ASTNode>,
+        span: Span,
+    },
+    UpasargaApplied {
+        node: Box<UpasargaNode>,
+    },
+    TaddhitaChain {
+        base: Box<ASTNode>,
+        suffixes: Vec<String>,
         span: Span,
     },
 }

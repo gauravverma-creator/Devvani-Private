@@ -1,6 +1,7 @@
 use devvani_lexer::{Lexer, SandhiMode};
 use devvani_parser::Parser;
 use devvani_codegen::{Codegen, CodegenTarget};
+use devvani_reversible::VedicBatchEngine;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -15,6 +16,7 @@ pub enum CompilerError {
 pub struct Compiler {
     input_file: PathBuf,
     output_file: Option<PathBuf>,
+    pub reversible_engine: Option<VedicBatchEngine>,
 }
 
 impl Compiler {
@@ -22,6 +24,7 @@ impl Compiler {
         Self {
             input_file: input.as_ref().to_path_buf(),
             output_file: None,
+            reversible_engine: None,
         }
     }
 
@@ -54,6 +57,36 @@ impl Compiler {
         }
 
         Ok(rust_code)
+    }
+
+    /// Initialize the reversible compute engine for this compilation session.
+    /// Call this before compiling if reversible tracking is needed.
+    /// ssd_dir: path where .dvr/.dvri files will be written.
+    pub fn enable_reversible_engine(&mut self, ssd_dir: impl AsRef<std::path::Path>) {
+        use devvani_reversible::WindowConfig;
+        match VedicBatchEngine::new(
+            32 * 1024 * 1024, // 32MB RAM tier
+            WindowConfig {
+                max_ops: 512,
+                purge_fraction: 0.80,
+                dependency_check: true,
+            },
+            ssd_dir,
+            16,  // coalesce threshold
+            64,  // batch size
+        ) {
+            Ok(engine) => {
+                self.reversible_engine = Some(engine);
+            }
+            Err(e) => {
+                eprintln!("[devvani-compiler] warning: reversible engine init failed: {}", e);
+            }
+        }
+    }
+
+    /// Returns true if the reversible engine is active for this session.
+    pub fn has_reversible_engine(&self) -> bool {
+        self.reversible_engine.is_some()
     }
 }
 
@@ -91,6 +124,4 @@ mod tests {
         if let Err(ref e) = result { println!("Error: {}", e); }
         assert!(result.is_ok());
     }
-
-
 }

@@ -11,6 +11,7 @@ members = [
     "crates/devvani-llvm",
     "crates/devvani-stdlib",
     "crates/devvani-module",
+    "crates/devvani-reversible",
 ]
 resolver = "2"
 

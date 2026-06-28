@@ -1,7 +1,8 @@
 use inkwell::values::{BasicValueEnum, FunctionValue};
 use std::collections::HashMap;
 use crate::error::DevvaniLLVMError;
-use devvani_ast::node::{ASTNode, KarakaParam};
+use devvani_ast::node::{ASTNode, KarakaParam, KarakaRole};
+use devvani_typesystem::vaak::VaakOwnership;
 
 /// Extends CodeGen from lib.rs with IR emission methods
 pub struct IrEmitter<'ctx> {
@@ -10,16 +11,42 @@ pub struct IrEmitter<'ctx> {
     pub builder: inkwell::builder::Builder<'ctx>,
     /// Symbol table: variable name → LLVM value
     pub variables: HashMap<String, BasicValueEnum<'ctx>>,
+    /// Vaak ownership map: variable name → ownership state
+    pub vaak_ownership_map: HashMap<String, VaakOwnership>,
 }
 
 impl<'ctx> IrEmitter<'ctx> {
     pub fn new(context: &'ctx inkwell::context::Context, module_name: &str) -> Self {
-        Self {
+        let mut emitter = Self {
             context,
             module: context.create_module(module_name),
             builder: context.create_builder(),
             variables: HashMap::new(),
-        }
+            vaak_ownership_map: HashMap::new(),
+        };
+        emitter.declare_vaak_stdlib();
+        emitter
+    }
+
+    fn declare_vaak_stdlib(&mut self) {
+        let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+        let i64_type = self.context.i64_type();
+        
+        // __devvani_vaak_yoga(i8*, i8*) -> i8*
+        let yoga_fn_type = i8_ptr_type.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+        self.module.add_function("__devvani_vaak_yoga", yoga_fn_type, None);
+        
+        // __devvani_vaak_parimana(i8*) -> i64
+        let parimana_fn_type = i64_type.fn_type(&[i8_ptr_type.into()], false);
+        self.module.add_function("__devvani_vaak_parimana", parimana_fn_type, None);
+        
+        // __devvani_vaak_khanda(i8*, i64, i64) -> i8*
+        let khanda_fn_type = i8_ptr_type.fn_type(&[i8_ptr_type.into(), i64_type.into(), i64_type.into()], false);
+        self.module.add_function("__devvani_vaak_khanda", khanda_fn_type, None);
+        
+        // __devvani_vaak_mukta(i8*) -> void
+        let mukta_fn_type = self.context.void_type().fn_type(&[i8_ptr_type.into()], false);
+        self.module.add_function("__devvani_vaak_mukta", mukta_fn_type, None);
     }
 
     /// Entry point: compile full AST to IR string
@@ -33,11 +60,27 @@ impl<'ctx> IrEmitter<'ctx> {
 
         self.compile_node(ast)?;
 
+        // Auto-free Karta-owned Vaak strings at function end (Adhikarana scope)
+        self.free_karta_strings();
+
         if function.get_last_basic_block().and_then(|bb| bb.get_terminator()).is_none() {
             self.builder.build_return(Some(&i64_type.const_int(0, false))).map_err(|e| DevvaniLLVMError::CodeGenError(e.to_string()))?;
         }
 
         Ok(self.module.print_to_string().to_string())
+    }
+
+    fn free_karta_strings(&mut self) {
+        if let Some(mukta_fn) = self.module.get_function("__devvani_vaak_mukta") {
+            for (naama, ownership) in self.vaak_ownership_map.iter() {
+                if *ownership == VaakOwnership::Karta {
+                    if let Some(ptr) = self.variables.get(naama) {
+                        let val: inkwell::values::BasicMetadataValueEnum<'ctx> = (*ptr).into();
+                        let _ = self.builder.build_call(mukta_fn, &[val], "mukta_call");
+                    }
+                }
+            }
+        }
     }
 
     /// Dispatch on ASTNode variant
@@ -75,9 +118,53 @@ impl<'ctx> IrEmitter<'ctx> {
                 Ok(Some(val.into()))
             }
             ASTNode::VaakLiteral { value, .. } => {
-                let val = self.builder.build_global_string_ptr(value, "str")
+                let val = self.builder.build_global_string_ptr(value, "vaak_lit")
                     .map_err(|e| DevvaniLLVMError::CodeGenError(e.to_string()))?;
                 Ok(Some(val.as_pointer_value().into()))
+            }
+            ASTNode::VaakNode { naama, mulya, karaka, is_mutable: _, span: _ } => {
+                let val = self.compile_node(mulya)?
+                    .ok_or_else(|| DevvaniLLVMError::CodeGenError("VaakNode: no mulya".into()))?;
+                
+                let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+                let ptr = self.builder.build_alloca(i8_ptr_type, naama)
+                    .map_err(|e| DevvaniLLVMError::CodeGenError(e.to_string()))?;
+                self.builder.build_store(ptr, val).map_err(|e| DevvaniLLVMError::CodeGenError(e.to_string()))?;
+                self.variables.insert(naama.clone(), ptr.into());
+                
+                if *karaka == KarakaRole::Karta {
+                    self.vaak_ownership_map.insert(naama.clone(), VaakOwnership::Karta);
+                } else if *karaka == KarakaRole::Karana {
+                    self.vaak_ownership_map.insert(naama.clone(), VaakOwnership::Karana);
+                }
+                
+                if *karaka == KarakaRole::Apadana {
+                    self.vaak_ownership_map.insert(naama.clone(), VaakOwnership::Apadana);
+                }
+                
+                Ok(Some(ptr.into()))
+            }
+            ASTNode::VaakYogaNode { vama, dakshina, span: _ } => {
+                let i8_ptr_type = self.context.i8_type().ptr_type(inkwell::AddressSpace::default());
+                let left = self.compile_node(vama)?.ok_or_else(|| DevvaniLLVMError::CodeGenError("VaakYoga: no vama".into()))?;
+                let right = self.compile_node(dakshina)?.ok_or_else(|| DevvaniLLVMError::CodeGenError("VaakYoga: no dakshina".into()))?;
+                
+                let vaak_yoga_fn = self.module.get_function("__devvani_vaak_yoga")
+                    .unwrap_or_else(|| {
+                        let fn_type = i8_ptr_type.fn_type(&[i8_ptr_type.into(), i8_ptr_type.into()], false);
+                        self.module.add_function("__devvani_vaak_yoga", fn_type, None)
+                    });
+                
+                let call = self.builder.build_call(vaak_yoga_fn, &[left.into(), right.into()], "yoga_result")
+                    .map_err(|e| DevvaniLLVMError::CodeGenError(e.to_string()))?;
+                
+                match call.try_as_basic_value() {
+                    inkwell::values::ValueKind::Basic(v) => {
+                        // Result is Karta-owned (caller must free)
+                        Ok(Some(v))
+                    }
+                    _ => Ok(Some(i8_ptr_type.const_zero().into())),
+                }
             }
             ASTNode::AstiNode { naama, mulya } | ASTNode::BhavatiNode { naama, mulya } => {
                 let val = self.compile_node(mulya)?

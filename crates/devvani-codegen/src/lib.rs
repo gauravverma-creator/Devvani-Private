@@ -1,7 +1,9 @@
 use devvani_ast::ASTNode;
+use devvani_ast::KarakaRole;
 use devvani_typesystem::{
     TypeChecker, Lakara, 
     lakara_to_scope, lakara_from_str,
+    vaak::{MoveChecker, VaakOwnership},
 };
 
 // ── Error type ──────────────────────────────────────────────
@@ -50,6 +52,7 @@ pub enum Instruction {
 pub struct Codegen {
     pub target: CodegenTarget,
     pub type_checker: TypeChecker,
+    pub move_checker: MoveChecker,
     pub instructions: Vec<Instruction>,
     pub rust_output: String,
     indent: usize,
@@ -60,6 +63,7 @@ impl Codegen {
         Self {
             target,
             type_checker: TypeChecker::new(),
+            move_checker: MoveChecker::new(),
             instructions: Vec::new(),
             rust_output: String::new(),
             indent: 0,
@@ -73,8 +77,49 @@ impl Codegen {
             return Err(CodegenError::TypeCheckFailed(format!("{:?}", errors)));
         }
 
-        // 2. Then call emit(node)
+        // 2. Run move checker on VaakNode/VaakYogaNode
+        let move_errors = self.check_moves(node);
+        if !move_errors.is_empty() {
+            return Err(CodegenError::TypeCheckFailed(move_errors.join("\n")));
+        }
+
+        // 3. Then call emit(node)
         self.emit(node)
+    }
+
+    fn check_moves(&mut self, node: &ASTNode) -> Vec<String> {
+        let mut errors = Vec::new();
+        self.walk_for_moves(node, &mut errors);
+        errors
+    }
+
+    fn walk_for_moves(&mut self, node: &ASTNode, errors: &mut Vec<String>) {
+        match node {
+            ASTNode::KaryakramNode { shareera } => {
+                for stmt in shareera {
+                    self.walk_for_moves(stmt, errors);
+                }
+            }
+            ASTNode::VaakNode { naama, karaka, .. } => {
+                if *karaka == KarakaRole::Apadana {
+                    if let Some(VaakOwnership::Moved) = self.move_checker.ownership_map.get(naama) {
+                        errors.push(format!("Doṣa D030: '{}' — svāmitva-hāni (ownership moved, cannot use)", naama));
+                    } else {
+                        self.move_checker.do_move(naama).ok();
+                    }
+                } else {
+                    let ownership = if *karaka == KarakaRole::Karta {
+                        VaakOwnership::Karta
+                    } else if *karaka == KarakaRole::Karana {
+                        VaakOwnership::Karana
+                    } else {
+                        VaakOwnership::Karta
+                    };
+                    self.move_checker.register(naama.clone(), ownership);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn emit(&mut self, node: &ASTNode) -> Result<(), CodegenError> {
@@ -117,6 +162,22 @@ impl Codegen {
             }
             ASTNode::VaakLiteral { value, .. } => {
                 self.rust_output.push_str(&format!("\"{}\"", value));
+            }
+            ASTNode::VaakNode { naama: _, mulya, karaka, is_mutable, span: _ } => {
+                let kw = if *is_mutable { "let mut" } else { "let" };
+                self.rust_output.push_str(&format!("{} {} = ", self.indent_str(), kw));
+                match karaka {
+                    KarakaRole::Karana => self.rust_output.push_str("&"),
+                    _ => {}
+                }
+                self.emit(mulya)?;
+                self.rust_output.push_str(";\n");
+            }
+            ASTNode::VaakYogaNode { vama, dakshina, span: _ } => {
+                self.emit(vama)?;
+                self.rust_output.push_str(" + ");
+                self.emit(dakshina)?;
+                self.instructions.push(Instruction::Yoga);
             }
             ASTNode::AstiNode { naama, mulya } => {
                 self.rust_output.push_str(&format!("{}let {} = ", self.indent_str(), naama));

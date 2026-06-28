@@ -22,6 +22,10 @@ pub enum DevvaniType {
     Owner(String),         // Shashthi
     Scope(String),         // Saptami
     Unknown,
+    /// Vaak — owned String type (Kartā semantics)
+    Vaak,
+    /// VaakBorrow — immutable string borrow (Karaṇa semantics)  
+    VaakBorrow,
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -84,6 +88,8 @@ impl fmt::Display for DevvaniType {
             DevvaniType::Owner(s) => write!(f, "Owner({})", s),
             DevvaniType::Scope(s) => write!(f, "Scope({})", s),
             DevvaniType::Unknown => write!(f, "Unknown"),
+            DevvaniType::Vaak => write!(f, "Vaak"),
+            DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
         }
     }
 }

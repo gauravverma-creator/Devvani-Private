@@ -17,4 +17,7 @@ pub enum LexError {
     
     #[error("Sandhi conflict between {rule1} and {rule2} at {span:?}")]
     SandhiConflict { rule1: String, rule2: String, span: Span },
+
+    #[error("Invalid escape sequence '{ch}' at {span:?}")]
+    InvalidEscape { ch: char, span: Span },
 }

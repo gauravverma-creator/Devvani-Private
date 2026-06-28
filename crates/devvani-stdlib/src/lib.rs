@@ -40,6 +40,14 @@ pub trait DhatuFn: Send + Sync {
 pub mod dhatu;
 pub mod registry;
 pub mod prelude;
+pub mod string;
+
+pub use string::{
+    __devvani_vaak_yoga,
+    __devvani_vaak_parimana,
+    __devvani_vaak_khanda,
+    __devvani_vaak_mukta,
+};
 
 #[cfg(test)]
 mod tests {

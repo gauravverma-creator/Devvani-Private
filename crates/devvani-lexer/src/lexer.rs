@@ -203,10 +203,40 @@ impl<'a> Lexer<'a> {
             }
             if c == '\\' {
                 self.advance();
+                let span = Span { line: self.line, col: self.col, len: 1 };
                 match self.peek() {
-                    Some('n') => s.push('\n'), Some('t') => s.push('\t'),
-                    Some('\\') => s.push('\\'), Some('"') => s.push('"'),
-                    _ => s.push('\\'),
+                    Some('r') => s.push('\r'),
+                    Some('n') => s.push('\n'),
+                    Some('t') => s.push('\t'),
+                    Some('0') => s.push('\0'),
+                    Some('\\') => s.push('\\'),
+                    Some('"') => s.push('"'),
+                    Some('u') => {
+                        self.advance();
+                        if self.peek() != Some('{') {
+                            return Err(LexError::InvalidEscape { ch: 'u', span });
+                        }
+                        self.advance();
+                        let mut hex_str = String::new();
+                        while let Some(hc) = self.peek() {
+                            if hc == '}' {
+                                self.advance();
+                                break;
+                            }
+                            if !hc.is_ascii_hexdigit() {
+                                return Err(LexError::InvalidEscape { ch: hc, span });
+                            }
+                            hex_str.push(hc);
+                            self.advance();
+                        }
+                        let code_point = u32::from_str_radix(&hex_str, 16).unwrap_or(0);
+                        let ch = char::from_u32(code_point).unwrap_or('\u{FFFD}');
+                        s.push(ch);
+                    }
+                    Some(unknown_ch) => {
+                        return Err(LexError::InvalidEscape { ch: unknown_ch, span });
+                    }
+                    None => return Err(LexError::UnterminatedString { span: Span { line: start_line, col: start_col, len: self.pos - start_pos } }),
                 }
                 self.advance();
             } else { s.push(c); self.advance(); }

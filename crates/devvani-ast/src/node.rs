@@ -194,6 +194,22 @@ pub enum ASTNode {
         value: String,
         span: Span,
     },
+    /// VaakNode — owned string variable declaration with Kāraka ownership role.
+    /// Kartā = owner, Karaṇa = immutable borrow, Apādāna = move.
+    VaakNode {
+        naama: String,
+        mulya: Box<ASTNode>,
+        karaka: KarakaRole,
+        is_mutable: bool,
+        span: Span,
+    },
+    /// VaakYogaNode — string concatenation (Yoga applied to strings)
+    /// Mīmāṃsā Apūrva-vidhi: two strings produce a new owned string
+    VaakYogaNode {
+        vama: Box<ASTNode>,
+        dakshina: Box<ASTNode>,
+        span: Span,
+    },
     Samasa {
         samasa_type: SamasaType,
         parts: Vec<ASTNode>,

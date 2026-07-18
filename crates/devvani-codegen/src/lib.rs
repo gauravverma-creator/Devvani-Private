@@ -73,8 +73,11 @@ impl Codegen {
     pub fn generate(&mut self, node: &ASTNode) -> Result<(), CodegenError> {
         // 1. Run type checker first
         let errors = self.type_checker.check_program(node);
-        if !errors.is_empty() {
-            return Err(CodegenError::TypeCheckFailed(format!("{:?}", errors)));
+        let fatal_errors: Vec<_> = errors.iter()
+            .filter(|e| !matches!(e, devvani_typesystem::TypeCheckError::AnavasthaDosha { .. }))
+            .collect();
+        if !fatal_errors.is_empty() {
+            return Err(CodegenError::TypeCheckFailed(format!("{:?}", fatal_errors)));
         }
 
         // 2. Run move checker on VaakNode/VaakYogaNode
@@ -282,37 +285,26 @@ impl Codegen {
                 self.indent -= 1;
                 self.rust_output.push_str(&format!("{}}}\n", self.indent_str()));
             }
-            ASTNode::KriyaCall { karta, kriya, karma, .. } => {
-                let subject = if let Some(k) = karta {
-                    match &**k {
-                        ASTNode::Nama { base, .. } => base.clone(),
-                        ASTNode::Samasa { resolved, .. } => resolved.clone(),
-                        _ => "self".to_string(),
-                    }
-                } else {
-                    "self".to_string()
-                };
-
-                let mut arg_names = Vec::new();
-                for arg in karma {
-                    if let ASTNode::Nama { base, .. } = arg {
-                        arg_names.push(base.clone());
-                    } else if let ASTNode::PurnaankLiteral { value, .. } = arg {
-                        arg_names.push(value.to_string());
-                    } else if let ASTNode::Samasa { resolved, .. } = arg {
-                        arg_names.push(resolved.clone());
-                    }
-                }
-
+            ASTNode::KriyaCall { kriya, karma, .. } => {
                 self.instructions.push(Instruction::Call {
-                    subject: subject.clone(),
+                    subject: String::new(),
                     verb: kriya.clone(),
-                    args: arg_names.clone(),
+                    args: Vec::new(),
                 });
 
-                let line = format!("{}.{}({});\n", subject, kriya, arg_names.join(", "));
                 self.rust_output.push_str(&self.indent_str());
-                self.rust_output.push_str(&line);
+                self.rust_output.push_str(kriya);
+                self.rust_output.push_str("(");
+                for (i, arg) in karma.iter().enumerate() {
+                    if i > 0 {
+                        self.rust_output.push_str(", ");
+                    }
+                    self.emit(arg)?;
+                }
+                self.rust_output.push_str(");\n");
+            }
+            ASTNode::AvartanaNode { call, .. } => {
+                self.emit(call.as_ref())?;
             }
             ASTNode::DhatuDef { name, params, body, lakara, .. } => {
                 let ts_lakara = lakara_from_str(&format!("{:?}", lakara)).unwrap_or(Lakara::Lat);

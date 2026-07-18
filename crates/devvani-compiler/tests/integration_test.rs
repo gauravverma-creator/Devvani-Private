@@ -25,6 +25,27 @@ fn test_rust_output_not_empty() {
 }
 
 #[test]
+fn test_recursive_dhatu_codegen() {
+    let source = "avartanah-dhatu n karoti । n yoga avartanah-dhatu n iti ।";
+    let _ = fs::write("examples/recursive_integration.dvn", source);
+    let result = Compiler::new("examples/recursive_integration.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    let call_count = code.matches("avartanah-dhatu(").count();
+    assert!(call_count >= 2, "expected avartanah-dhatu( to appear >= 2 times, got {} in:\n{}", call_count, code);
+}
+
+#[test]
+fn test_nonrecursive_dhatu_call_codegen() {
+    let source = "prathamah-dhatu x karoti । x yoga 1 iti । dvitiyah-dhatu y karoti । y yoga prathamah-dhatu x iti ।";
+    let _ = fs::write("examples/nonrecursive_integration.dvn", source);
+    let result = Compiler::new("examples/nonrecursive_integration.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(code.contains("prathamah-dhatu("), "expected prathamah-dhatu( in generated code:\n{}", code);
+}
+
+#[test]
 fn test_diagnostics_clean_report() {
     use devvani_compiler::diagnostics::DiagnosticEngine;
     let report = DiagnosticEngine::report(&[]);

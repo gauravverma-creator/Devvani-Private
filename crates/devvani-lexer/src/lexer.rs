@@ -121,6 +121,24 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
+        while self.peek() == Some('-') {
+            let rest = &self.input[self.pos + 1..];
+            let next_start = rest.chars().next();
+            if next_start.map_or(false, |c| is_iast_identifier_start(c)) {
+                id.push('-');
+                self.advance();
+                while let Some(c) = self.peek() {
+                    if is_iast_identifier_continue(c) {
+                        id.push(c);
+                        self.advance();
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
         let kind = match id.as_str() {
             "Lat" => TokenKind::Lat, "Lit" => TokenKind::Lit, "Lut" => TokenKind::Lut,
             "Lrt" => TokenKind::Lrt, "Let" => TokenKind::Let, "Lot" => TokenKind::Lot,
@@ -309,5 +327,35 @@ mod tests {
         let mut lexer = Lexer::new("\"hello\\nworld\"");
         let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
         assert_eq!(tokens[0].kind, TokenKind::VaakLiteral("hello\nworld".to_string()));
+    }
+
+    #[test]
+    fn test_hyphenated_identifier() {
+        let mut lexer = Lexer::new("avartanah-dhatu");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naama("avartanah-dhatu".to_string()));
+    }
+
+    #[test]
+    fn test_hyphenated_identifier_multiple_hyphens() {
+        let mut lexer = Lexer::new("avartanah-dhatu-karoti");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naama("avartanah-dhatu-karoti".to_string()));
+    }
+
+    #[test]
+    fn test_plain_identifier_regression() {
+        let mut lexer = Lexer::new("phala");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naama("phala".to_string()));
+    }
+
+    #[test]
+    fn test_standalone_hyphen_not_swallowed() {
+        let mut lexer = Lexer::new("foo - bar");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naama("foo".to_string()));
+        assert_eq!(tokens[1].kind, TokenKind::Unknown('-'));
+        assert_eq!(tokens[2].kind, TokenKind::Naama("bar".to_string()));
     }
 }

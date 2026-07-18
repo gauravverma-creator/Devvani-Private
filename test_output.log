@@ -1,0 +1,75 @@
+   Compiling devvani-typesystem v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-typesystem)
+   Compiling devvani-parser v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-parser)
+   Compiling devvani-stdlib v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-stdlib)
+   Compiling devvani-codegen v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-codegen)
+   Compiling devvani-llvm v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-llvm)
+   Compiling devvani-compiler v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-compiler)
+   Compiling devvani-cli v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 30.95s
+     Running unittests src/lib.rs (target/debug/deps/devvani_ast-53ea04d626300fff)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/devvani_cli-50589392962f8b29)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_codegen-98e7a1420b99f0b5)
+
+running 2 tests
+test tests::test_empty_program ... ok
+test tests::test_nama_node ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_compiler-1976f3ab4e13a39a)
+
+running 8 tests
+test diagnostics::tests::test_report_empty ... ok
+test tests::test_compile_nonexistent_file ... ok
+test diagnostics::tests::test_from_type_error_naama_apraapta ... ok
+test diagnostics::tests::test_from_type_error_anavastha_dosha ... ok
+test diagnostics::tests::test_from_compiler_error_parse ... ok
+test diagnostics::tests::test_report_with_diagnostics ... ok
+test tests::test_compile_hello ... ok
+test tests::test_compile_ganana ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/integration_test.rs (target/debug/deps/integration_test-bf7e24d2d55a3349)
+
+running 14 tests
+test test_diagnostics_clean_report ... ok
+test test_krit_tavya_obligation ... ok
+test test_krit_kta_past_passive ... ok
+test test_krit_tum_infinitive ... ok
+test test_taddhita_iya_relational ... ok
+test test_taddhita_tama_superlative ... ok
+test test_taddhita_tva_abstract_noun ... ok
+test test_vibhakti_dvitiya_parameter_type ... ok
+test test_upasarga_export_private_conflict ... ok
+test test_pipeline_hello ... ok
+test test_rust_output_not_empty ... ok
+test test_pipeline_samasa ... ok
+test test_recursive_dhatu_codegen ... FAILED
+test test_nonrecursive_dhatu_call_codegen ... ok
+
+failures:
+
+---- test_recursive_dhatu_codegen stdout ----
+
+thread 'test_recursive_dhatu_codegen' (11066) panicked at crates/devvani-compiler/tests/integration_test.rs:32:5:
+compile failed: Some("D010: TypeCheckFailed(\"[PrakaaraAsangata(\\\"Arithmetic requires numeric types\\\"), AnavasthaDosha { dhatu_name: \\\"avartanah-dhatu\\\" }]\")")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_recursive_dhatu_codegen
+
+test result: FAILED. 13 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p devvani-compiler --test integration_test`

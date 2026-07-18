@@ -8,6 +8,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     pub symbols: SymbolTable,
+    current_dhatu_name: Vec<String>,
 }
 
 impl Parser {
@@ -16,6 +17,7 @@ impl Parser {
             tokens,
             pos: 0,
             symbols: SymbolTable::new(),
+            current_dhatu_name: Vec::new(),
         }
     }
 
@@ -44,7 +46,20 @@ impl Parser {
             TokenKind::Yavat => self.parse_yavat(),
             TokenKind::Naama(ref name) => {
                 if name.ends_with("-dhatu") {
-                    self.parse_dhatu_def()
+                    let lookup = self.symbols.lookup(name);
+                    if !matches!(lookup.map(|s| &s.kind), Some(SymbolKind::Dhatu { .. })) {
+                        self.parse_dhatu_def()
+                    } else {
+                        let expr = self.parse_arithmetic()?;
+                        if self.check(&TokenKind::Vadati) {
+                            self.advance();
+                            self.expect(TokenKind::Danda)?;
+                            Ok(ASTNode::VadatiNode { mulya: Box::new(expr) })
+                        } else {
+                            if self.check(&TokenKind::Danda) { self.advance(); }
+                            Ok(expr)
+                        }
+                    }
                 } else if self.check_ahead(1, &TokenKind::Asti) {
                     self.parse_asti()
                 } else if self.check_ahead(1, &TokenKind::Bhavati) {
@@ -90,7 +105,17 @@ impl Parser {
     fn parse_dhatu_def(&mut self) -> Result<ASTNode, ParseError> {
         let name_tok = self.expect_identifier()?;
         let name = if let TokenKind::Naama(n) = name_tok.kind { n } else { unreachable!() };
-        
+
+        let _ = self.symbols.define(&name, Symbol {
+            name: name.clone(),
+            kind: SymbolKind::Dhatu { gana: Gana::Bhvadi, lakara: Lakara::Lat },
+            karaka: KarakaRole::Karta,
+            vibhakti: Vibhakti::Prathama,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            defined_at: name_tok.span,
+        });
+
         let mut params = Vec::new();
         while !self.is_karoti() && !self.check(&TokenKind::Danda) && !self.is_at_end() {
             let p_tok = self.expect_identifier()?;
@@ -121,9 +146,11 @@ impl Parser {
         }
         
         let mut body = Vec::new();
+        self.current_dhatu_name.push(name.clone());
         while !self.check(&TokenKind::Iti) && !self.is_at_end() {
             body.push(self.parse_vakya()?);
         }
+        self.current_dhatu_name.pop();
         self.symbols.pop_scope();
         self.expect(TokenKind::Iti)?;
         if self.check(&TokenKind::Danda) { self.advance(); }
@@ -263,6 +290,11 @@ impl Parser {
             TokenKind::DashaamshaLiteral(value) => Ok(ASTNode::DashaamshaLiteral { value, span: tok.span }),
             TokenKind::VaakLiteral(value) => Ok(ASTNode::VaakLiteral { value, span: tok.span }),
             TokenKind::Naama(name) => {
+                if let Some(sym) = self.symbols.lookup(&name) {
+                    if matches!(sym.kind, SymbolKind::Dhatu { .. }) {
+                        return self.parse_kriya_call(name, tok.span);
+                    }
+                }
                 let vibhakti = self.match_vibhakti().unwrap_or(Vibhakti::Prathama);
                 Ok(ASTNode::Nama {
                     base: name,
@@ -278,6 +310,43 @@ impl Parser {
                 span: tok.span,
             }),
         }
+    }
+
+    fn parse_kriya_call(&mut self, name: String, span: Span) -> Result<ASTNode, ParseError> {
+        let stop_kinds = [
+            TokenKind::Danda, TokenKind::Iti, TokenKind::Vadati,
+            TokenKind::Yoga, TokenKind::Viyoga, TokenKind::Guna, TokenKind::Bhaga,
+            TokenKind::Sama, TokenKind::AsamaH, TokenKind::NyuunaH, TokenKind::AdhikaH,
+            TokenKind::Varam, TokenKind::Tarhi, TokenKind::Anyatha, TokenKind::Samaapti,
+        ];
+
+        let mut karma = Vec::new();
+        while !self.check_any(&stop_kinds) && !self.is_at_end() {
+            let arg = self.parse_primary()?;
+            karma.push(arg);
+        }
+
+        let kriya_call = ASTNode::KriyaCall {
+            karta: None,
+            kriya: name.clone(),
+            karma,
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span,
+        };
+
+        if let Some(current) = self.current_dhatu_name.last() {
+            if *current == name {
+                return Ok(ASTNode::AvartanaNode {
+                    call: Box::new(kriya_call),
+                    span,
+                });
+            }
+        }
+
+        Ok(kriya_call)
     }
 
     fn match_vibhakti(&mut self) -> Option<Vibhakti> {
@@ -316,6 +385,12 @@ impl Parser {
         }
     }
 
+    fn check_any(&self, kinds: &[TokenKind]) -> bool {
+        if self.is_at_end() { return false; }
+        let next = &self.peek().kind;
+        kinds.iter().any(|k| k == next)
+    }
+
     fn check(&self, kind: &TokenKind) -> bool {
         if self.is_at_end() { return false; }
         &self.peek().kind == kind
@@ -346,5 +421,160 @@ impl Parser {
 
     fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len() || self.tokens[self.pos].kind == TokenKind::Samaapti
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn span() -> Span {
+        Span { line: 1, col: 1, len: 1 }
+    }
+
+    fn nm(s: &str) -> Token {
+        Token { kind: TokenKind::Naama(s.to_string()), span: span() }
+    }
+
+    fn kw(kind: TokenKind) -> Token {
+        Token { kind, span: span() }
+    }
+
+    fn parse_tokens(tokens: Vec<Token>) -> Result<ASTNode, ParseError> {
+        let mut parser = Parser::new(tokens);
+        parser.parse()
+    }
+
+    // Regression: a simple non-recursive dhatu parses exactly as before.
+    #[test]
+    fn test_simple_dhatu_regression() {
+        let tokens = vec![
+            nm("square-dhatu"), nm("n"), nm("karoti"), kw(TokenKind::Danda),
+            nm("n"), kw(TokenKind::Iti), kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DhatuDef { name, params, body, .. } => {
+                        assert_eq!(name, "square-dhatu");
+                        assert_eq!(params.len(), 1);
+                        assert_eq!(params[0].name, "n");
+                        assert_eq!(body.len(), 1);
+                        assert!(matches!(&body[0], ASTNode::Nama { base, .. } if base == "n"));
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // A dhatu whose body calls its own name -> AvartanaNode wrapping KriyaCall.
+    #[test]
+    fn test_self_recursive_dhatu_is_avatarana() {
+        let tokens = vec![
+            nm("factorial-dhatu"), nm("n"), nm("karoti"), kw(TokenKind::Danda),
+            nm("n"), kw(TokenKind::Yoga),
+            nm("factorial-dhatu"), nm("n"),
+            kw(TokenKind::Iti), kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                match &shareera[0] {
+                    ASTNode::DhatuDef { body, .. } => {
+                        // body[0] = YogaNode { vama: Nama n, dakshina: AvartanaNode }
+                        match &body[0] {
+                            ASTNode::YogaNode { dakshina, .. } => {
+                                match dakshina.as_ref() {
+                                    ASTNode::AvartanaNode { call, .. } => {
+                                        match call.as_ref() {
+                                            ASTNode::KriyaCall { kriya, karma, .. } => {
+                                                assert_eq!(kriya, "factorial-dhatu");
+                                                assert_eq!(karma.len(), 1);
+                                            }
+                                            other => panic!("expected KriyaCall inside AvartanaNode, got {:?}", other),
+                                        }
+                                    }
+                                    other => panic!("expected AvartanaNode, got {:?}", other),
+                                }
+                            }
+                            other => panic!("expected YogaNode in body, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // A dhatu calling a DIFFERENT registered dhatu -> plain KriyaCall (not AvartanaNode).
+    #[test]
+    fn test_call_to_other_dhatu_is_kriya_call() {
+        let tokens = vec![
+            nm("first-dhatu"), nm("x"), nm("karoti"), kw(TokenKind::Danda),
+            nm("x"), kw(TokenKind::Iti), kw(TokenKind::Danda),
+            nm("second-dhatu"), nm("y"), nm("karoti"), kw(TokenKind::Danda),
+            nm("y"), kw(TokenKind::Yoga),
+            nm("first-dhatu"), nm("x"),
+            kw(TokenKind::Iti), kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                match &shareera[1] {
+                    ASTNode::DhatuDef { body, .. } => {
+                        match &body[0] {
+                            ASTNode::YogaNode { dakshina, .. } => {
+                                match dakshina.as_ref() {
+                                    ASTNode::KriyaCall { kriya, karma, .. } => {
+                                        assert_eq!(kriya, "first-dhatu");
+                                        assert_eq!(karma.len(), 1);
+                                    }
+                                    other => panic!("expected plain KriyaCall, got {:?}", other),
+                                }
+                            }
+                            other => panic!("expected YogaNode, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // A reference to a name NOT registered as a Dhatu stays a plain Nama (no regression).
+    #[test]
+    fn test_unregistered_name_is_nama() {
+        let tokens = vec![
+            nm("foo-dhatu"), nm("a"), nm("karoti"), kw(TokenKind::Danda),
+            nm("a"), kw(TokenKind::Yoga), nm("bar"),
+            kw(TokenKind::Iti), kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                match &shareera[0] {
+                    ASTNode::DhatuDef { body, .. } => {
+                        match &body[0] {
+                            ASTNode::YogaNode { dakshina, .. } => {
+                                assert!(matches!(dakshina.as_ref(), ASTNode::Nama { base, .. } if base == "bar"));
+                            }
+                            other => panic!("expected YogaNode, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
     }
 }

@@ -229,4 +229,11 @@ pub enum ASTNode {
         suffixes: Vec<String>,
         span: Span,
     },
+    /// AvartanaNode — marks a KriyaCall that is a direct self-recursive call
+    /// (a DhatuDef calling its own name from within its own body).
+    /// Wraps the underlying KriyaCall for recursion-specific analysis in a later phase.
+    AvartanaNode {
+        call: Box<ASTNode>,  // always an ASTNode::KriyaCall
+        span: Span,
+    },
 }

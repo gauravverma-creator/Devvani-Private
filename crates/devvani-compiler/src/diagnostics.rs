@@ -95,6 +95,19 @@ impl DiagnosticEngine {
                 sutra_ref: None,
                 hint: None,
             },
+            TypeCheckError::AnavasthaDosha { dhatu_name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D040".to_string(),
+                sanskrit_title: "अनवस्था-दोषः".to_string(),
+                roman_title: "Anavastha Doshah".to_string(),
+                message: format!(
+                    "'{}' — is Dhātu mein koi base case nahi mila jo recursion ko rokta ho. \
+                     Har path recursive call tak jaata hai — infinite regress ka khatra hai.", dhatu_name),
+                sutra_ref: Some("Nyaya Sutra + Ashtadhyayi 6.4.22 (finality of rule application)".to_string()),
+                hint: Some(format!(
+                    "'{}' ke andar ek Yadi/Anyatha branch add karo jisme kam se kam ek path \
+                     bina recursive call ke terminate ho.", dhatu_name)),
+            },
         }
     }
 
@@ -226,5 +239,15 @@ mod tests {
         let report = DiagnosticEngine::report(&[diag1, diag2]);
         assert!(report.contains("D001"));
         assert!(report.contains("D009"));
+    }
+
+    #[test]
+    fn test_from_type_error_anavastha_dosha() {
+        let err = TypeCheckError::AnavasthaDosha { dhatu_name: "recur".to_string() };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D040");
+        assert!(diag.message.contains("recur"));
+        assert!(diag.display().contains("recur"));
+        assert!(diag.hint.unwrap().contains("recur"));
     }
 }

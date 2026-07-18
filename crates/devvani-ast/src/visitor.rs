@@ -19,6 +19,7 @@ pub trait ASTVisitor {
     fn visit_literal(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_samasa(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_krit_chain(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_avatarana(&mut self, node: &ASTNode) -> VisitResult;
     
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
@@ -40,6 +41,7 @@ pub trait ASTVisitor {
             ASTNode::VaakLiteral { .. } => self.visit_literal(node),
             ASTNode::Samasa { .. } => self.visit_samasa(node),
             ASTNode::KritChain { .. } => self.visit_krit_chain(node),
+            ASTNode::AvartanaNode { .. } => self.visit_avatarana(node),
             _ => Ok(()),
         }
     }
@@ -162,6 +164,17 @@ impl ASTVisitor for PrettyPrinter {
     fn visit_krit_chain(&mut self, _node: &ASTNode) -> VisitResult {
         self.print_indent();
         println!("KritChain");
+        Ok(())
+    }
+
+    fn visit_avatarana(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::AvartanaNode { call, .. } = node {
+            self.print_indent();
+            println!("Avartana");
+            self.indent += 1;
+            self.visit(call)?;
+            self.indent -= 1;
+        }
         Ok(())
     }
 }

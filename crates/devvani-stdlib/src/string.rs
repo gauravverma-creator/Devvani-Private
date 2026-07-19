@@ -5,44 +5,35 @@
 //! - Parimana takes *const i8 — borrow only (Karaṇa), no free needed
 //! - Mukta frees Karta-owned strings
 
-use std::ffi::{c_char, CString, CStr};
+use std::ffi::{c_char, CStr, CString};
 use std::ptr;
 
 /// __devvani_vaak_yoga(left: *const i8, right: *const i8) -> *mut i8
 /// Concatenates two strings. Caller owns the result (Karta).
 #[no_mangle]
-pub extern "C" fn __devvani_vaak_yoga(
-    left: *const c_char,
-    right: *const c_char,
-) -> *mut c_char {
+pub extern "C" fn __devvani_vaak_yoga(left: *const c_char, right: *const c_char) -> *mut c_char {
     unsafe {
         let left_str = CStr::from_ptr(left).to_str().unwrap_or("");
         let right_str = CStr::from_ptr(right).to_str().unwrap_or("");
         let result = format!("{}{}", left_str, right_str);
-        CString::new(result).map(|cs| cs.into_raw()).unwrap_or(ptr::null_mut())
+        CString::new(result)
+            .map(|cs| cs.into_raw())
+            .unwrap_or(ptr::null_mut())
     }
 }
 
 /// __devvani_vaak_parimana(s: *const i8) -> i64
 /// Returns byte length of string. Does not transfer ownership (Karaṇa borrow).
 #[no_mangle]
-pub extern "C" fn __devvani_vaak_parimana(
-    s: *const c_char,
-) -> i64 {
-    unsafe {
-        CStr::from_ptr(s).to_bytes().len() as i64
-    }
+pub extern "C" fn __devvani_vaak_parimana(s: *const c_char) -> i64 {
+    unsafe { CStr::from_ptr(s).to_bytes().len() as i64 }
 }
 
 /// __devvani_vaak_khanda(s: *const i8, start: i64, end: i64) -> *mut i8
 /// Returns substring [start..end]. Caller owns result (Karta).
 /// Returns empty string if indices out of bounds (safe, no panic).
 #[no_mangle]
-pub extern "C" fn __devvani_vaak_khanda(
-    s: *const c_char,
-    start: i64,
-    end: i64,
-) -> *mut c_char {
+pub extern "C" fn __devvani_vaak_khanda(s: *const c_char, start: i64, end: i64) -> *mut c_char {
     unsafe {
         let str_slice = CStr::from_ptr(s).to_str().unwrap_or("");
         let len = str_slice.len() as i64;
@@ -51,16 +42,16 @@ pub extern "C" fn __devvani_vaak_khanda(
         let actual_start = clamped_start.min(clamped_end);
         let actual_end = clamped_end;
         let result = &str_slice[actual_start as usize..actual_end as usize];
-        CString::new(result).map(|cs| cs.into_raw()).unwrap_or(ptr::null_mut())
+        CString::new(result)
+            .map(|cs| cs.into_raw())
+            .unwrap_or(ptr::null_mut())
     }
 }
 
 /// __devvani_vaak_mukta(s: *mut i8)
 /// Frees a Karta-owned string returned by yoga/khanda.
 #[no_mangle]
-pub extern "C" fn __devvani_vaak_mukta(
-    s: *mut c_char,
-) {
+pub extern "C" fn __devvani_vaak_mukta(s: *mut c_char) {
     unsafe {
         if s.is_null() {
             return;

@@ -60,79 +60,108 @@ impl DvriIndex {
     }
 
     pub fn write<W: Write>(&self, writer: &mut W) -> Result<(), ReversibleError> {
-        writer.write_all(&DVRI_MAGIC).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("write dvri magic failed: {}", e),
-        })?;
+        writer
+            .write_all(&DVRI_MAGIC)
+            .map_err(|e| ReversibleError::PurgeFailed {
+                reason: format!("write dvri magic failed: {}", e),
+            })?;
         let count = self.entries.len() as u64;
-        writer.write_all(&count.to_le_bytes()).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("write entry count failed: {}", e),
-        })?;
+        writer
+            .write_all(&count.to_le_bytes())
+            .map_err(|e| ReversibleError::PurgeFailed {
+                reason: format!("write entry count failed: {}", e),
+            })?;
         for entry in self.entries.values() {
-            writer.write_all(&entry.op_id.to_le_bytes()).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("write op_id failed: {}", e),
+            writer.write_all(&entry.op_id.to_le_bytes()).map_err(|e| {
+                ReversibleError::PurgeFailed {
+                    reason: format!("write op_id failed: {}", e),
+                }
             })?;
             let path_str = entry.dvr_path.to_string_lossy();
             let path_bytes = path_str.as_bytes();
             let path_len = path_bytes.len() as u32;
-            writer.write_all(&path_len.to_le_bytes()).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("write path_len failed: {}", e),
+            writer.write_all(&path_len.to_le_bytes()).map_err(|e| {
+                ReversibleError::PurgeFailed {
+                    reason: format!("write path_len failed: {}", e),
+                }
             })?;
-            writer.write_all(path_bytes).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("write path failed: {}", e),
-            })?;
-            writer.write_all(&entry.byte_offset.to_le_bytes()).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("write byte_offset failed: {}", e),
-            })?;
-            writer.write_all(&entry.record_len.to_le_bytes()).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("write record_len failed: {}", e),
-            })?;
+            writer
+                .write_all(path_bytes)
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("write path failed: {}", e),
+                })?;
+            writer
+                .write_all(&entry.byte_offset.to_le_bytes())
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("write byte_offset failed: {}", e),
+                })?;
+            writer
+                .write_all(&entry.record_len.to_le_bytes())
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("write record_len failed: {}", e),
+                })?;
         }
         Ok(())
     }
 
     pub fn read<R: Read>(reader: &mut R) -> Result<Self, ReversibleError> {
         let mut magic = [0u8; 4];
-        reader.read_exact(&mut magic).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("read dvri magic failed: {}", e),
-        })?;
+        reader
+            .read_exact(&mut magic)
+            .map_err(|e| ReversibleError::PurgeFailed {
+                reason: format!("read dvri magic failed: {}", e),
+            })?;
         if magic != DVRI_MAGIC {
             return Err(ReversibleError::PurgeFailed {
                 reason: "invalid .dvri magic bytes".to_string(),
             });
         }
         let mut count_bytes = [0u8; 8];
-        reader.read_exact(&mut count_bytes).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("read entry count failed: {}", e),
-        })?;
+        reader
+            .read_exact(&mut count_bytes)
+            .map_err(|e| ReversibleError::PurgeFailed {
+                reason: format!("read entry count failed: {}", e),
+            })?;
         let count = u64::from_le_bytes(count_bytes) as usize;
         let mut index = DvriIndex::new();
         for _ in 0..count {
             let mut op_id_bytes = [0u8; 8];
-            reader.read_exact(&mut op_id_bytes).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("read op_id failed: {}", e),
-            })?;
+            reader
+                .read_exact(&mut op_id_bytes)
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("read op_id failed: {}", e),
+                })?;
             let op_id = u64::from_le_bytes(op_id_bytes);
             let mut path_len_bytes = [0u8; 4];
-            reader.read_exact(&mut path_len_bytes).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("read path_len failed: {}", e),
-            })?;
+            reader
+                .read_exact(&mut path_len_bytes)
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("read path_len failed: {}", e),
+                })?;
             let path_len = u32::from_le_bytes(path_len_bytes) as usize;
             let mut path_bytes = vec![0u8; path_len];
-            reader.read_exact(&mut path_bytes).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("read path failed: {}", e),
-            })?;
-            let path_str = String::from_utf8(path_bytes).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("invalid path utf8: {}", e),
-            })?;
+            reader
+                .read_exact(&mut path_bytes)
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("read path failed: {}", e),
+                })?;
+            let path_str =
+                String::from_utf8(path_bytes).map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("invalid path utf8: {}", e),
+                })?;
             let mut offset_bytes = [0u8; 8];
-            reader.read_exact(&mut offset_bytes).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("read byte_offset failed: {}", e),
-            })?;
+            reader
+                .read_exact(&mut offset_bytes)
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("read byte_offset failed: {}", e),
+                })?;
             let byte_offset = u64::from_le_bytes(offset_bytes);
             let mut rec_len_bytes = [0u8; 4];
-            reader.read_exact(&mut rec_len_bytes).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("read record_len failed: {}", e),
-            })?;
+            reader
+                .read_exact(&mut rec_len_bytes)
+                .map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("read record_len failed: {}", e),
+                })?;
             let record_len = u32::from_le_bytes(rec_len_bytes);
             index.insert(IndexEntry {
                 op_id,

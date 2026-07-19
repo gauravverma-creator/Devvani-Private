@@ -1,7 +1,7 @@
 #[derive(Debug, Clone, PartialEq)]
 pub enum Visibility {
-    Prakataḥ,   // public  — prakaṭaḥ keyword in .dvn files
-    Guptaḥ,     // private — guptaḥ keyword in .dvn files
+    Prakataḥ, // public  — prakaṭaḥ keyword in .dvn files
+    Guptaḥ,   // private — guptaḥ keyword in .dvn files
 }
 
 impl Default for Visibility {

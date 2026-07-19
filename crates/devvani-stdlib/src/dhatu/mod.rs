@@ -1,9 +1,9 @@
-pub mod io;
-pub mod types;
-pub mod collections;
-pub mod itertools;
-pub mod object;
-pub mod iteration;
-pub mod math;
-pub mod introspect;
 pub mod advanced;
+pub mod collections;
+pub mod introspect;
+pub mod io;
+pub mod iteration;
+pub mod itertools;
+pub mod math;
+pub mod object;
+pub mod types;

@@ -1,14 +1,30 @@
+use crate::{lakara::*, linga::*, symbol::*, type_env::TypeEnv, vacana::*, vibhakti::*};
 use devvani_ast::ASTNode;
-use crate::{vibhakti::*, type_env::TypeEnv, lakara::*, vacana::*, linga::*, symbol::*};
 use std::fmt;
 
 #[derive(Debug, Clone)]
 pub enum TypeCheckError {
     NaamaApraapta(String),
-    PrakaaraVaisamya { expected: String, found: String },
+    PrakaaraVaisamya {
+        expected: String,
+        found: String,
+    },
     SatyaasatyaApekshita(String),
     PrakaaraAsangata(String),
-    AnavasthaDosha { dhatu_name: String },
+    AnavasthaDosha {
+        dhatu_name: String,
+    },
+    PanktiAsangata {
+        expected: DevvaniType,
+        found: DevvaniType,
+    },
+    VinyasaAprayukta {
+        found: DevvaniType,
+    },
+    VinyasaSimaLanghana {
+        index: usize,
+        len: usize,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -16,12 +32,43 @@ impl fmt::Display for TypeCheckError {
         match self {
             TypeCheckError::NaamaApraapta(name) => write!(f, "Naama-apraapta: {}", name),
             TypeCheckError::PrakaaraVaisamya { expected, found } => {
-                write!(f, "Prakaara-vaisamya: expected {}, found {}", expected, found)
+                write!(
+                    f,
+                    "Prakaara-vaisamya: expected {}, found {}",
+                    expected, found
+                )
             }
-            TypeCheckError::SatyaasatyaApekshita(msg) => write!(f, "Satyaasatya-apekshita: {}", msg),
+            TypeCheckError::SatyaasatyaApekshita(msg) => {
+                write!(f, "Satyaasatya-apekshita: {}", msg)
+            }
             TypeCheckError::PrakaaraAsangata(msg) => write!(f, "Prakaara-asangata: {}", msg),
             TypeCheckError::AnavasthaDosha { dhatu_name } => {
-                write!(f, "Anavastha-dosha: '{}' has no reachable base case", dhatu_name)
+                write!(
+                    f,
+                    "Anavastha-dosha: '{}' has no reachable base case",
+                    dhatu_name
+                )
+            }
+            TypeCheckError::PanktiAsangata { expected, found } => {
+                write!(
+                    f,
+                    "Pankti-asangata: expected {:?}, found {:?}",
+                    expected, found
+                )
+            }
+            TypeCheckError::VinyasaAprayukta { found } => {
+                write!(
+                    f,
+                    "Vinyasa-aprayukta: indexing applied to non-array type {:?}",
+                    found
+                )
+            }
+            TypeCheckError::VinyasaSimaLanghana { index, len } => {
+                write!(
+                    f,
+                    "Vinyasa-sima-langhana: index {} out of bounds for array length {}",
+                    index, len
+                )
             }
         }
     }
@@ -32,40 +79,83 @@ fn each_child(node: &ASTNode, f: &mut dyn FnMut(&ASTNode)) {
     match node {
         ASTNode::KaryakramNode { shareera } => shareera.iter().for_each(|n| f(n)),
         ASTNode::DhatuDef { body, .. } => body.iter().for_each(|n| f(n)),
-        ASTNode::KriyaCall { karta, karma, karana, sampradana, apadan, adhikarana, .. } => {
-            if let Some(k) = karta { f(k); }
+        ASTNode::KriyaCall {
+            karta,
+            karma,
+            karana,
+            sampradana,
+            apadan,
+            adhikarana,
+            ..
+        } => {
+            if let Some(k) = karta {
+                f(k);
+            }
             karma.iter().for_each(|n| f(n));
-            if let Some(k) = karana { f(k); }
-            if let Some(k) = sampradana { f(k); }
-            if let Some(k) = apadan { f(k); }
-            if let Some(k) = adhikarana { f(k); }
+            if let Some(k) = karana {
+                f(k);
+            }
+            if let Some(k) = sampradana {
+                f(k);
+            }
+            if let Some(k) = apadan {
+                f(k);
+            }
+            if let Some(k) = adhikarana {
+                f(k);
+            }
         }
-        ASTNode::AstiNode { mulya, .. } => f(mulya),
-        ASTNode::BhavatiNode { mulya, .. } => f(mulya),
+        ASTNode::AstiNode { mulya, .. } | ASTNode::BhavatiNode { mulya, .. } => f(mulya),
         ASTNode::YogaNode { vama, dakshina }
         | ASTNode::ViyogaNode { vama, dakshina }
         | ASTNode::GunaNode { vama, dakshina }
-        | ASTNode::BhagaNode { vama, dakshina }
-        | ASTNode::SamaNode { vama, dakshina }
+        | ASTNode::BhagaNode { vama, dakshina } => {
+            f(vama);
+            f(dakshina);
+        }
+        ASTNode::SamaNode { vama, dakshina }
         | ASTNode::AsamaNode { vama, dakshina }
         | ASTNode::NyuunaNode { vama, dakshina }
-        | ASTNode::AdhikaNode { vama, dakshina } => { f(vama); f(dakshina); }
+        | ASTNode::AdhikaNode { vama, dakshina } => {
+            f(vama);
+            f(dakshina);
+        }
         ASTNode::VadatiNode { mulya } => f(mulya),
-        ASTNode::YadiNode { sthiti, tarhi, anyatha } => {
+        ASTNode::YadiNode {
+            sthiti,
+            tarhi,
+            anyatha,
+        } => {
             f(sthiti);
             tarhi.iter().for_each(|n| f(n));
-            if let Some(b) = anyatha { b.iter().for_each(|n| f(n)); }
+            if let Some(b) = anyatha {
+                b.iter().for_each(|n| f(n));
+            }
         }
-        ASTNode::YavatNode { sthiti, shareera } => { f(sthiti); shareera.iter().for_each(|n| f(n)); }
-        ASTNode::PunahNode { varam, shareera } => { f(varam); shareera.iter().for_each(|n| f(n)); }
+        ASTNode::YavatNode { sthiti, shareera } => {
+            f(sthiti);
+            shareera.iter().for_each(|n| f(n));
+        }
+        ASTNode::PunahNode { varam, shareera } => {
+            f(varam);
+            shareera.iter().for_each(|n| f(n));
+        }
         ASTNode::Dvandva { members, .. } => members.iter().for_each(|n| f(n)),
         ASTNode::VaakNode { mulya, .. } => f(mulya),
-        ASTNode::VaakYogaNode { vama, dakshina, .. } => { f(vama); f(dakshina); }
+        ASTNode::VaakYogaNode { vama, dakshina, .. } => {
+            f(vama);
+            f(dakshina);
+        }
         ASTNode::Samasa { parts, .. } => parts.iter().for_each(|n| f(n)),
         ASTNode::KritChain { steps, .. } => steps.iter().for_each(|n| f(n)),
         ASTNode::UpasargaApplied { node } => f(&node.target),
         ASTNode::TaddhitaChain { base, .. } => f(base),
         ASTNode::AvartanaNode { call, .. } => f(call),
+        ASTNode::PanktiNode { elements, .. } => elements.iter().for_each(|n| f(n)),
+        ASTNode::VinyasaNode { target, index, .. } => {
+            f(target);
+            f(index);
+        }
         _ => {}
     }
 }
@@ -184,33 +274,51 @@ impl TypeChecker {
                 ty
             }
 
-            ASTNode::YogaNode { vama, dakshina } |
-            ASTNode::ViyogaNode { vama, dakshina } |
-            ASTNode::GunaNode { vama, dakshina } |
-            ASTNode::BhagaNode { vama, dakshina } => {
+            ASTNode::YogaNode { vama, dakshina }
+            | ASTNode::ViyogaNode { vama, dakshina }
+            | ASTNode::GunaNode { vama, dakshina }
+            | ASTNode::BhagaNode { vama, dakshina } => {
                 let t_vama = self.check(vama);
                 let t_dakshina = self.check(dakshina);
-                
+
                 let is_num = |t: &DevvaniType| match t {
-                    DevvaniType::Subject(s) => s == "Purnaank" || s == "Dashaamsha" || (s != "Bool" && s != "Vaak" && !s.contains("Future") && !s.contains("Result")),
+                    DevvaniType::Subject(s) => {
+                        s == "Purnaank"
+                            || s == "Dashaamsha"
+                            || (s != "Bool"
+                                && s != "Vaak"
+                                && !s.contains("Future")
+                                && !s.contains("Result"))
+                    }
                     DevvaniType::Parameter(_) => true,
                     _ => false,
                 };
-                
+
                 if !is_num(&t_vama) || !is_num(&t_dakshina) {
-                    self.errors.push(TypeCheckError::PrakaaraAsangata("Arithmetic requires numeric types".to_string()));
+                    self.errors.push(TypeCheckError::PrakaaraAsangata(
+                        "Arithmetic requires numeric types".to_string(),
+                    ));
                     return DevvaniType::Unknown;
                 }
-                
+
                 let types_compatible = |t1: &DevvaniType, t2: &DevvaniType| -> bool {
                     if t1 == t2 {
                         return true;
                     }
-                    if matches!(t1, DevvaniType::Parameter(_)) || matches!(t2, DevvaniType::Parameter(_)) {
+                    if matches!(t1, DevvaniType::Parameter(_))
+                        || matches!(t2, DevvaniType::Parameter(_))
+                    {
                         return true;
                     }
                     let is_generic = |t: &DevvaniType| match t {
-                        DevvaniType::Subject(s) => s != "Purnaank" && s != "Dashaamsha" && s != "Bool" && s != "Vaak" && !s.contains("Future") && !s.contains("Result"),
+                        DevvaniType::Subject(s) => {
+                            s != "Purnaank"
+                                && s != "Dashaamsha"
+                                && s != "Bool"
+                                && s != "Vaak"
+                                && !s.contains("Future")
+                                && !s.contains("Result")
+                        }
                         _ => false,
                     };
                     if is_generic(t1) || is_generic(t2) {
@@ -218,32 +326,41 @@ impl TypeChecker {
                     }
                     false
                 };
-                
+
                 if !types_compatible(&t_vama, &t_dakshina) {
-                    self.errors.push(TypeCheckError::PrakaaraVaisamya { 
-                        expected: format!("{:?}", t_vama), 
-                        found: format!("{:?}", t_dakshina) 
+                    self.errors.push(TypeCheckError::PrakaaraVaisamya {
+                        expected: format!("{:?}", t_vama),
+                        found: format!("{:?}", t_dakshina),
                     });
                 }
                 t_vama
             }
 
-            ASTNode::SamaNode { vama, dakshina } |
-            ASTNode::AsamaNode { vama, dakshina } |
-            ASTNode::NyuunaNode { vama, dakshina } |
-            ASTNode::AdhikaNode { vama, dakshina } => {
+            ASTNode::SamaNode { vama, dakshina }
+            | ASTNode::AsamaNode { vama, dakshina }
+            | ASTNode::NyuunaNode { vama, dakshina }
+            | ASTNode::AdhikaNode { vama, dakshina } => {
                 let t_vama = self.check(vama);
                 let t_dakshina = self.check(dakshina);
-                
+
                 let types_compatible = |t1: &DevvaniType, t2: &DevvaniType| -> bool {
                     if t1 == t2 {
                         return true;
                     }
-                    if matches!(t1, DevvaniType::Parameter(_)) || matches!(t2, DevvaniType::Parameter(_)) {
+                    if matches!(t1, DevvaniType::Parameter(_))
+                        || matches!(t2, DevvaniType::Parameter(_))
+                    {
                         return true;
                     }
                     let is_generic = |t: &DevvaniType| match t {
-                        DevvaniType::Subject(s) => s != "Purnaank" && s != "Dashaamsha" && s != "Bool" && s != "Vaak" && !s.contains("Future") && !s.contains("Result"),
+                        DevvaniType::Subject(s) => {
+                            s != "Purnaank"
+                                && s != "Dashaamsha"
+                                && s != "Bool"
+                                && s != "Vaak"
+                                && !s.contains("Future")
+                                && !s.contains("Result")
+                        }
                         _ => false,
                     };
                     if is_generic(t1) || is_generic(t2) {
@@ -251,11 +368,11 @@ impl TypeChecker {
                     }
                     false
                 };
-                
+
                 if !types_compatible(&t_vama, &t_dakshina) {
-                    self.errors.push(TypeCheckError::PrakaaraVaisamya { 
-                        expected: format!("{:?}", t_vama), 
-                        found: format!("{:?}", t_dakshina) 
+                    self.errors.push(TypeCheckError::PrakaaraVaisamya {
+                        expected: format!("{:?}", t_vama),
+                        found: format!("{:?}", t_dakshina),
                     });
                 }
                 DevvaniType::Subject("Bool".to_string())
@@ -273,14 +390,24 @@ impl TypeChecker {
                 ty
             }
 
-            ASTNode::YadiNode { sthiti, tarhi, anyatha } => {
+            ASTNode::YadiNode {
+                sthiti,
+                tarhi,
+                anyatha,
+            } => {
                 let t_sthiti = self.check(sthiti);
                 if !matches!(t_sthiti, DevvaniType::Subject(ref s) if s == "Bool") {
-                    self.errors.push(TypeCheckError::SatyaasatyaApekshita("Yadi condition must be Bool".to_string()));
+                    self.errors.push(TypeCheckError::SatyaasatyaApekshita(
+                        "Yadi condition must be Bool".to_string(),
+                    ));
                 }
-                for stmt in tarhi { self.check(stmt); }
+                for stmt in tarhi {
+                    self.check(stmt);
+                }
                 if let Some(body) = anyatha {
-                    for stmt in body { self.check(stmt); }
+                    for stmt in body {
+                        self.check(stmt);
+                    }
                 }
                 DevvaniType::Unknown
             }
@@ -288,41 +415,60 @@ impl TypeChecker {
             ASTNode::YavatNode { sthiti, shareera } => {
                 let t_sthiti = self.check(sthiti);
                 if !matches!(t_sthiti, DevvaniType::Subject(ref s) if s == "Bool") {
-                    self.errors.push(TypeCheckError::SatyaasatyaApekshita("Yavat condition must be Bool".to_string()));
+                    self.errors.push(TypeCheckError::SatyaasatyaApekshita(
+                        "Yavat condition must be Bool".to_string(),
+                    ));
                 }
-                for stmt in shareera { self.check(stmt); }
+                for stmt in shareera {
+                    self.check(stmt);
+                }
                 DevvaniType::Unknown
             }
 
             ASTNode::PunahNode { varam, shareera } => {
                 let t_varam = self.check(varam);
                 if !matches!(t_varam, DevvaniType::Subject(ref s) if s == "Purnaank") {
-                    self.errors.push(TypeCheckError::PrakaaraVaisamya { 
-                        expected: "Purnaank".to_string(), 
-                        found: format!("{:?}", t_varam) 
+                    self.errors.push(TypeCheckError::PrakaaraVaisamya {
+                        expected: "Purnaank".to_string(),
+                        found: format!("{:?}", t_varam),
                     });
                 }
-                for stmt in shareera { self.check(stmt); }
+                for stmt in shareera {
+                    self.check(stmt);
+                }
                 DevvaniType::Unknown
             }
 
-            ASTNode::DhatuDef { name, params, body, lakara, .. } => {
+            ASTNode::DhatuDef {
+                name,
+                params,
+                body,
+                lakara,
+                ..
+            } => {
                 let l_str = format!("{:?}", lakara);
                 let typesystem_lakara = lakara_from_str(&l_str).unwrap_or(Lakara::Lat);
-                
+
                 let old_lakara = self.current_lakara.clone();
                 self.current_lakara = Some(typesystem_lakara.clone());
-                
+
                 let scope = lakara_to_scope(&typesystem_lakara);
-                let symbol = Symbol::new(name, DevvaniType::Scope(format!("{:?}", scope.kind)), &Vacana::Eka, &Linga::Pullinga, "fn");
+                let symbol = Symbol::new(
+                    name,
+                    DevvaniType::Scope(format!("{:?}", scope.kind)),
+                    &Vacana::Eka,
+                    &Linga::Pullinga,
+                    "fn",
+                );
                 self.env.define_symbol(name, symbol);
 
                 let old_env = self.env.clone();
                 self.env = self.env.enter_scope(name);
-                
+
                 for param in params {
                     let ty = DevvaniType::Parameter(param.name.clone());
-                    let param_symbol = Symbol::new(&param.name, ty, &Vacana::Eka, &Linga::Pullinga, "i64");
+                    let param_symbol =
+                        Symbol::new(&param.name, ty, &Vacana::Eka, &Linga::Pullinga, "i64");
                     self.env.define_symbol(&param.name, param_symbol);
                 }
 
@@ -334,7 +480,9 @@ impl TypeChecker {
                 self.current_lakara = old_lakara;
 
                 if !has_reachable_base_case(body) && body.iter().any(contains_avartana) {
-                    self.errors.push(TypeCheckError::AnavasthaDosha { dhatu_name: name.clone() });
+                    self.errors.push(TypeCheckError::AnavasthaDosha {
+                        dhatu_name: name.clone(),
+                    });
                 }
 
                 match scope.return_wrapper {
@@ -344,11 +492,17 @@ impl TypeChecker {
                 }
             }
 
-            ASTNode::KriyaCall { karta, kriya, karma, .. } => {
+            ASTNode::KriyaCall {
+                karta,
+                kriya,
+                karma,
+                ..
+            } => {
                 if let Some(subject_node) = karta {
                     if let ASTNode::Nama { base, .. } = &**subject_node {
                         if self.env.lookup(base).is_none() {
-                            self.errors.push(TypeCheckError::NaamaApraapta(base.clone()));
+                            self.errors
+                                .push(TypeCheckError::NaamaApraapta(base.clone()));
                         }
                     }
                 }
@@ -356,7 +510,10 @@ impl TypeChecker {
                 for arg in karma {
                     let arg_type = self.check(arg);
                     match arg_type {
-                        DevvaniType::Parameter(_) | DevvaniType::Subject(_) | DevvaniType::Vaak | DevvaniType::VaakBorrow => {}
+                        DevvaniType::Parameter(_)
+                        | DevvaniType::Subject(_)
+                        | DevvaniType::Vaak
+                        | DevvaniType::VaakBorrow => {}
                         _ => {
                             self.errors.push(TypeCheckError::PrakaaraVaisamya {
                                 expected: "Parameter/Subject".to_string(),
@@ -369,10 +526,79 @@ impl TypeChecker {
                 DevvaniType::Subject(kriya.clone())
             }
 
-            ASTNode::AvartanaNode { call, .. } => {
-                self.check(call)
+            ASTNode::AvartanaNode { call, .. } => self.check(call),
+
+            ASTNode::VinyasaNode { target, index, .. } => {
+                let t_target = self.check(target);
+                let t_index = self.check(index);
+
+                match t_target {
+                    DevvaniType::Pankti(elem_ty, len) => {
+                        let is_num = |t: &DevvaniType| match t {
+                            DevvaniType::Subject(s) => {
+                                s == "Purnaank"
+                                    || s == "Dashaamsha"
+                                    || (s != "Bool"
+                                        && s != "Vaak"
+                                        && !s.contains("Future")
+                                        && !s.contains("Result"))
+                            }
+                            DevvaniType::Parameter(_) => true,
+                            _ => false,
+                        };
+
+                        if !is_num(&t_index) {
+                            self.errors.push(TypeCheckError::PrakaaraAsangata(
+                                "Indexer must be numeric".to_string(),
+                            ));
+                            return elem_ty.as_ref().clone();
+                        }
+
+                        if let ASTNode::PurnaankLiteral { value, .. } = index.as_ref() {
+                            if *value >= len as i64 {
+                                self.errors.push(TypeCheckError::VinyasaSimaLanghana {
+                                    index: *value as usize,
+                                    len,
+                                });
+                            }
+                        }
+
+                        elem_ty.as_ref().clone()
+                    }
+                    _ => {
+                        self.errors.push(TypeCheckError::VinyasaAprayukta {
+                            found: t_target.clone(),
+                        });
+                        DevvaniType::Unknown
+                    }
+                }
             }
-            
+
+            ASTNode::PanktiNode { elements, .. } => {
+                if elements.is_empty() {
+                    return DevvaniType::Pankti(Box::new(DevvaniType::Unknown), 0);
+                }
+
+                let mut element_types: Vec<DevvaniType> = Vec::new();
+                for elem in elements {
+                    let elem_ty = self.check(elem);
+                    element_types.push(elem_ty);
+                }
+
+                let first_type = element_types[0].clone();
+                for (_i, elem_ty) in element_types.iter().enumerate().skip(1) {
+                    if elem_ty != &first_type {
+                        self.errors.push(TypeCheckError::PanktiAsangata {
+                            expected: first_type.clone(),
+                            found: elem_ty.clone(),
+                        });
+                        return DevvaniType::Unknown;
+                    }
+                }
+
+                DevvaniType::Pankti(Box::new(first_type), elements.len())
+            }
+
             _ => DevvaniType::Unknown,
         }
     }
@@ -386,12 +612,14 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devvani_ast::{
-        ASTNode, Gana, Lakara, Linga, Span, Vacana,
-    };
+    use devvani_ast::{ASTNode, Gana, Lakara, Linga, Span, Vacana};
 
     fn span() -> Span {
-        Span { line: 0, col: 0, len: 0 }
+        Span {
+            line: 0,
+            col: 0,
+            len: 0,
+        }
     }
 
     fn avartana(name: &str) -> ASTNode {
@@ -448,20 +676,20 @@ mod tests {
     #[test]
     fn recursive_with_base_case_yields_no_anavastha() {
         // yadi ... tarhi (no recursion) ... anyatha (recursive) ... samaptih
-        let body = vec![
-            yadi(
-                vec![ASTNode::VadatiNode {
-                    mulya: Box::new(ASTNode::VaakLiteral {
-                        value: "base".to_string(),
-                        span: span(),
-                    }),
-                }],
-                Some(vec![avartana("recur")]),
-            ),
-        ];
+        let body = vec![yadi(
+            vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "base".to_string(),
+                    span: span(),
+                }),
+            }],
+            Some(vec![avartana("recur")]),
+        )];
         let errors = check_dhatu(body);
         assert!(
-            !errors.iter().any(|e| matches!(e, TypeCheckError::AnavasthaDosha { .. })),
+            !errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AnavasthaDosha { .. })),
             "expected no AnavasthaDosha, got: {:?}",
             errors
         );
@@ -499,7 +727,9 @@ mod tests {
         }];
         let errors = check_dhatu(body);
         assert!(
-            !errors.iter().any(|e| matches!(e, TypeCheckError::AnavasthaDosha { .. })),
+            !errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AnavasthaDosha { .. })),
             "non-recursive dhatu must not produce AnavasthaDosha, got: {:?}",
             errors
         );
@@ -508,15 +738,307 @@ mod tests {
     #[test]
     fn recursive_yadi_both_branhes_recurse_is_conservative() {
         // Has a Yadi but both branches contain recursion -> conservative: no flag.
-        let body = vec![yadi(
-            vec![avartana("recur")],
-            Some(vec![avartana("recur")]),
-        )];
+        let body = vec![yadi(vec![avartana("recur")], Some(vec![avartana("recur")]))];
         let errors = check_dhatu(body);
         assert!(
-            !errors.iter().any(|e| matches!(e, TypeCheckError::AnavasthaDosha { .. })),
+            !errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AnavasthaDosha { .. })),
             "conservative: both branches recurse but has guard, got: {:?}",
             errors
+        );
+    }
+
+    // Pankti (fixed-size array) tests
+
+    #[test]
+    fn homogeneous_numeric_pankti_type_checks() {
+        let mut checker = TypeChecker::new();
+        let pankti = ASTNode::PanktiNode {
+            elements: vec![
+                ASTNode::PurnaankLiteral {
+                    value: 1,
+                    span: span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 2,
+                    span: span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 3,
+                    span: span(),
+                },
+            ],
+            span: span(),
+        };
+        let ty = checker.check(&pankti);
+        assert!(matches!(ty, DevvaniType::Pankti(_, 3)));
+        if let DevvaniType::Pankti(elem_ty, len) = &ty {
+            assert_eq!(*len, 3);
+            assert_eq!(**elem_ty, DevvaniType::Subject("Purnaank".to_string()));
+        }
+    }
+
+    #[test]
+    fn empty_pankti_type_checks_to_unknown() {
+        let mut checker = TypeChecker::new();
+        let pankti = ASTNode::PanktiNode {
+            elements: vec![],
+            span: span(),
+        };
+        let ty = checker.check(&pankti);
+        assert_eq!(ty, DevvaniType::Pankti(Box::new(DevvaniType::Unknown), 0));
+    }
+
+    #[test]
+    fn mixed_type_pankti_produces_pankti_asangata() {
+        let mut checker = TypeChecker::new();
+        let pankti = ASTNode::PanktiNode {
+            elements: vec![
+                ASTNode::PurnaankLiteral {
+                    value: 1,
+                    span: span(),
+                },
+                ASTNode::VaakLiteral {
+                    value: "string".to_string(),
+                    span: span(),
+                },
+            ],
+            span: span(),
+        };
+        let _ty = checker.check(&pankti);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PanktiAsangata { .. })),
+            "expected PanktiAsangata error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn nested_pankti_type_checks_correctly() {
+        let mut checker = TypeChecker::new();
+        let nested_pankti = ASTNode::PanktiNode {
+            elements: vec![
+                ASTNode::PanktiNode {
+                    elements: vec![
+                        ASTNode::PurnaankLiteral {
+                            value: 1,
+                            span: span(),
+                        },
+                        ASTNode::PurnaankLiteral {
+                            value: 2,
+                            span: span(),
+                        },
+                    ],
+                    span: span(),
+                },
+                ASTNode::PanktiNode {
+                    elements: vec![
+                        ASTNode::PurnaankLiteral {
+                            value: 3,
+                            span: span(),
+                        },
+                        ASTNode::PurnaankLiteral {
+                            value: 4,
+                            span: span(),
+                        },
+                    ],
+                    span: span(),
+                },
+            ],
+            span: span(),
+        };
+        let ty = checker.check(&nested_pankti);
+        assert!(matches!(ty, DevvaniType::Pankti(_, 2)));
+        if let DevvaniType::Pankti(elem_ty, len) = &ty {
+            assert_eq!(*len, 2);
+            assert!(matches!(**elem_ty, DevvaniType::Pankti(_, 2)));
+        }
+    }
+
+    #[test]
+    fn valid_vinyasa_index_resolves_to_element_type() {
+        let mut checker = TypeChecker::new();
+        // First define an array variable
+        let array_node = ASTNode::AstiNode {
+            naama: "arr".to_string(),
+            mulya: Box::new(ASTNode::PanktiNode {
+                elements: vec![
+                    ASTNode::PurnaankLiteral {
+                        value: 10,
+                        span: span(),
+                    },
+                    ASTNode::PurnaankLiteral {
+                        value: 20,
+                        span: span(),
+                    },
+                    ASTNode::PurnaankLiteral {
+                        value: 30,
+                        span: span(),
+                    },
+                ],
+                span: span(),
+            }),
+        };
+        checker.check(&array_node);
+
+        // Now index it
+        let vinyasa = ASTNode::VinyasaNode {
+            target: Box::new(ASTNode::Nama {
+                base: "arr".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            index: Box::new(ASTNode::PurnaankLiteral {
+                value: 0,
+                span: span(),
+            }),
+            span: span(),
+        };
+        let ty = checker.check(&vinyasa);
+        assert_eq!(ty, DevvaniType::Subject("Purnaank".to_string()));
+    }
+
+    #[test]
+    fn vinyasa_non_pankti_produces_aprayukta() {
+        let mut checker = TypeChecker::new();
+        let vinyasa = ASTNode::VinyasaNode {
+            target: Box::new(ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }),
+            index: Box::new(ASTNode::PurnaankLiteral {
+                value: 0,
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&vinyasa);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::VinyasaAprayukta { .. })),
+            "expected VinyasaAprayukta error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn statically_out_of_bounds_index_produces_sima_langhana() {
+        let mut checker = TypeChecker::new();
+        // Define a 3-element array
+        let array_node = ASTNode::AstiNode {
+            naama: "x".to_string(),
+            mulya: Box::new(ASTNode::PanktiNode {
+                elements: vec![
+                    ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: span(),
+                    },
+                    ASTNode::PurnaankLiteral {
+                        value: 2,
+                        span: span(),
+                    },
+                    ASTNode::PurnaankLiteral {
+                        value: 3,
+                        span: span(),
+                    },
+                ],
+                span: span(),
+            }),
+        };
+        checker.check(&array_node);
+
+        // Index with out-of-bounds constant 5
+        let vinyasa = ASTNode::VinyasaNode {
+            target: Box::new(ASTNode::Nama {
+                base: "x".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            index: Box::new(ASTNode::PurnaankLiteral {
+                value: 5,
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&vinyasa);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::VinyasaSimaLanghana { .. })),
+            "expected VinyasaSimaLanghana error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn variable_index_does_not_error() {
+        let mut checker = TypeChecker::new();
+        // Define array and index variable
+        let array_node = ASTNode::AstiNode {
+            naama: "arr".to_string(),
+            mulya: Box::new(ASTNode::PanktiNode {
+                elements: vec![
+                    ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: span(),
+                    },
+                    ASTNode::PurnaankLiteral {
+                        value: 2,
+                        span: span(),
+                    },
+                ],
+                span: span(),
+            }),
+        };
+        checker.check(&array_node);
+
+        let _idx_node = ASTNode::AstiNode {
+            naama: "idx".to_string(),
+            mulya: Box::new(ASTNode::PurnaankLiteral {
+                value: 0,
+                span: span(),
+            }),
+        };
+        checker.check(&_idx_node);
+
+        // Index with variable (not a compile-time constant)
+        let vinyasa = ASTNode::VinyasaNode {
+            target: Box::new(ASTNode::Nama {
+                base: "arr".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            index: Box::new(ASTNode::Nama {
+                base: "idx".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&vinyasa);
+        // Should NOT have VinyasaSimaLanghana since index is a variable
+        assert!(
+            !checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::VinyasaSimaLanghana { .. })),
+            "expected NO VinyasaSimaLanghana for variable index, got: {:?}",
+            checker.errors
         );
     }
 }

@@ -1,25 +1,25 @@
-use devvani_typesystem::TypeCheckError;
-use devvani_codegen::CodegenError;
 use crate::CompilerError;
+use devvani_codegen::CodegenError;
+use devvani_typesystem::TypeCheckError;
 
 // Severity levels
 #[derive(Debug, Clone, PartialEq)]
 pub enum Severity {
-    Dosha,    // Error   (दोष)
-    Sanka,    // Warning (शंका)
-    Suchana,  // Info    (सूचना)
+    Dosha,   // Error   (दोष)
+    Sanka,   // Warning (शंका)
+    Suchana, // Info    (सूचना)
 }
 
 // A single diagnostic message
 #[derive(Debug, Clone)]
 pub struct Diagnostic {
     pub severity: Severity,
-    pub code: String,          // e.g. "D001", "S002"
-    pub sanskrit_title: String,// e.g. "अपरिचित नाम"
-    pub roman_title: String,   // e.g. "Aparicita Nama"
-    pub message: String,       // full explanation
+    pub code: String,              // e.g. "D001", "S002"
+    pub sanskrit_title: String,    // e.g. "अपरिचित नाम"
+    pub roman_title: String,       // e.g. "Aparicita Nama"
+    pub message: String,           // full explanation
     pub sutra_ref: Option<String>, // e.g. "sutra 1.4.54"
-    pub hint: Option<String>,  // suggested fix
+    pub hint: Option<String>,      // suggested fix
 }
 
 impl Diagnostic {
@@ -35,15 +35,15 @@ impl Diagnostic {
             severity_str, self.code, self.roman_title
         );
         output.push_str(&format!(" {}: {}\n", self.sanskrit_title, self.message));
-        
+
         if let Some(sutra) = &self.sutra_ref {
             output.push_str(&format!(" Sutra: {}\n", sutra));
         }
-        
+
         if let Some(hint) = &self.hint {
             output.push_str(&format!(" Hint: {}\n", hint));
         }
-        
+
         output.push_str("────────────────────────────────────────────────");
         output
     }
@@ -62,7 +62,9 @@ impl DiagnosticEngine {
                 roman_title: "Aparicita Nama".to_string(),
                 message: format!(
                     "'{}' Prathama Vibhakti mein Kartā ke roop mein \
-                     nahi mila. Pehle ise define karo.", name),
+                     nahi mila. Pehle ise define karo.",
+                    name
+                ),
                 sutra_ref: Some("1.4.54 (Kartā — svatantraḥ kartā)".to_string()),
                 hint: Some(format!("'{}' ko pehle declare karo: rāmaḥ", name)),
             },
@@ -73,7 +75,9 @@ impl DiagnosticEngine {
                 roman_title: "Vibhakti Bheda".to_string(),
                 message: format!(
                     "Pratyāśit (expected): {} — Prāpta (found): {}. \
-                     Vibhakti mismatch.", expected, found),
+                     Vibhakti mismatch.",
+                    expected, found
+                ),
                 sutra_ref: Some("1.1.2".to_string()),
                 hint: Some("Sahi Vibhakti pratyaya lagao.".to_string()),
             },
@@ -102,11 +106,58 @@ impl DiagnosticEngine {
                 roman_title: "Anavastha Doshah".to_string(),
                 message: format!(
                     "'{}' — is Dhātu mein koi base case nahi mila jo recursion ko rokta ho. \
-                     Har path recursive call tak jaata hai — infinite regress ka khatra hai.", dhatu_name),
-                sutra_ref: Some("Nyaya Sutra + Ashtadhyayi 6.4.22 (finality of rule application)".to_string()),
+                     Har path recursive call tak jaata hai — infinite regress ka khatra hai.",
+                    dhatu_name
+                ),
+                sutra_ref: Some(
+                    "Nyaya Sutra + Ashtadhyayi 6.4.22 (finality of rule application)".to_string(),
+                ),
                 hint: Some(format!(
                     "'{}' ke andar ek Yadi/Anyatha branch add karo jisme kam se kam ek path \
-                     bina recursive call ke terminate ho.", dhatu_name)),
+                     bina recursive call ke terminate ho.",
+                    dhatu_name
+                )),
+            },
+            TypeCheckError::PanktiAsangata { expected, found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D050".to_string(),
+                sanskrit_title: "पङ्क्ति-असङ्गति".to_string(),
+                roman_title: "Pankti Asangati".to_string(),
+                message: format!(
+                    "Pankti mein element types saman hone chahiye. \
+                     Expected {:?}, found {:?}.",
+                    expected, found
+                ),
+                sutra_ref: Some("Ashtadhyayi 1.2.64 (samanya-vishesha)".to_string()),
+                hint: None,
+            },
+            TypeCheckError::VinyasaAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D051".to_string(),
+                sanskrit_title: "विन्यास-अप्रयुक्तः".to_string(),
+                roman_title: "Vinyasa Aprayuktah".to_string(),
+                message: format!(
+                    "Indexing operation sirf array (Pankti) par lagu hota hai. \
+                     Found non-array type {:?}.",
+                    found
+                ),
+                sutra_ref: None,
+                hint: None,
+            },
+            TypeCheckError::VinyasaSimaLanghana { index, len } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D052".to_string(),
+                sanskrit_title: "विन्यास-सीमा-लङ्घनम्".to_string(),
+                roman_title: "Vinyasa Sima Langhanam".to_string(),
+                message: format!(
+                    "Array index {} array ki length {} se adhik hai. \
+                     Valid indices 0 se {} tak hain.",
+                    index,
+                    len,
+                    len - 1
+                ),
+                sutra_ref: None,
+                hint: None,
             },
         }
     }
@@ -118,8 +169,11 @@ impl DiagnosticEngine {
                 code: "D004".to_string(),
                 sanskrit_title: "असमर्थित पद".to_string(),
                 roman_title: "Asamarthita Pada".to_string(),
-                message: format!("'{}' — yeh pada abhi codegen mein \
-                                  samarthit nahi.", n),
+                message: format!(
+                    "'{}' — yeh pada abhi codegen mein \
+                                  samarthit nahi.",
+                    n
+                ),
                 sutra_ref: None,
                 hint: Some("Devvani ke supported constructs dekho.".to_string()),
             },
@@ -151,11 +205,17 @@ impl DiagnosticEngine {
                 code: "D007".to_string(),
                 sanskrit_title: "संचिका-दोष".to_string(),
                 roman_title: "Sanchika Dosha".to_string(),
-                message: format!("'{}' file nahi mili ya padhi nahi ja \
-                                  sakti.", msg),
+                message: format!(
+                    "'{}' file nahi mili ya padhi nahi ja \
+                                  sakti.",
+                    msg
+                ),
                 sutra_ref: None,
-                hint: Some("Sahi file path do: devvani compile \
-                            <file.dvn>".to_string()),
+                hint: Some(
+                    "Sahi file path do: devvani compile \
+                            <file.dvn>"
+                        .to_string(),
+                ),
             },
             CompilerError::LexError(msg) => Diagnostic {
                 severity: Severity::Dosha,
@@ -164,8 +224,11 @@ impl DiagnosticEngine {
                 roman_title: "Varna Vishleshan Dosha".to_string(),
                 message: format!("Shabda pahchana mein samasya: {}", msg),
                 sutra_ref: Some("1.1.1".to_string()),
-                hint: Some("IAST Unicode sahi hai? \
-                            Matra aur anusvara check karo.".to_string()),
+                hint: Some(
+                    "IAST Unicode sahi hai? \
+                            Matra aur anusvara check karo."
+                        .to_string(),
+                ),
             },
             CompilerError::ParseError(msg) => Diagnostic {
                 severity: Severity::Dosha,
@@ -174,16 +237,22 @@ impl DiagnosticEngine {
                 roman_title: "Vakya Sanrachna Dosha".to_string(),
                 message: format!("SOV krama galat hai: {}", msg),
                 sutra_ref: Some("2.1.1".to_string()),
-                hint: Some("Devvani SOV order follow karo: \
-                            Kartā Karma Kriyā.".to_string()),
+                hint: Some(
+                    "Devvani SOV order follow karo: \
+                            Kartā Karma Kriyā."
+                        .to_string(),
+                ),
             },
             CompilerError::CodegenError(msg) => Diagnostic {
                 severity: Severity::Dosha,
                 code: "D010".to_string(),
                 sanskrit_title: "कोड-निर्माण-दोष".to_string(),
                 roman_title: "Code Nirman Dosha".to_string(),
-                message: format!("Rust code generation mein samasya: \
-                                  {}", msg),
+                message: format!(
+                    "Rust code generation mein samasya: \
+                                  {}",
+                    msg
+                ),
                 sutra_ref: None,
                 hint: None,
             },
@@ -192,10 +261,10 @@ impl DiagnosticEngine {
 
     pub fn report(diagnostics: &[Diagnostic]) -> String {
         if diagnostics.is_empty() {
-            return "✓ Shuddham — कोई दोष नही | No errors found.\n"
-                .to_string();
+            return "✓ Shuddham — कोई दोष नही | No errors found.\n".to_string();
         }
-        diagnostics.iter()
+        diagnostics
+            .iter()
             .map(|d| d.display())
             .collect::<Vec<_>>()
             .join("\n")
@@ -235,7 +304,7 @@ mod tests {
         let diag1 = DiagnosticEngine::from_type_error(&err1);
         let err2 = CompilerError::ParseError("test".to_string());
         let diag2 = DiagnosticEngine::from_compiler_error(&err2);
-        
+
         let report = DiagnosticEngine::report(&[diag1, diag2]);
         assert!(report.contains("D001"));
         assert!(report.contains("D009"));
@@ -243,11 +312,45 @@ mod tests {
 
     #[test]
     fn test_from_type_error_anavastha_dosha() {
-        let err = TypeCheckError::AnavasthaDosha { dhatu_name: "recur".to_string() };
+        let err = TypeCheckError::AnavasthaDosha {
+            dhatu_name: "recur".to_string(),
+        };
         let diag = DiagnosticEngine::from_type_error(&err);
         assert_eq!(diag.code, "D040");
         assert!(diag.message.contains("recur"));
         assert!(diag.display().contains("recur"));
         assert!(diag.hint.unwrap().contains("recur"));
+    }
+
+    #[test]
+    fn test_from_type_error_pankti_asangata() {
+        let err = TypeCheckError::PanktiAsangata {
+            expected: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D050");
+        assert!(diag.display().contains("Pankti Asangati"));
+        assert!(diag.sutra_ref.unwrap().contains("Ashtadhyayi 1.2.64"));
+    }
+
+    #[test]
+    fn test_from_type_error_vinyasa_aprayukta() {
+        let err = TypeCheckError::VinyasaAprayukta {
+            found: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D051");
+        assert!(diag.display().contains("Vinyasa Aprayuktah"));
+    }
+
+    #[test]
+    fn test_from_type_error_vinyasa_sima_langhana() {
+        let err = TypeCheckError::VinyasaSimaLanghana { index: 5, len: 3 };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D052");
+        assert!(diag.display().contains("Vinyasa Sima Langhanam"));
+        assert!(diag.message.contains("5"));
+        assert!(diag.message.contains("3"));
     }
 }

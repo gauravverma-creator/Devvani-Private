@@ -1,7 +1,7 @@
-use crate::token::{Token, TokenKind, Span};
 use crate::error::LexError;
 use crate::sandhi::{SandhiEngine, SandhiMode};
-use crate::unicode_map::{is_iast_identifier_start, is_iast_identifier_continue};
+use crate::token::{Span, Token, TokenKind};
+use crate::unicode_map::{is_iast_identifier_continue, is_iast_identifier_start};
 use std::iter::Peekable;
 use std::str::Chars;
 
@@ -27,14 +27,16 @@ impl<'a> Lexer<'a> {
     pub fn tokenize(&mut self, sandhi_mode: SandhiMode) -> Result<Vec<Token>, LexError> {
         let mut sandhi_engine = SandhiEngine::new(sandhi_mode);
         let processed_input = sandhi_engine.apply(self.input);
-        
+
         let mut tokens = Vec::new();
         let mut sub_lexer = Lexer::new(&processed_input);
 
         while let Some(token) = sub_lexer.next_token()? {
             let is_eof = token.kind == TokenKind::Samaapti;
             tokens.push(token);
-            if is_eof { break; }
+            if is_eof {
+                break;
+            }
         }
 
         Ok(tokens)
@@ -49,10 +51,16 @@ impl<'a> Lexer<'a> {
 
         let c = match self.peek() {
             Some(c) => c,
-            None => return Ok(Some(Token {
-                kind: TokenKind::Samaapti,
-                span: Span { line: self.line, col: self.col, len: 0 },
-            })),
+            None => {
+                return Ok(Some(Token {
+                    kind: TokenKind::Samaapti,
+                    span: Span {
+                        line: self.line,
+                        col: self.col,
+                        len: 0,
+                    },
+                }))
+            }
         };
 
         // Special standalone characters check BEFORE identifiers
@@ -60,23 +68,35 @@ impl<'a> Lexer<'a> {
             self.advance();
             return Ok(Some(Token {
                 kind: TokenKind::Visarga,
-                span: Span { line: start_line, col: start_col, len: self.pos - start_pos },
+                span: Span {
+                    line: start_line,
+                    col: start_col,
+                    len: self.pos - start_pos,
+                },
             }));
         }
         if c == 'ṃ' {
             self.advance();
             return Ok(Some(Token {
                 kind: TokenKind::Anusvara,
-                span: Span { line: start_line, col: start_col, len: self.pos - start_pos },
+                span: Span {
+                    line: start_line,
+                    col: start_col,
+                    len: self.pos - start_pos,
+                },
             }));
         }
-        
+
         // Devanagari Danda (। - U+0964)
         if c == '।' {
             self.advance();
             return Ok(Some(Token {
                 kind: TokenKind::Danda,
-                span: Span { line: start_line, col: start_col, len: self.pos - start_pos },
+                span: Span {
+                    line: start_line,
+                    col: start_col,
+                    len: self.pos - start_pos,
+                },
             }));
         }
 
@@ -94,8 +114,22 @@ impl<'a> Lexer<'a> {
 
         // Catch-all for any other characters
         let kind = match c {
-            'ḥ' => { self.advance(); TokenKind::Visarga }
-            'ṃ' => { self.advance(); TokenKind::Anusvara }
+            'ḥ' => {
+                self.advance();
+                TokenKind::Visarga
+            }
+            'ṃ' => {
+                self.advance();
+                TokenKind::Anusvara
+            }
+            '[' => {
+                self.advance();
+                TokenKind::LBracket
+            }
+            ']' => {
+                self.advance();
+                TokenKind::RBracket
+            }
             _ => {
                 self.advance();
                 TokenKind::Unknown(c)
@@ -104,7 +138,11 @@ impl<'a> Lexer<'a> {
 
         Ok(Some(Token {
             kind,
-            span: Span { line: start_line, col: start_col, len: self.pos - start_pos },
+            span: Span {
+                line: start_line,
+                col: start_col,
+                len: self.pos - start_pos,
+            },
         }))
     }
 
@@ -140,24 +178,52 @@ impl<'a> Lexer<'a> {
             }
         }
         let kind = match id.as_str() {
-            "Lat" => TokenKind::Lat, "Lit" => TokenKind::Lit, "Lut" => TokenKind::Lut,
-            "Lrt" => TokenKind::Lrt, "Let" => TokenKind::Let, "Lot" => TokenKind::Lot,
-            "Lan" => TokenKind::Lan, "Vidhilin" => TokenKind::Vidhilin,
-            "Asihlin" => TokenKind::Asihlin, "Lun" => TokenKind::Lun,
-            "ca" | "Ca" => TokenKind::Ca, "va" | "Va" => TokenKind::Va, "na" | "Na" => TokenKind::Na,
-            "iti" | "Iti" => TokenKind::Iti, "eva" | "Eva" => TokenKind::Eva, "api" | "Api" => TokenKind::Api,
-            "tu" | "Tu" => TokenKind::Tu, "yadi" | "Yadi" => TokenKind::Yadi, "tarhi" | "Tarhi" => TokenKind::Tarhi,
-            "anyatha" | "Anyatha" => TokenKind::Anyatha, "kintu" | "Kintu" => TokenKind::Kintu,
-            "punah" | "Punah" => TokenKind::Punah, "atha" | "Atha" => TokenKind::Atha, "alam" | "Alam" => TokenKind::Alam,
-            "Pra" => TokenKind::Pra, "Para" => TokenKind::Para, "Apa" => TokenKind::Apa,
-            "Sam" => TokenKind::Sam, "Anu" => TokenKind::Anu, "Ava" => TokenKind::Ava,
-            "Nis" => TokenKind::Nis, "Nir" => TokenKind::Nir, "Dus" => TokenKind::Dus,
-            "Dur" => TokenKind::Dur, "Vi" => TokenKind::Vi, "Aa" => TokenKind::Aa,
-            "Ni" => TokenKind::Ni, "Adhi" => TokenKind::Adhi,
-            "Ati" => TokenKind::Ati, "Su" => TokenKind::Su, "Ud" => TokenKind::Ud,
-            "Abhi" => TokenKind::Abhi, "Prati" => TokenKind::Prati, "Pari" => TokenKind::Pari,
+            "Lat" => TokenKind::Lat,
+            "Lit" => TokenKind::Lit,
+            "Lut" => TokenKind::Lut,
+            "Lrt" => TokenKind::Lrt,
+            "Let" => TokenKind::Let,
+            "Lot" => TokenKind::Lot,
+            "Lan" => TokenKind::Lan,
+            "Vidhilin" => TokenKind::Vidhilin,
+            "Asihlin" => TokenKind::Asihlin,
+            "Lun" => TokenKind::Lun,
+            "ca" | "Ca" => TokenKind::Ca,
+            "va" | "Va" => TokenKind::Va,
+            "na" | "Na" => TokenKind::Na,
+            "iti" | "Iti" => TokenKind::Iti,
+            "eva" | "Eva" => TokenKind::Eva,
+            "api" | "Api" => TokenKind::Api,
+            "tu" | "Tu" => TokenKind::Tu,
+            "yadi" | "Yadi" => TokenKind::Yadi,
+            "tarhi" | "Tarhi" => TokenKind::Tarhi,
+            "anyatha" | "Anyatha" => TokenKind::Anyatha,
+            "kintu" | "Kintu" => TokenKind::Kintu,
+            "punah" | "Punah" => TokenKind::Punah,
+            "atha" | "Atha" => TokenKind::Atha,
+            "alam" | "Alam" => TokenKind::Alam,
+            "Pra" => TokenKind::Pra,
+            "Para" => TokenKind::Para,
+            "Apa" => TokenKind::Apa,
+            "Sam" => TokenKind::Sam,
+            "Anu" => TokenKind::Anu,
+            "Ava" => TokenKind::Ava,
+            "Nis" => TokenKind::Nis,
+            "Nir" => TokenKind::Nir,
+            "Dus" => TokenKind::Dus,
+            "Dur" => TokenKind::Dur,
+            "Vi" => TokenKind::Vi,
+            "Aa" => TokenKind::Aa,
+            "Ni" => TokenKind::Ni,
+            "Adhi" => TokenKind::Adhi,
+            "Ati" => TokenKind::Ati,
+            "Su" => TokenKind::Su,
+            "Ud" => TokenKind::Ud,
+            "Abhi" => TokenKind::Abhi,
+            "Prati" => TokenKind::Prati,
+            "Pari" => TokenKind::Pari,
             "Upa" => TokenKind::Upa,
-            
+
             // New Sanskrit Keywords (IAST and Devanagari)
             "asti" | "अस्ति" => TokenKind::Asti,
             "bhavati" | "भवति" => TokenKind::Bhavati,
@@ -176,10 +242,17 @@ impl<'a> Lexer<'a> {
             "asamah" | "असमः" => TokenKind::AsamaH,
             "nyunah" | "न्यूनः" => TokenKind::NyuunaH,
             "adhikah" | "अधिकः" => TokenKind::AdhikaH,
-            
+
             _ => TokenKind::Naama(id),
         };
-        Ok(Token { kind, span: Span { line: start_line, col: start_col, len: self.pos - start_pos } })
+        Ok(Token {
+            kind,
+            span: Span {
+                line: start_line,
+                col: start_col,
+                len: self.pos - start_pos,
+            },
+        })
     }
 
     fn lex_anka(&mut self) -> Result<Token, LexError> {
@@ -189,23 +262,46 @@ impl<'a> Lexer<'a> {
         let mut s = String::new();
         while let Some(c) = self.peek() {
             if c.is_ascii_digit() || c == '_' {
-                if c != '_' { s.push(c); }
+                if c != '_' {
+                    s.push(c);
+                }
                 self.advance();
-            } else { break; }
+            } else {
+                break;
+            }
         }
         if self.peek() == Some('.') {
-            s.push('.'); self.advance();
+            s.push('.');
+            self.advance();
             while let Some(c) = self.peek() {
                 if c.is_ascii_digit() || c == '_' {
-                    if c != '_' { s.push(c); }
+                    if c != '_' {
+                        s.push(c);
+                    }
                     self.advance();
-                } else { break; }
+                } else {
+                    break;
+                }
             }
             let val: f64 = s.parse().unwrap_or(0.0);
-            return Ok(Token { kind: TokenKind::DashaamshaLiteral(val), span: Span { line: start_line, col: start_col, len: self.pos - start_pos } });
+            return Ok(Token {
+                kind: TokenKind::DashaamshaLiteral(val),
+                span: Span {
+                    line: start_line,
+                    col: start_col,
+                    len: self.pos - start_pos,
+                },
+            });
         }
         let val: i64 = s.parse().unwrap_or(0);
-        Ok(Token { kind: TokenKind::PurnaankLiteral(val), span: Span { line: start_line, col: start_col, len: self.pos - start_pos } })
+        Ok(Token {
+            kind: TokenKind::PurnaankLiteral(val),
+            span: Span {
+                line: start_line,
+                col: start_col,
+                len: self.pos - start_pos,
+            },
+        })
     }
 
     fn lex_vaak(&mut self) -> Result<Token, LexError> {
@@ -217,11 +313,22 @@ impl<'a> Lexer<'a> {
         while let Some(c) = self.peek() {
             if c == '"' {
                 self.advance();
-                return Ok(Token { kind: TokenKind::VaakLiteral(s), span: Span { line: start_line, col: start_col, len: self.pos - start_pos } });
+                return Ok(Token {
+                    kind: TokenKind::VaakLiteral(s),
+                    span: Span {
+                        line: start_line,
+                        col: start_col,
+                        len: self.pos - start_pos,
+                    },
+                });
             }
             if c == '\\' {
                 self.advance();
-                let span = Span { line: self.line, col: self.col, len: 1 };
+                let span = Span {
+                    line: self.line,
+                    col: self.col,
+                    len: 1,
+                };
                 match self.peek() {
                     Some('r') => s.push('\r'),
                     Some('n') => s.push('\n'),
@@ -252,30 +359,59 @@ impl<'a> Lexer<'a> {
                         s.push(ch);
                     }
                     Some(unknown_ch) => {
-                        return Err(LexError::InvalidEscape { ch: unknown_ch, span });
+                        return Err(LexError::InvalidEscape {
+                            ch: unknown_ch,
+                            span,
+                        });
                     }
-                    None => return Err(LexError::UnterminatedString { span: Span { line: start_line, col: start_col, len: self.pos - start_pos } }),
+                    None => {
+                        return Err(LexError::UnterminatedString {
+                            span: Span {
+                                line: start_line,
+                                col: start_col,
+                                len: self.pos - start_pos,
+                            },
+                        })
+                    }
                 }
                 self.advance();
-            } else { s.push(c); self.advance(); }
+            } else {
+                s.push(c);
+                self.advance();
+            }
         }
-        Err(LexError::UnterminatedString { span: Span { line: start_line, col: start_col, len: self.pos - start_pos } })
+        Err(LexError::UnterminatedString {
+            span: Span {
+                line: start_line,
+                col: start_col,
+                len: self.pos - start_pos,
+            },
+        })
     }
 
     fn skip_whitespace(&mut self) -> Result<(), LexError> {
         while let Some(c) = self.peek() {
-            if c.is_whitespace() { self.advance(); }
-            else { break; }
+            if c.is_whitespace() {
+                self.advance();
+            } else {
+                break;
+            }
         }
         Ok(())
     }
 
-    fn peek(&mut self) -> Option<char> { self.chars.peek().copied() }
+    fn peek(&mut self) -> Option<char> {
+        self.chars.peek().copied()
+    }
     fn advance(&mut self) {
         if let Some(c) = self.chars.next() {
             self.pos += c.len_utf8();
-            if c == '\n' { self.line += 1; self.col = 1; }
-            else { self.col += 1; }
+            if c == '\n' {
+                self.line += 1;
+                self.col = 1;
+            } else {
+                self.col += 1;
+            }
         }
     }
 }
@@ -326,21 +462,30 @@ mod tests {
     fn test_strings() {
         let mut lexer = Lexer::new("\"hello\\nworld\"");
         let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::VaakLiteral("hello\nworld".to_string()));
+        assert_eq!(
+            tokens[0].kind,
+            TokenKind::VaakLiteral("hello\nworld".to_string())
+        );
     }
 
     #[test]
     fn test_hyphenated_identifier() {
         let mut lexer = Lexer::new("avartanah-dhatu");
         let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Naama("avartanah-dhatu".to_string()));
+        assert_eq!(
+            tokens[0].kind,
+            TokenKind::Naama("avartanah-dhatu".to_string())
+        );
     }
 
     #[test]
     fn test_hyphenated_identifier_multiple_hyphens() {
         let mut lexer = Lexer::new("avartanah-dhatu-karoti");
         let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Naama("avartanah-dhatu-karoti".to_string()));
+        assert_eq!(
+            tokens[0].kind,
+            TokenKind::Naama("avartanah-dhatu-karoti".to_string())
+        );
     }
 
     #[test]
@@ -357,5 +502,26 @@ mod tests {
         assert_eq!(tokens[0].kind, TokenKind::Naama("foo".to_string()));
         assert_eq!(tokens[1].kind, TokenKind::Unknown('-'));
         assert_eq!(tokens[2].kind, TokenKind::Naama("bar".to_string()));
+    }
+
+    #[test]
+    fn test_lbracket_rbracket_tokens() {
+        let mut lexer = Lexer::new("[ ]");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::LBracket);
+        assert_eq!(tokens[1].kind, TokenKind::RBracket);
+    }
+
+    #[test]
+    fn test_brackets_in_array_literal() {
+        let mut lexer = Lexer::new("[1, 2, 3]");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::LBracket);
+        assert_eq!(tokens[1].kind, TokenKind::PurnaankLiteral(1));
+        assert_eq!(tokens[2].kind, TokenKind::Unknown(','));
+        assert_eq!(tokens[3].kind, TokenKind::PurnaankLiteral(2));
+        assert_eq!(tokens[4].kind, TokenKind::Unknown(','));
+        assert_eq!(tokens[5].kind, TokenKind::PurnaankLiteral(3));
+        assert_eq!(tokens[6].kind, TokenKind::RBracket);
     }
 }

@@ -61,17 +61,20 @@ fn test_uncompute_success() {
         )
         .unwrap();
     let result = buf.uncompute(op_id).unwrap();
-    assert_eq!(
-        result,
-        UncomputeResult::Success { op_id, ancilla_id }
-    );
+    assert_eq!(result, UncomputeResult::Success { op_id, ancilla_id });
 }
 
 #[test]
 fn test_uncompute_already_consumed() {
     let mut buf = small_buffer();
     let (op_id, _, _) = buf
-        .record("yoga".to_string(), "viyoga".to_string(), vec![1], vec![2], vec![])
+        .record(
+            "yoga".to_string(),
+            "viyoga".to_string(),
+            vec![1],
+            vec![2],
+            vec![],
+        )
         .unwrap();
     buf.uncompute(op_id).unwrap();
     let result = buf.uncompute(op_id).unwrap();
@@ -81,8 +84,22 @@ fn test_uncompute_already_consumed() {
 #[test]
 fn test_stats_after_operations() {
     let mut buf = small_buffer();
-    buf.record("yoga".to_string(), "viyoga".to_string(), vec![1], vec![2], vec![]).unwrap();
-    buf.record("guna".to_string(), "bhaga".to_string(), vec![3], vec![9], vec![]).unwrap();
+    buf.record(
+        "yoga".to_string(),
+        "viyoga".to_string(),
+        vec![1],
+        vec![2],
+        vec![],
+    )
+    .unwrap();
+    buf.record(
+        "guna".to_string(),
+        "bhaga".to_string(),
+        vec![3],
+        vec![9],
+        vec![],
+    )
+    .unwrap();
     let stats = buf.stats();
     assert_eq!(stats.total_ops_recorded, 2);
     assert_eq!(stats.total_ops_uncomputed, 0);

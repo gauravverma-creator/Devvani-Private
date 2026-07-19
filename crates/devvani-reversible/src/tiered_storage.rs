@@ -35,12 +35,7 @@ impl TieredStorage {
     }
 
     pub fn with_defaults(ssd_base_dir: impl AsRef<Path>) -> Result<Self, ReversibleError> {
-        Self::new(
-            64 * 1024 * 1024,
-            WindowConfig::default(),
-            ssd_base_dir,
-            32,
-        )
+        Self::new(64 * 1024 * 1024, WindowConfig::default(), ssd_base_dir, 32)
     }
 
     /// Record a new reversible operation.

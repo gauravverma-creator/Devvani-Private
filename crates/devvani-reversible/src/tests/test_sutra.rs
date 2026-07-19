@@ -74,7 +74,9 @@ fn test_inverse_chain_selects_paravartya() {
 
 #[test]
 fn test_partition_respects_reduction_fraction() {
-    let ops: Vec<ReversibleOp> = (0..10).map(|i| make_op(i, "yoga", "viyoga", vec![])).collect();
+    let ops: Vec<ReversibleOp> = (0..10)
+        .map(|i| make_op(i, "yoga", "viyoga", vec![]))
+        .collect();
     let selection = SutraSelector::select(&ops);
     let (retain, compress) = SutraSelector::partition(&ops, &selection);
     assert_eq!(retain.len() + compress.len(), ops.len());

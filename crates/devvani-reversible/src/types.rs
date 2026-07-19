@@ -11,17 +11,17 @@ pub type AncillaId = u64;
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ReversibleOp {
     pub id: OpId,
-    pub forward_fn_name: String,   // Devvani Dhatu name e.g. "yoga" (addition)
-    pub inverse_fn_name: String,   // Inverse Dhatu name e.g. "viyoga" (subtraction)
-    pub input_snapshot: Vec<u8>,   // Serialized input state before the operation
-    pub output_snapshot: Vec<u8>,  // Serialized output state after the operation
-    pub ancilla_id: AncillaId,     // Which ancilla slot stores this op
-    pub timestamp: u64,            // Monotonic counter, not wall clock
-    pub is_consumed: bool,         // True after uncomputation has been performed
-    pub dependencies: Vec<OpId>,   // OpIds this operation depends on
+    pub forward_fn_name: String, // Devvani Dhatu name e.g. "yoga" (addition)
+    pub inverse_fn_name: String, // Inverse Dhatu name e.g. "viyoga" (subtraction)
+    pub input_snapshot: Vec<u8>, // Serialized input state before the operation
+    pub output_snapshot: Vec<u8>, // Serialized output state after the operation
+    pub ancilla_id: AncillaId,   // Which ancilla slot stores this op
+    pub timestamp: u64,          // Monotonic counter, not wall clock
+    pub is_consumed: bool,       // True after uncomputation has been performed
+    pub dependencies: Vec<OpId>, // OpIds this operation depends on
 }
 
-/// Represents a side-effect marker — operations that write to I/O, filesystem, or 
+/// Represents a side-effect marker — operations that write to I/O, filesystem, or
 /// external state. These cannot be fully reversed but are tracked for audit.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct SideEffectMarker {

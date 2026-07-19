@@ -1,5 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use crate::{KoshaManifest, ModuleError};
+use std::collections::{HashMap, HashSet};
 
 pub struct ModuleResolver {
     // dependency graph: module_name -> list of its dependencies
@@ -106,7 +106,7 @@ mod tests {
             dependencies: HashMap::new(),
         };
         resolver.register_module(manifest);
-        
+
         let resolved = resolver.resolve_import("caller", "deva-ai").unwrap();
         assert_eq!(resolved.name, "deva-ai");
     }
@@ -121,14 +121,16 @@ mod tests {
     #[test]
     fn test_circular_dependency_detection() {
         let mut resolver = ModuleResolver::new();
-        
+
         // A -> B
         resolver.register_module(KoshaManifest {
             name: "A".to_string(),
             version: "0.1.0".to_string(),
             official: false,
             signature: None,
-            dependencies: [("B".to_string(), "0.1.0".to_string())].into_iter().collect(),
+            dependencies: [("B".to_string(), "0.1.0".to_string())]
+                .into_iter()
+                .collect(),
         });
 
         // B -> C
@@ -137,7 +139,9 @@ mod tests {
             version: "0.1.0".to_string(),
             official: false,
             signature: None,
-            dependencies: [("C".to_string(), "0.1.0".to_string())].into_iter().collect(),
+            dependencies: [("C".to_string(), "0.1.0".to_string())]
+                .into_iter()
+                .collect(),
         });
 
         // C -> A
@@ -146,7 +150,9 @@ mod tests {
             version: "0.1.0".to_string(),
             official: false,
             signature: None,
-            dependencies: [("A".to_string(), "0.1.0".to_string())].into_iter().collect(),
+            dependencies: [("A".to_string(), "0.1.0".to_string())]
+                .into_iter()
+                .collect(),
         });
 
         let cycle = resolver.detect_circular();

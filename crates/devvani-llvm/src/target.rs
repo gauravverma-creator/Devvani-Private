@@ -1,9 +1,8 @@
+use crate::error::DevvaniLLVMError;
 use inkwell::targets::{
-    CodeModel, InitializationConfig, RelocMode,
-    Target, TargetMachine, TargetTriple,
+    CodeModel, InitializationConfig, RelocMode, Target, TargetMachine, TargetTriple,
 };
 use inkwell::OptimizationLevel;
-use crate::error::DevvaniLLVMError;
 
 pub struct DevvaniTarget {
     pub machine: TargetMachine,
@@ -28,9 +27,9 @@ impl DevvaniTarget {
                 RelocMode::Default,
                 CodeModel::Default,
             )
-            .ok_or_else(|| DevvaniLLVMError::TargetError(
-                "Failed to create target machine".to_string()
-            ))?;
+            .ok_or_else(|| {
+                DevvaniLLVMError::TargetError("Failed to create target machine".to_string())
+            })?;
 
         Ok(Self { machine, triple })
     }

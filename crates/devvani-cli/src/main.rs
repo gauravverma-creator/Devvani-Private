@@ -1,10 +1,10 @@
 use clap::{Parser as ClapParser, Subcommand, ValueEnum};
+use devvani_compiler::diagnostics::DiagnosticEngine;
 use devvani_lexer::{Lexer, SandhiMode};
-use devvani_parser::Parser;
-use devvani_typesystem::checker::TypeChecker;
 use devvani_llvm::codegen::IrEmitter;
 use devvani_llvm::target::DevvaniTarget;
-use devvani_compiler::diagnostics::DiagnosticEngine;
+use devvani_parser::Parser;
+use devvani_typesystem::checker::TypeChecker;
 use inkwell::context::Context;
 use inkwell::targets::FileType;
 use std::fs;
@@ -50,13 +50,9 @@ enum Commands {
         emit: EmitTarget,
     },
     /// Check a Devvani file (Type checking + Symbol Table)
-    Check {
-        file: String,
-    },
+    Check { file: String },
     /// Install a Devvani module
-    Install {
-        package: String,
-    },
+    Install { package: String },
     /// List loaded modules and registry info
     Modules,
 }
@@ -66,7 +62,10 @@ fn main() {
 
     match &cli.command {
         Commands::Install { package } => {
-            println!("āyātaḥ: installing package '{}' from https://registry.kosha.dev", package);
+            println!(
+                "āyātaḥ: installing package '{}' from https://registry.kosha.dev",
+                package
+            );
             let loader = devvani_module::ModuleLoader::new();
             let path = loader.cache_path(package);
             println!("siddham — package path resolved: {}", path.display());
@@ -78,24 +77,41 @@ fn main() {
             println!("Local Cache: ~/.devvani/packages/");
             println!("Loaded modules: {}", pipeline.loaded_module_count());
         }
-        Commands::Lex { file, json, sandhi_off } => {
+        Commands::Lex {
+            file,
+            json,
+            sandhi_off,
+        } => {
             let source = match fs::read_to_string(file) {
                 Ok(s) => s,
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::IoError(e.to_string()));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::IoError(e.to_string()),
+                    );
                     eprintln!("{}", diag.display());
                     return;
                 }
             };
             let mut lexer = Lexer::new(&source);
-            let sandhi_mode = if *sandhi_off { SandhiMode::Off } else { SandhiMode::Auto };
+            let sandhi_mode = if *sandhi_off {
+                SandhiMode::Off
+            } else {
+                SandhiMode::Auto
+            };
             match lexer.tokenize(sandhi_mode) {
                 Ok(tokens) => {
-                    if *json { println!("{}", serde_json::to_string_pretty(&tokens).unwrap()); }
-                    else { for token in tokens { println!("{:?}", token); } }
+                    if *json {
+                        println!("{}", serde_json::to_string_pretty(&tokens).unwrap());
+                    } else {
+                        for token in tokens {
+                            println!("{:?}", token);
+                        }
+                    }
                 }
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::LexError(format!("{:?}", e)));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::LexError(format!("{:?}", e)),
+                    );
                     eprintln!("{}", diag.display());
                 }
             }
@@ -104,7 +120,9 @@ fn main() {
             let source = match fs::read_to_string(file) {
                 Ok(s) => s,
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::IoError(e.to_string()));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::IoError(e.to_string()),
+                    );
                     eprintln!("{}", diag.display());
                     return;
                 }
@@ -113,7 +131,9 @@ fn main() {
             let tokens = match lexer.tokenize(SandhiMode::Auto) {
                 Ok(t) => t,
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::LexError(format!("{:?}", e)));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::LexError(format!("{:?}", e)),
+                    );
                     eprintln!("{}", diag.display());
                     return;
                 }
@@ -128,7 +148,9 @@ fn main() {
                     }
                 }
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::ParseError(format!("{:?}", e)));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::ParseError(format!("{:?}", e)),
+                    );
                     eprintln!("{}", diag.display());
                 }
             }
@@ -166,7 +188,8 @@ fn main() {
             let mut checker = TypeChecker::new();
             let errors = checker.check_program(&ast);
             if !errors.is_empty() {
-                let diagnostics: Vec<_> = errors.iter()
+                let diagnostics: Vec<_> = errors
+                    .iter()
                     .map(|e| DiagnosticEngine::from_type_error(e))
                     .collect();
                 eprintln!("{}", DiagnosticEngine::report(&diagnostics));
@@ -186,7 +209,9 @@ fn main() {
             };
 
             let default_out = Path::new(file).with_extension("");
-            let out_base = output.as_deref().unwrap_or_else(|| default_out.to_str().unwrap());
+            let out_base = output
+                .as_deref()
+                .unwrap_or_else(|| default_out.to_str().unwrap());
 
             match emit {
                 EmitTarget::Ir => {
@@ -197,16 +222,20 @@ fn main() {
                 EmitTarget::Obj => {
                     let out_path = format!("{}.o", out_base);
                     let target = DevvaniTarget::new_native().expect("Failed to init native target");
-                    target.machine.write_to_file(&emitter.module, FileType::Object, Path::new(&out_path))
+                    target
+                        .machine
+                        .write_to_file(&emitter.module, FileType::Object, Path::new(&out_path))
                         .expect("Failed to write object file");
                     println!("✓ Object file written to: {}", out_path);
                 }
                 EmitTarget::Binary => {
                     let obj_path = format!("{}.o", out_base);
                     let target = DevvaniTarget::new_native().expect("Failed to init native target");
-                    target.machine.write_to_file(&emitter.module, FileType::Object, Path::new(&obj_path))
+                    target
+                        .machine
+                        .write_to_file(&emitter.module, FileType::Object, Path::new(&obj_path))
                         .expect("Failed to write temporary object file");
-                    
+
                     let bin_path = out_base;
                     let status = std::process::Command::new("cc")
                         .arg(&obj_path)
@@ -229,7 +258,9 @@ fn main() {
             let source = match fs::read_to_string(file) {
                 Ok(s) => s,
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::IoError(e.to_string()));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::IoError(e.to_string()),
+                    );
                     eprintln!("{}", diag.display());
                     return;
                 }
@@ -238,7 +269,9 @@ fn main() {
             let tokens = match lexer.tokenize(SandhiMode::Auto) {
                 Ok(t) => t,
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::LexError(format!("{:?}", e)));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::LexError(format!("{:?}", e)),
+                    );
                     eprintln!("{}", diag.display());
                     return;
                 }
@@ -247,7 +280,9 @@ fn main() {
             let ast = match parser.parse() {
                 Ok(a) => a,
                 Err(e) => {
-                    let diag = DiagnosticEngine::from_compiler_error(&devvani_compiler::CompilerError::ParseError(format!("{:?}", e)));
+                    let diag = DiagnosticEngine::from_compiler_error(
+                        &devvani_compiler::CompilerError::ParseError(format!("{:?}", e)),
+                    );
                     eprintln!("{}", diag.display());
                     return;
                 }
@@ -255,12 +290,13 @@ fn main() {
 
             let mut checker = TypeChecker::new();
             let errors = checker.check_program(&ast);
-            
+
             println!("--- Symbol Table Check ---");
-            let diagnostics: Vec<_> = errors.iter()
+            let diagnostics: Vec<_> = errors
+                .iter()
                 .map(|e| DiagnosticEngine::from_type_error(e))
                 .collect();
-            
+
             println!("{}", DiagnosticEngine::report(&diagnostics));
         }
     }

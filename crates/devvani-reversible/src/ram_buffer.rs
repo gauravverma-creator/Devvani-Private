@@ -18,15 +18,18 @@ use crate::window::{ComputeWindow, WindowConfig};
 pub struct RamBuffer {
     ancilla_store: AncillaStore,
     #[allow(dead_code)]
-    shadow_store: AncillaStore,   // Double-buffer shadow
+    shadow_store: AncillaStore, // Double-buffer shadow
     window: ComputeWindow,
     capacity_bytes: usize,
     used_bytes: usize,
-    op_counter: u64,              // Monotonic op ID counter
+    op_counter: u64, // Monotonic op ID counter
 }
 
 impl RamBuffer {
-    pub fn new(capacity_bytes: usize, window_config: WindowConfig) -> Result<Self, ReversibleError> {
+    pub fn new(
+        capacity_bytes: usize,
+        window_config: WindowConfig,
+    ) -> Result<Self, ReversibleError> {
         let window = ComputeWindow::new(window_config)?;
         Ok(Self {
             ancilla_store: AncillaStore::new(),
@@ -72,7 +75,7 @@ impl RamBuffer {
             inverse_fn_name,
             input_snapshot,
             output_snapshot,
-            ancilla_id: 0, // Will be set by AncillaStore.store()
+            ancilla_id: 0,    // Will be set by AncillaStore.store()
             timestamp: op_id, // Use op_id as monotonic timestamp
             is_consumed: false,
             dependencies,

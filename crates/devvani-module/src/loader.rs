@@ -1,5 +1,5 @@
+use crate::{registry::PackageRegistry, KoshaManifest, ModuleError};
 use std::path::PathBuf;
-use crate::{KoshaManifest, ModuleError, registry::PackageRegistry};
 
 #[derive(Debug)]
 pub struct LoadedModule {
@@ -20,7 +20,7 @@ impl ModuleLoader {
             .unwrap_or_else(|| PathBuf::from("."))
             .join(".devvani")
             .join("packages");
-        
+
         Self {
             registry: PackageRegistry::new(),
             cache_dir,

@@ -1,4 +1,3 @@
-
 use crate::node::ASTNode;
 
 pub type VisitResult = Result<(), String>;
@@ -20,7 +19,9 @@ pub trait ASTVisitor {
     fn visit_samasa(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_krit_chain(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_avatarana(&mut self, node: &ASTNode) -> VisitResult;
-    
+    fn visit_pankti(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_vinyasa(&mut self, node: &ASTNode) -> VisitResult;
+
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
             ASTNode::KaryakramNode { shareera, .. } => self.visit_karyakram(shareera),
@@ -29,19 +30,26 @@ pub trait ASTVisitor {
             ASTNode::Nama { .. } => self.visit_nama(node),
             ASTNode::AstiNode { .. } => self.visit_asti(node),
             ASTNode::BhavatiNode { .. } => self.visit_bhavati(node),
-            ASTNode::YogaNode { .. } | ASTNode::ViyogaNode { .. } |
-            ASTNode::GunaNode { .. } | ASTNode::BhagaNode { .. } => self.visit_arithmetic(node),
-            ASTNode::SamaNode { .. } | ASTNode::AsamaNode { .. } |
-            ASTNode::NyuunaNode { .. } | ASTNode::AdhikaNode { .. } => self.visit_comparison(node),
+            ASTNode::YogaNode { .. }
+            | ASTNode::ViyogaNode { .. }
+            | ASTNode::GunaNode { .. }
+            | ASTNode::BhagaNode { .. } => self.visit_arithmetic(node),
+            ASTNode::SamaNode { .. }
+            | ASTNode::AsamaNode { .. }
+            | ASTNode::NyuunaNode { .. }
+            | ASTNode::AdhikaNode { .. } => self.visit_comparison(node),
             ASTNode::VadatiNode { .. } | ASTNode::PathatiNode { .. } => self.visit_io(node),
             ASTNode::YadiNode { .. } => self.visit_yadi(node),
             ASTNode::YavatNode { .. } => self.visit_yavat(node),
             ASTNode::PunahNode { .. } => self.visit_punah(node),
-            ASTNode::PurnaankLiteral { .. } | ASTNode::DashaamshaLiteral { .. } | 
-            ASTNode::VaakLiteral { .. } => self.visit_literal(node),
+            ASTNode::PurnaankLiteral { .. }
+            | ASTNode::DashaamshaLiteral { .. }
+            | ASTNode::VaakLiteral { .. } => self.visit_literal(node),
             ASTNode::Samasa { .. } => self.visit_samasa(node),
             ASTNode::KritChain { .. } => self.visit_krit_chain(node),
             ASTNode::AvartanaNode { .. } => self.visit_avatarana(node),
+            ASTNode::PanktiNode { .. } => self.visit_pankti(node),
+            ASTNode::VinyasaNode { .. } => self.visit_vinyasa(node),
             _ => Ok(()),
         }
     }
@@ -56,7 +64,9 @@ impl PrettyPrinter {
         Self { indent: 0 }
     }
     fn print_indent(&self) {
-        for _ in 0..self.indent { print!("  "); }
+        for _ in 0..self.indent {
+            print!("  ");
+        }
     }
 }
 
@@ -70,7 +80,7 @@ impl ASTVisitor for PrettyPrinter {
         self.indent -= 1;
         Ok(())
     }
-    
+
     fn visit_dhatu_def(&mut self, node: &ASTNode) -> VisitResult {
         if let ASTNode::DhatuDef { name, lakara, .. } = node {
             self.print_indent();
@@ -173,6 +183,31 @@ impl ASTVisitor for PrettyPrinter {
             println!("Avartana");
             self.indent += 1;
             self.visit(call)?;
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_pankti(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::PanktiNode { elements, .. } = node {
+            self.print_indent();
+            println!("Pankti [{} elements]", elements.len());
+            self.indent += 1;
+            for elem in elements {
+                self.visit(elem)?;
+            }
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_vinyasa(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::VinyasaNode { target, index, .. } = node {
+            self.print_indent();
+            println!("Vinyasa");
+            self.indent += 1;
+            self.visit(target)?;
+            self.visit(index)?;
             self.indent -= 1;
         }
         Ok(())

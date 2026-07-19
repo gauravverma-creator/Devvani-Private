@@ -1,15 +1,15 @@
-pub mod manifest;
-pub mod registry;
 pub mod error;
-pub mod resolver;
 pub mod loader;
-pub mod visibility;
+pub mod manifest;
 pub mod pipeline;
+pub mod registry;
+pub mod resolver;
+pub mod visibility;
 
-pub use manifest::KoshaManifest;
-pub use registry::PackageRegistry;
 pub use error::ModuleError;
-pub use resolver::ModuleResolver;
-pub use loader::{ModuleLoader, LoadedModule};
-pub use visibility::{Visibility, SymbolVisibility};
+pub use loader::{LoadedModule, ModuleLoader};
+pub use manifest::KoshaManifest;
 pub use pipeline::ModulePipeline;
+pub use registry::PackageRegistry;
+pub use resolver::ModuleResolver;
+pub use visibility::{SymbolVisibility, Visibility};

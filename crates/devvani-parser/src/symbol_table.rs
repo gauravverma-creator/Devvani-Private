@@ -1,7 +1,7 @@
-use std::collections::HashMap;
-use devvani_ast::{KarakaRole, Vibhakti, Linga, Vacana, Gana, Lakara, Upasarga};
-use devvani_lexer::Span;
 use crate::error::ParseError;
+use devvani_ast::{Gana, KarakaRole, Lakara, Linga, Upasarga, Vacana, Vibhakti};
+use devvani_lexer::Span;
+use std::collections::HashMap;
 
 pub struct Symbol {
     pub name: String,

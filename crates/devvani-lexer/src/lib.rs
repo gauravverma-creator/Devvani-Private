@@ -1,10 +1,10 @@
-pub mod token;
+pub mod error;
 pub mod lexer;
 pub mod sandhi;
+pub mod token;
 pub mod unicode_map;
-pub mod error;
 
-pub use token::{Token, TokenKind, Span};
+pub use error::LexError;
 pub use lexer::Lexer;
 pub use sandhi::{SandhiEngine, SandhiMode};
-pub use error::LexError;
+pub use token::{Span, Token, TokenKind};

@@ -2,14 +2,14 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KritPratyaya {
-    Kta,    // past passive participle - "done" e.g. krita
-    Tavya,  // obligation/must - "to be done" e.g. kartavya
-    Ana,    // present participle/agent - "doing" e.g. karana
-    Tum,    // infinitive - "to do" e.g. kartum
-    Ktva,   // absolutive - "having done" e.g. kritva
-    Trich,  // agent noun - "one who does" e.g. karta
-    Anta,   // present active participle e.g. kuranta
-    Nya,    // obligation variant e.g. karanya
+    Kta,   // past passive participle - "done" e.g. krita
+    Tavya, // obligation/must - "to be done" e.g. kartavya
+    Ana,   // present participle/agent - "doing" e.g. karana
+    Tum,   // infinitive - "to do" e.g. kartum
+    Ktva,  // absolutive - "having done" e.g. kritva
+    Trich, // agent noun - "one who does" e.g. karta
+    Anta,  // present active participle e.g. kuranta
+    Nya,   // obligation variant e.g. karanya
     Unknown,
 }
 
@@ -22,12 +22,12 @@ pub struct KritType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum KritDerivedType {
-    PastPassive,      // Kta  - bool/state
-    Obligation,       // Tavya, Nya - must-do marker
-    PresentAgent,     // Ana, Anta - currently doing
-    Infinitive,       // Tum - function reference
-    Absolutive,       // Ktva - completed action
-    AgentNoun,        // Trich - actor type
+    PastPassive,  // Kta  - bool/state
+    Obligation,   // Tavya, Nya - must-do marker
+    PresentAgent, // Ana, Anta - currently doing
+    Infinitive,   // Tum - function reference
+    Absolutive,   // Ktva - completed action
+    AgentNoun,    // Trich - actor type
 }
 
 pub fn krit_from_suffix(suffix: &str) -> KritPratyaya {
@@ -89,11 +89,17 @@ mod tests {
 
     #[test]
     fn test_krit_to_derived_infinitive() {
-        assert_eq!(krit_to_derived_type(&KritPratyaya::Tum), KritDerivedType::Infinitive);
+        assert_eq!(
+            krit_to_derived_type(&KritPratyaya::Tum),
+            KritDerivedType::Infinitive
+        );
     }
 
     #[test]
     fn test_krit_to_derived_obligation() {
-        assert_eq!(krit_to_derived_type(&KritPratyaya::Tavya), KritDerivedType::Obligation);
+        assert_eq!(
+            krit_to_derived_type(&KritPratyaya::Tavya),
+            KritDerivedType::Obligation
+        );
     }
 }

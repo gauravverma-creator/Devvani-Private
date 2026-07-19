@@ -1,8 +1,8 @@
+use crate::error::ModuleError;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use serde::{Serialize, Deserialize};
-use crate::error::ModuleError;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KoshaManifest {
@@ -36,9 +36,9 @@ impl KoshaManifest {
     }
 
     pub fn from_str(s: &str) -> Result<Self, ModuleError> {
-        let raw: RawManifest = toml::from_str(s)
-            .map_err(|e| ModuleError::ManifestParseError(e.to_string()))?;
-        
+        let raw: RawManifest =
+            toml::from_str(s).map_err(|e| ModuleError::ManifestParseError(e.to_string()))?;
+
         Ok(KoshaManifest {
             name: raw.package.name,
             version: raw.package.version,

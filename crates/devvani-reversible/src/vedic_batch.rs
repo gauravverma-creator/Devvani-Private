@@ -192,12 +192,15 @@ impl VedicBatchEngine {
     }
 
     pub fn last_sutra(&self) -> Option<Sutra> {
-        self.batch_stats.last_sutra_used.as_deref().and_then(|name| match name {
-            "UrdhvaTiryagbhyam" => Some(Sutra::UrdhvaTiryak),
-            "Nikhilam" => Some(Sutra::Nikhilam),
-            "Paravartya" => Some(Sutra::Paravartya),
-            "Anurupyena" => Some(Sutra::Anurupyena),
-            _ => None,
-        })
+        self.batch_stats
+            .last_sutra_used
+            .as_deref()
+            .and_then(|name| match name {
+                "UrdhvaTiryagbhyam" => Some(Sutra::UrdhvaTiryak),
+                "Nikhilam" => Some(Sutra::Nikhilam),
+                "Paravartya" => Some(Sutra::Paravartya),
+                "Anurupyena" => Some(Sutra::Anurupyena),
+                _ => None,
+            })
     }
 }

@@ -84,16 +84,25 @@ mod tests {
 
     #[test]
     fn test_taddhita_derived_abstract_noun() {
-        assert_eq!(taddhita_to_derived_type(&TaddhitaPratyaya::Tva), TaddhitaDerivedType::AbstractNoun);
+        assert_eq!(
+            taddhita_to_derived_type(&TaddhitaPratyaya::Tva),
+            TaddhitaDerivedType::AbstractNoun
+        );
     }
 
     #[test]
     fn test_taddhita_derived_possessive() {
-        assert_eq!(taddhita_to_derived_type(&TaddhitaPratyaya::Vat), TaddhitaDerivedType::Possessive);
+        assert_eq!(
+            taddhita_to_derived_type(&TaddhitaPratyaya::Vat),
+            TaddhitaDerivedType::Possessive
+        );
     }
 
     #[test]
     fn test_taddhita_derived_superlative() {
-        assert_eq!(taddhita_to_derived_type(&TaddhitaPratyaya::Tama), TaddhitaDerivedType::Superlative);
+        assert_eq!(
+            taddhita_to_derived_type(&TaddhitaPratyaya::Tama),
+            TaddhitaDerivedType::Superlative
+        );
     }
 }

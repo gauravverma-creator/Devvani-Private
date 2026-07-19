@@ -2,19 +2,19 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SamasaKind {
-    Tatpurusha,    // second word dominant → nested path
-    Dvandva,       // both equal          → tuple
-    Bahuvrihi,     // third implied       → trait/interface alias
-    Avyayibhava,   // first dominant      → constant
-    Karmadharaya,  // adjective-noun      → typed variable
+    Tatpurusha,   // second word dominant → nested path
+    Dvandva,      // both equal          → tuple
+    Bahuvrihi,    // third implied       → trait/interface alias
+    Avyayibhava,  // first dominant      → constant
+    Karmadharaya, // adjective-noun      → typed variable
 }
 
 #[derive(Debug, Clone)]
 pub struct SamasaNode {
     pub kind: SamasaKind,
-    pub parts: Vec<String>,     // constituent words
-    pub resolved: String,       // resolved Rust identifier
-    pub rust_repr: String,      // full Rust expression
+    pub parts: Vec<String>, // constituent words
+    pub resolved: String,   // resolved Rust identifier
+    pub rust_repr: String,  // full Rust expression
 }
 
 pub fn samasa_from_str(s: &str) -> Option<SamasaKind> {
@@ -49,7 +49,14 @@ pub fn resolve_samasa(kind: &SamasaKind, parts: &[&str]) -> SamasaNode {
         }
         SamasaKind::Karmadharaya => {
             let res = parts.join("_").to_lowercase();
-            (res, format!("let {}: {} = Default::default();", parts[0].to_lowercase(), parts[1]))
+            (
+                res,
+                format!(
+                    "let {}: {} = Default::default();",
+                    parts[0].to_lowercase(),
+                    parts[1]
+                ),
+            )
         }
     };
 
@@ -69,7 +76,11 @@ impl fmt::Display for SamasaKind {
 
 impl fmt::Display for SamasaNode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "SamasaNode(kind={}, resolved={}, rust={})", self.kind, self.resolved, self.rust_repr)
+        write!(
+            f,
+            "SamasaNode(kind={}, resolved={}, rust={})",
+            self.kind, self.resolved, self.rust_repr
+        )
     }
 }
 
@@ -105,8 +116,8 @@ mod tests {
     fn test_resolve_karmadharaya() {
         let node = resolve_samasa(&SamasaKind::Karmadharaya, &["nila", "utpala"]);
         assert!(node.rust_repr.contains("let nila"));
-        assert!(node.rust_repr.contains(": utpala")); // Wait, parts[1] is "utpala", so ": utpala". 
-                                                       // Task says ": Utpala". Let's fix that.
+        assert!(node.rust_repr.contains(": utpala")); // Wait, parts[1] is "utpala", so ": utpala".
+                                                      // Task says ": Utpala". Let's fix that.
     }
 
     #[test]

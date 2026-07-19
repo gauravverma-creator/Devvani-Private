@@ -31,7 +31,7 @@ impl SandhiEngine {
         }
 
         let mut output = input.to_string();
-        
+
         // Rule 1: Savarna Dirgha
         self.apply_replacement(&mut output, "a+a", "ā", "Savarna Dirgha");
         self.apply_replacement(&mut output, "i+i", "ī", "Savarna Dirgha");
@@ -52,11 +52,17 @@ impl SandhiEngine {
         // Rule 5: Visarga Sandhi (Simplified)
         self.apply_replacement(&mut output, "ḥ+c", "śc", "Visarga Sandhi");
         self.apply_replacement(&mut output, "ḥ+t", "st", "Visarga Sandhi");
-        
+
         output
     }
 
-    fn apply_replacement(&mut self, s: &mut String, pattern: &str, replacement: &str, rule_name: &str) {
+    fn apply_replacement(
+        &mut self,
+        s: &mut String,
+        pattern: &str,
+        replacement: &str,
+        rule_name: &str,
+    ) {
         let mut start = 0;
         while let Some(pos) = s[start..].find(pattern) {
             let actual_pos = start + pos;

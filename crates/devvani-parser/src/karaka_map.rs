@@ -1,4 +1,4 @@
-use devvani_ast::{Vibhakti, KarakaRole};
+use devvani_ast::{KarakaRole, Vibhakti};
 
 pub fn vibhakti_to_karaka(v: &Vibhakti) -> KarakaRole {
     match v {

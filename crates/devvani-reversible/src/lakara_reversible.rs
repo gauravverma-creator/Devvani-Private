@@ -31,14 +31,10 @@ pub enum LakaaraReversible {
     },
     /// PratyavartyaLrt — reversible future
     /// The Dhātu will execute and record; uncomputation is deferred.
-    PratyavartyaLrt {
-        inverse_dhatu: String,
-    },
+    PratyavartyaLrt { inverse_dhatu: String },
     /// AnapravartyaLot — irreversible imperative (side effect)
     /// I/O, file writes, network calls. Tracked in side effect log only.
-    AnapravartyaLot {
-        effect_description: String,
-    },
+    AnapravartyaLot { effect_description: String },
 }
 
 impl LakaaraReversible {
@@ -105,7 +101,10 @@ impl ReversibleDiagnostic {
     pub fn message(&self) -> String {
         match self {
             ReversibleDiagnostic::InverseDhatuNotFound { dhatu_name } => {
-                format!("D020: inverse dhatu '{}' not found in current scope", dhatu_name)
+                format!(
+                    "D020: inverse dhatu '{}' not found in current scope",
+                    dhatu_name
+                )
             }
             ReversibleDiagnostic::MissingRecordedOpId { dhatu_name } => {
                 format!("D021: PratyavartyaLan on '{}' has no recorded OpId — was the operation executed?", dhatu_name)
@@ -114,7 +113,10 @@ impl ReversibleDiagnostic {
                 format!("D022: side effect '{}' inside a reversible Dhātu — use AnapravartyaLot or move outside", effect_description)
             }
             ReversibleDiagnostic::UncomputeOnIrreversible { dhatu_name } => {
-                format!("D023: cannot uncompute '{}' — marked AnapravartyaLot (irreversible)", dhatu_name)
+                format!(
+                    "D023: cannot uncompute '{}' — marked AnapravartyaLot (irreversible)",
+                    dhatu_name
+                )
             }
         }
     }

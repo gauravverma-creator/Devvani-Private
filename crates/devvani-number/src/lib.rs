@@ -1,9 +1,9 @@
 //! Architecture-aware Devvani Number System
 
-pub mod platform;
-pub mod binary;
 pub mod arithmetic;
+pub mod binary;
 pub mod display;
+pub mod platform;
 
 use std::fmt;
 

@@ -98,7 +98,9 @@ impl VaakSymbol {
     /// Check if this symbol can be read (not Moved)
     pub fn can_read(&self) -> Result<(), VaakError> {
         if self.ownership == VaakOwnership::Moved {
-            Err(VaakError::UseAfterMove { naama: self.naama.clone() })
+            Err(VaakError::UseAfterMove {
+                naama: self.naama.clone(),
+            })
         } else {
             Ok(())
         }
@@ -107,9 +109,15 @@ impl VaakSymbol {
     /// Check if this symbol can be written (must be Karta + mutable)
     pub fn can_write(&self) -> Result<(), VaakError> {
         match self.ownership {
-            VaakOwnership::Moved => Err(VaakError::UseAfterMove { naama: self.naama.clone() }),
-            VaakOwnership::Karana => Err(VaakError::ImmutableBorrow { naama: self.naama.clone() }),
-            _ if !self.is_mutable => Err(VaakError::NotMutable { naama: self.naama.clone() }),
+            VaakOwnership::Moved => Err(VaakError::UseAfterMove {
+                naama: self.naama.clone(),
+            }),
+            VaakOwnership::Karana => Err(VaakError::ImmutableBorrow {
+                naama: self.naama.clone(),
+            }),
+            _ if !self.is_mutable => Err(VaakError::NotMutable {
+                naama: self.naama.clone(),
+            }),
             _ => Ok(()),
         }
     }
@@ -138,14 +146,26 @@ pub enum VaakError {
 impl std::fmt::Display for VaakError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            VaakError::UseAfterMove { naama } =>
-                write!(f, "Doṣa D030: '{}' — svāmitva-hāni (ownership moved, cannot use)", naama),
-            VaakError::CannotMoveBorrow { naama } =>
-                write!(f, "Doṣa D031: '{}' — karaṇa-apādāna-doṣa (cannot move an immutable borrow)", naama),
-            VaakError::ImmutableBorrow { naama } =>
-                write!(f, "Doṣa D032: '{}' — karaṇa-lekha-doṣa (cannot write to immutable borrow)", naama),
-            VaakError::NotMutable { naama } =>
-                write!(f, "Doṣa D033: '{}' — sthira-lekha-doṣa (variable is not mutable)", naama),
+            VaakError::UseAfterMove { naama } => write!(
+                f,
+                "Doṣa D030: '{}' — svāmitva-hāni (ownership moved, cannot use)",
+                naama
+            ),
+            VaakError::CannotMoveBorrow { naama } => write!(
+                f,
+                "Doṣa D031: '{}' — karaṇa-apādāna-doṣa (cannot move an immutable borrow)",
+                naama
+            ),
+            VaakError::ImmutableBorrow { naama } => write!(
+                f,
+                "Doṣa D032: '{}' — karaṇa-lekha-doṣa (cannot write to immutable borrow)",
+                naama
+            ),
+            VaakError::NotMutable { naama } => write!(
+                f,
+                "Doṣa D033: '{}' — sthira-lekha-doṣa (variable is not mutable)",
+                naama
+            ),
         }
     }
 }
@@ -166,7 +186,9 @@ impl MoveChecker {
     pub fn check_use(&self, naama: &str) -> Result<(), VaakError> {
         if let Some(ownership) = self.ownership_map.get(naama) {
             if *ownership == VaakOwnership::Moved {
-                return Err(VaakError::UseAfterMove { naama: naama.to_string() });
+                return Err(VaakError::UseAfterMove {
+                    naama: naama.to_string(),
+                });
             }
         }
         Ok(())
@@ -174,10 +196,15 @@ impl MoveChecker {
 
     pub fn do_move(&mut self, naama: &str) -> Result<(), VaakError> {
         match self.ownership_map.get(naama) {
-            Some(VaakOwnership::Moved) => Err(VaakError::UseAfterMove { naama: naama.to_string() }),
-            Some(VaakOwnership::Karana) => Err(VaakError::CannotMoveBorrow { naama: naama.to_string() }),
+            Some(VaakOwnership::Moved) => Err(VaakError::UseAfterMove {
+                naama: naama.to_string(),
+            }),
+            Some(VaakOwnership::Karana) => Err(VaakError::CannotMoveBorrow {
+                naama: naama.to_string(),
+            }),
             Some(VaakOwnership::Karta | VaakOwnership::Apadana) => {
-                self.ownership_map.insert(naama.to_string(), VaakOwnership::Moved);
+                self.ownership_map
+                    .insert(naama.to_string(), VaakOwnership::Moved);
                 Ok(())
             }
             None => Ok(()),
@@ -236,7 +263,10 @@ mod tests {
     fn test_immutable_karta_cannot_write() {
         let sym = VaakSymbol::new_karta("sthira", false);
         assert!(sym.can_write().is_err());
-        assert!(matches!(sym.can_write().unwrap_err(), VaakError::NotMutable { .. }));
+        assert!(matches!(
+            sym.can_write().unwrap_err(),
+            VaakError::NotMutable { .. }
+        ));
     }
 
     #[test]
@@ -246,7 +276,7 @@ mod tests {
         assert_eq!(sym.rust_type_hint, "&str");
     }
 
-#[test]
+    #[test]
     fn test_karta_register() {
         let mut checker = MoveChecker::new();
         checker.register("vāk".to_string(), VaakOwnership::Karta);

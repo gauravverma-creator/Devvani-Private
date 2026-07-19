@@ -81,7 +81,11 @@ mod tests {
         let n = UpasargaNode {
             directives: vec![UpasargaDirective::Export],
             target: Box::new(ASTNode::KaryakramNode { shareera: vec![] }),
-            span: Span { line: 0, col: 0, len: 0 },
+            span: Span {
+                line: 0,
+                col: 0,
+                len: 0,
+            },
         };
         assert!(UpasargaChecker.check(&n).is_ok());
     }
@@ -91,7 +95,11 @@ mod tests {
         let n = UpasargaNode {
             directives: vec![UpasargaDirective::Export, UpasargaDirective::Inline],
             target: Box::new(ASTNode::KaryakramNode { shareera: vec![] }),
-            span: Span { line: 0, col: 0, len: 0 },
+            span: Span {
+                line: 0,
+                col: 0,
+                len: 0,
+            },
         };
         assert!(UpasargaChecker.check(&n).is_ok());
     }
@@ -101,7 +109,11 @@ mod tests {
         let n = UpasargaNode {
             directives: vec![UpasargaDirective::Export, UpasargaDirective::Private],
             target: Box::new(ASTNode::KaryakramNode { shareera: vec![] }),
-            span: Span { line: 0, col: 0, len: 0 },
+            span: Span {
+                line: 0,
+                col: 0,
+                len: 0,
+            },
         };
         match UpasargaChecker.check(&n) {
             Err(UpasargaError::UpasargaSangharsha { .. }) => {}
@@ -114,7 +126,11 @@ mod tests {
         let n = UpasargaNode {
             directives: vec![UpasargaDirective::Inline, UpasargaDirective::Override],
             target: Box::new(ASTNode::KaryakramNode { shareera: vec![] }),
-            span: Span { line: 0, col: 0, len: 0 },
+            span: Span {
+                line: 0,
+                col: 0,
+                len: 0,
+            },
         };
         match UpasargaChecker.check(&n) {
             Err(UpasargaError::UpasargaSangharsha { .. }) => {}

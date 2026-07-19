@@ -1,14 +1,18 @@
 //! Devanagari display implementation
-use crate::{DevvaniInt, DevvaniFloat};
+use crate::{DevvaniFloat, DevvaniInt};
 use std::fmt;
 
-const DEVA_CHARS: [char; 10] = ['०','१','२','३','४','५','६','७','८','९'];
+const DEVA_CHARS: [char; 10] = ['०', '१', '२', '३', '४', '५', '६', '७', '८', '९'];
 
 impl fmt::Display for DevvaniInt {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_negative { write!(f, "-")?; }
-        if self.value == 0 { return write!(f, "०"); }
-        
+        if self.is_negative {
+            write!(f, "-")?;
+        }
+        if self.value == 0 {
+            return write!(f, "०");
+        }
+
         let mut digits = ['\0'; 20];
         let mut n = self.value as u64;
         let mut len = 0;
@@ -26,10 +30,16 @@ impl fmt::Display for DevvaniInt {
 
 impl fmt::Display for DevvaniFloat {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.value.is_nan() { return write!(f, "अपरिभाषित"); }
-        if self.value.is_infinite() { return write!(f, "अनंत"); }
-        if self.value < 0.0 { write!(f, "-")?; }
-        
+        if self.value.is_nan() {
+            return write!(f, "अपरिभाषित");
+        }
+        if self.value.is_infinite() {
+            return write!(f, "अनंत");
+        }
+        if self.value < 0.0 {
+            write!(f, "-")?;
+        }
+
         let val = self.value.abs();
         let int_part = val.floor() as u64;
         let frac_part = val - val.floor();
@@ -63,7 +73,9 @@ impl fmt::Display for DevvaniFloat {
                 let digit = f_val.floor() as usize;
                 write!(f, "{}", DEVA_CHARS[digit])?;
                 f_val -= f_val.floor();
-                if f_val < 1e-15 { break; }
+                if f_val < 1e-15 {
+                    break;
+                }
             }
         }
         Ok(())

@@ -23,7 +23,10 @@ pub struct SsdTier {
 impl SsdTier {
     /// Create a new SsdTier rooted at base_dir.
     /// coalesce_threshold: how many ops to buffer before flushing to disk (default 32).
-    pub fn new(base_dir: impl AsRef<Path>, coalesce_threshold: usize) -> Result<Self, ReversibleError> {
+    pub fn new(
+        base_dir: impl AsRef<Path>,
+        coalesce_threshold: usize,
+    ) -> Result<Self, ReversibleError> {
         let base_dir = base_dir.as_ref().to_path_buf();
         fs::create_dir_all(&base_dir).map_err(|e| ReversibleError::PurgeFailed {
             reason: format!("create SSD tier dir failed: {}", e),
@@ -61,9 +64,10 @@ impl SsdTier {
         }
 
         let mut existing_ops: Vec<ReversibleOp> = if self.current_dvr_path.exists() {
-            let f = File::open(&self.current_dvr_path).map_err(|e| ReversibleError::PurgeFailed {
-                reason: format!("open dvr for read failed: {}", e),
-            })?;
+            let f =
+                File::open(&self.current_dvr_path).map_err(|e| ReversibleError::PurgeFailed {
+                    reason: format!("open dvr for read failed: {}", e),
+                })?;
             let mut reader = BufReader::new(f);
             read_dvr(&mut reader)?
         } else {
@@ -122,22 +126,29 @@ impl SsdTier {
             reason: format!("open dvr for fetch failed: {}", e),
         })?;
         let mut reader = BufReader::new(f);
-        reader.seek(SeekFrom::Start(entry.byte_offset)).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("seek to op failed: {}", e),
-        })?;
+        reader
+            .seek(SeekFrom::Start(entry.byte_offset))
+            .map_err(|e| ReversibleError::PurgeFailed {
+                reason: format!("seek to op failed: {}", e),
+            })?;
 
         let mut len_bytes = [0u8; 4];
-        std::io::Read::read_exact(&mut reader, &mut len_bytes).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("read record len failed: {}", e),
+        std::io::Read::read_exact(&mut reader, &mut len_bytes).map_err(|e| {
+            ReversibleError::PurgeFailed {
+                reason: format!("read record len failed: {}", e),
+            }
         })?;
         let len = u32::from_le_bytes(len_bytes) as usize;
         let mut data = vec![0u8; len];
-        std::io::Read::read_exact(&mut reader, &mut data).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("read record data failed: {}", e),
+        std::io::Read::read_exact(&mut reader, &mut data).map_err(|e| {
+            ReversibleError::PurgeFailed {
+                reason: format!("read record data failed: {}", e),
+            }
         })?;
-        let op: ReversibleOp = serde_json::from_slice(&data).map_err(|e| ReversibleError::PurgeFailed {
-            reason: format!("deserialize fetched op failed: {}", e),
-        })?;
+        let op: ReversibleOp =
+            serde_json::from_slice(&data).map_err(|e| ReversibleError::PurgeFailed {
+                reason: format!("deserialize fetched op failed: {}", e),
+            })?;
         Ok(Some(op))
     }
 

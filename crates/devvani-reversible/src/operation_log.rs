@@ -10,7 +10,7 @@ use std::collections::HashMap;
 #[derive(Debug, Default)]
 pub struct OperationLog {
     forward_chain: Vec<OpId>,
-    uncompute_chain: Vec<OpId>,   // reverse of forward, populated on demand
+    uncompute_chain: Vec<OpId>, // reverse of forward, populated on demand
     op_index: HashMap<OpId, ReversibleOp>,
     side_effects: Vec<SideEffectMarker>,
     uncompute_results: Vec<UncomputeResult>,

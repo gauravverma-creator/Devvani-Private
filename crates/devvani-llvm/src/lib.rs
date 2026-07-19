@@ -1,10 +1,10 @@
-pub mod error;
-pub mod type_map;
-pub mod target;
 pub mod codegen;
+pub mod error;
+pub mod target;
+pub mod type_map;
 
-use inkwell::context::Context;
 use inkwell::builder::Builder;
+use inkwell::context::Context;
 use inkwell::module::Module;
 
 use crate::error::DevvaniLLVMError;
@@ -18,23 +18,25 @@ pub struct CodeGen<'ctx> {
 }
 
 impl<'ctx> CodeGen<'ctx> {
-    pub fn new(
-        context: &'ctx Context,
-        module_name: &str,
-    ) -> Result<Self, DevvaniLLVMError> {
+    pub fn new(context: &'ctx Context, module_name: &str) -> Result<Self, DevvaniLLVMError> {
         let module = context.create_module(module_name);
         let builder = context.create_builder();
         let target = DevvaniTarget::new_native()?;
 
-        Ok(Self { context, module, builder, target })
+        Ok(Self {
+            context,
+            module,
+            builder,
+            target,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devvani_ast::node::Vibhakti;
     use crate::type_map::TypeMapper;
+    use devvani_ast::node::Vibhakti;
 
     #[test]
     fn test_codegen_init() {

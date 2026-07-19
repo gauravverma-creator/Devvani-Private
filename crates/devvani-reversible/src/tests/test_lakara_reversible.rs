@@ -48,10 +48,19 @@ fn test_diagnostic_codes() {
 #[test]
 fn test_sanskrit_names_non_empty() {
     let variants = vec![
-        LakaaraReversible::PratyavartyaLit { inverse_dhatu: "x".to_string() },
-        LakaaraReversible::PratyavartyaLan { inverse_dhatu: "x".to_string(), recorded_op_id: None },
-        LakaaraReversible::PratyavartyaLrt { inverse_dhatu: "x".to_string() },
-        LakaaraReversible::AnapravartyaLot { effect_description: "x".to_string() },
+        LakaaraReversible::PratyavartyaLit {
+            inverse_dhatu: "x".to_string(),
+        },
+        LakaaraReversible::PratyavartyaLan {
+            inverse_dhatu: "x".to_string(),
+            recorded_op_id: None,
+        },
+        LakaaraReversible::PratyavartyaLrt {
+            inverse_dhatu: "x".to_string(),
+        },
+        LakaaraReversible::AnapravartyaLot {
+            effect_description: "x".to_string(),
+        },
     ];
     for v in &variants {
         assert!(!v.sanskrit_name().is_empty());

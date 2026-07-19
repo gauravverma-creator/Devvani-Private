@@ -56,7 +56,7 @@ impl Sutra {
 pub struct SutraSelection {
     pub sutra: Sutra,
     pub reason: String,
-    pub estimated_reduction: f64,  // 0.0 to 1.0, fraction of ops that can be compressed
+    pub estimated_reduction: f64, // 0.0 to 1.0, fraction of ops that can be compressed
 }
 
 /// SutraSelector analyzes a batch of ops and picks the best sutra.
@@ -165,12 +165,8 @@ impl SutraSelector {
     /// Returns (retain_ids, compress_ids).
     /// compress_ids are ops that can be folded into a summary — their ancilla data
     /// is still preserved but they are evicted from the active window.
-    pub fn partition(
-        ops: &[ReversibleOp],
-        selection: &SutraSelection,
-    ) -> (Vec<OpId>, Vec<OpId>) {
-        let compress_count =
-            (ops.len() as f64 * selection.estimated_reduction).floor() as usize;
+    pub fn partition(ops: &[ReversibleOp], selection: &SutraSelection) -> (Vec<OpId>, Vec<OpId>) {
+        let compress_count = (ops.len() as f64 * selection.estimated_reduction).floor() as usize;
         let retain_count = ops.len() - compress_count;
 
         // Always retain the most recent ops (tail of the chain)

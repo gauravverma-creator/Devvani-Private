@@ -4,11 +4,26 @@ pub fn normalize_iast(input: &str) -> String {
 
     while let Some(c) = chars.next() {
         match c {
-            'a' if chars.peek() == Some(&'a') => { chars.next(); result.push('ā'); }
-            'i' if chars.peek() == Some(&'i') => { chars.next(); result.push('ī'); }
-            'u' if chars.peek() == Some(&'u') => { chars.next(); result.push('ū'); }
-            's' if chars.peek() == Some(&'h') => { chars.next(); result.push('ś'); }
-            'S' if chars.peek() == Some(&'h') => { chars.next(); result.push('ṣ'); }
+            'a' if chars.peek() == Some(&'a') => {
+                chars.next();
+                result.push('ā');
+            }
+            'i' if chars.peek() == Some(&'i') => {
+                chars.next();
+                result.push('ī');
+            }
+            'u' if chars.peek() == Some(&'u') => {
+                chars.next();
+                result.push('ū');
+            }
+            's' if chars.peek() == Some(&'h') => {
+                chars.next();
+                result.push('ś');
+            }
+            'S' if chars.peek() == Some(&'h') => {
+                chars.next();
+                result.push('ṣ');
+            }
             'M' => result.push('ṃ'),
             'H' => result.push('ḥ'),
             _ => result.push(c),

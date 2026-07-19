@@ -3,29 +3,31 @@ use std::fmt;
 /// Sanskrit Vibhakti (case) maps to compiler type roles
 #[derive(Debug, Clone, PartialEq)]
 pub enum VibhaktiRole {
-    Prathama,   // Nominative   → Subject / Type Declaration
-    Dvitiya,    // Accusative   → Function Parameter / Object
-    Tritiya,    // Instrumental → Helper / Library
-    Chaturthi,  // Dative       → Return Target / Receiver
-    Panchami,   // Ablative     → Source / Origin
-    Shashthi,   // Genitive     → Parent / Owner (struct field)
-    Saptami,    // Locative     → Scope / Namespace / Module
+    Prathama,  // Nominative   → Subject / Type Declaration
+    Dvitiya,   // Accusative   → Function Parameter / Object
+    Tritiya,   // Instrumental → Helper / Library
+    Chaturthi, // Dative       → Return Target / Receiver
+    Panchami,  // Ablative     → Source / Origin
+    Shashthi,  // Genitive     → Parent / Owner (struct field)
+    Saptami,   // Locative     → Scope / Namespace / Module
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum DevvaniType {
-    Subject(String),       // Prathama
-    Parameter(String),     // Dvitiya
-    Instrument(String),    // Tritiya
-    ReturnTarget(String),  // Chaturthi
-    Source(String),        // Panchami
-    Owner(String),         // Shashthi
-    Scope(String),         // Saptami
+    Subject(String),      // Prathama
+    Parameter(String),    // Dvitiya
+    Instrument(String),   // Tritiya
+    ReturnTarget(String), // Chaturthi
+    Source(String),       // Panchami
+    Owner(String),        // Shashthi
+    Scope(String),        // Saptami
     Unknown,
     /// Vaak — owned String type (Kartā semantics)
     Vaak,
     /// VaakBorrow — immutable string borrow (Karaṇa semantics)  
     VaakBorrow,
+    /// Pankti — fixed-size array type (element type, length)
+    Pankti(Box<DevvaniType>, usize),
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -42,7 +44,8 @@ pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
 
 pub fn infer_type_from_suffix(word: &str) -> VibhaktiRole {
     let lower_word = word.to_lowercase();
-    if lower_word.ends_with("ah") || lower_word.ends_with("ah") { // "aH" handled by lowercase
+    if lower_word.ends_with("ah") || lower_word.ends_with("ah") {
+        // "aH" handled by lowercase
         VibhaktiRole::Prathama
     } else if lower_word.ends_with("am") {
         VibhaktiRole::Dvitiya
@@ -56,7 +59,10 @@ pub fn infer_type_from_suffix(word: &str) -> VibhaktiRole {
         VibhaktiRole::Shashthi
     } else if lower_word.ends_with("e") {
         VibhaktiRole::Saptami
-    } else if lower_word == "purnaankliteral" || lower_word == "dashaamshaliteral" || lower_word == "vaakliteral" {
+    } else if lower_word == "purnaankliteral"
+        || lower_word == "dashaamshaliteral"
+        || lower_word == "vaakliteral"
+    {
         VibhaktiRole::Prathama
     } else {
         VibhaktiRole::Prathama
@@ -90,6 +96,7 @@ impl fmt::Display for DevvaniType {
             DevvaniType::Unknown => write!(f, "Unknown"),
             DevvaniType::Vaak => write!(f, "Vaak"),
             DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
+            DevvaniType::Pankti(elem_ty, len) => write!(f, "Pankti({}, {})", elem_ty, len),
         }
     }
 }

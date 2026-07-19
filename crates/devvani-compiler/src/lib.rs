@@ -1,6 +1,6 @@
+use devvani_codegen::{Codegen, CodegenTarget};
 use devvani_lexer::{Lexer, SandhiMode};
 use devvani_parser::Parser;
-use devvani_codegen::{Codegen, CodegenTarget};
 use devvani_reversible::VedicBatchEngine;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -34,26 +34,25 @@ impl Compiler {
     }
 
     pub fn compile(&self) -> Result<String, String> {
-        let source = fs::read_to_string(&self.input_file)
-            .map_err(|e| format!("D007: {}", e))?;
+        let source = fs::read_to_string(&self.input_file).map_err(|e| format!("D007: {}", e))?;
 
         let mut lexer = Lexer::new(&source);
-        let tokens = lexer.tokenize(SandhiMode::Auto)
+        let tokens = lexer
+            .tokenize(SandhiMode::Auto)
             .map_err(|e| format!("D008: {:?}", e))?;
 
         let mut parser = Parser::new(tokens);
-        let ast = parser.parse()
-            .map_err(|e| format!("D009: {:?}", e))?;
+        let ast = parser.parse().map_err(|e| format!("D009: {:?}", e))?;
 
         let mut codegen = Codegen::new(CodegenTarget::RustSource);
-        codegen.generate(&ast)
+        codegen
+            .generate(&ast)
             .map_err(|e| format!("D010: {:?}", e))?;
 
         let rust_code = codegen.rust_source().to_string();
 
         if let Some(out_path) = &self.output_file {
-            fs::write(out_path, &rust_code)
-                .map_err(|e| format!("D006: {}", e))?;
+            fs::write(out_path, &rust_code).map_err(|e| format!("D006: {}", e))?;
         }
 
         Ok(rust_code)
@@ -72,14 +71,17 @@ impl Compiler {
                 dependency_check: true,
             },
             ssd_dir,
-            16,  // coalesce threshold
-            64,  // batch size
+            16, // coalesce threshold
+            64, // batch size
         ) {
             Ok(engine) => {
                 self.reversible_engine = Some(engine);
             }
             Err(e) => {
-                eprintln!("[devvani-compiler] warning: reversible engine init failed: {}", e);
+                eprintln!(
+                    "[devvani-compiler] warning: reversible engine init failed: {}",
+                    e
+                );
             }
         }
     }
@@ -109,10 +111,12 @@ mod tests {
     fn test_compile_hello() {
         let _ = fs::create_dir_all("examples");
         let _ = fs::write("examples/hello_test.dvn", "phalam asti 5 ।");
-        
+
         let compiler = Compiler::new("examples/hello_test.dvn");
         let result = compiler.compile();
-        if let Err(ref e) = result { println!("Error: {}", e); }
+        if let Err(ref e) = result {
+            println!("Error: {}", e);
+        }
         assert!(result.is_ok());
     }
 
@@ -121,7 +125,9 @@ mod tests {
         let _ = fs::write("examples/ganana_test.dvn", "eka asti 1 । 1 yoga 2 vadati ।");
         let compiler = Compiler::new("examples/ganana_test.dvn");
         let result = compiler.compile();
-        if let Err(ref e) = result { println!("Error: {}", e); }
+        if let Err(ref e) = result {
+            println!("Error: {}", e);
+        }
         assert!(result.is_ok());
     }
 }

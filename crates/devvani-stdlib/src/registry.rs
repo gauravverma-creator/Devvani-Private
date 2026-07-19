@@ -1,4 +1,4 @@
-use crate::{DvnValue, DhatuFn, StdlibError};
+use crate::{DhatuFn, DvnValue, StdlibError};
 use std::collections::HashMap;
 
 pub struct DhatuRegistry {
@@ -15,26 +15,29 @@ impl DhatuRegistry {
     }
 
     fn register_all(&mut self) {
-        use crate::dhatu::{io::*, types::*, collections::*, itertools::*, object::*, iteration::*, math::*, introspect::*, advanced::*};
-        
+        use crate::dhatu::{
+            advanced::*, collections::*, introspect::*, io::*, iteration::*, itertools::*, math::*,
+            object::*, types::*,
+        };
+
         // Part 1
         self.register(Box::new(Vadati));
         self.register(Box::new(Pathati));
         self.register(Box::new(Likhati));
         self.register(Box::new(PathatiFile));
-        
+
         self.register(Box::new(PariNameti));
         self.register(Box::new(Vakyayati));
         self.register(Box::new(Kampayati));
         self.register(Box::new(Dvayati));
         self.register(Box::new(PrakaShati));
         self.register(Box::new(Manayati));
-        
+
         self.register(Box::new(Sucayati));
         self.register(Box::new(Sutrayati));
         self.register(Box::new(Koshayati));
         self.register(Box::new(Sthapayati));
-        
+
         self.register(Box::new(Kramate));
         self.register(Box::new(Yugmayati));
         self.register(Box::new(Citrayati));
@@ -108,9 +111,7 @@ impl DhatuRegistry {
         self.dhatus.get(name).map(|d| d.as_ref())
     }
 
-    pub fn call(&self, name: &str, args: Vec<DvnValue>) 
-        -> Result<DvnValue, StdlibError> 
-    {
+    pub fn call(&self, name: &str, args: Vec<DvnValue>) -> Result<DvnValue, StdlibError> {
         self.get(name)
             .ok_or_else(|| StdlibError::TypeError {
                 dhatu: name.to_string(),

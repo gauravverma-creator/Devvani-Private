@@ -1,4 +1,3 @@
-
 use serde::{Deserialize, Serialize};
 
 pub use devvani_lexer::token::Span;
@@ -31,12 +30,25 @@ pub enum Vibhakti {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Lakara {
-    Lat, Lit, Lut, Lrt, Let, Lot, Lan, Vidhilin, Asihlin, Lun,
+    Lat,
+    Lit,
+    Lut,
+    Lrt,
+    Let,
+    Lot,
+    Lan,
+    Vidhilin,
+    Asihlin,
+    Lun,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum SamasaType {
-    Tatpurusha, Dvandva, Bahuvrihi, Avyayibhava, Karmadhaaraya,
+    Tatpurusha,
+    Dvandva,
+    Bahuvrihi,
+    Avyayibhava,
+    Karmadhaaraya,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -66,15 +78,43 @@ pub enum Vacana {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Gana {
-    Bhvadi, Adadi, Juhotyadi, Divadi, Svadi,
-    Tudadi, Rudhadi, Tanadi, Kryadi, Curadi,
+    Bhvadi,
+    Adadi,
+    Juhotyadi,
+    Divadi,
+    Svadi,
+    Tudadi,
+    Rudhadi,
+    Tanadi,
+    Kryadi,
+    Curadi,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Upasarga {
-    Pra, Para, Apa, Sam, Anu, Ava, Nis, Nir,
-    Dus, Dur, Vi, A, Aa, Ni, Adhi, Api, Ati, Su,
-    Ud, Abhi, Prati, Pari, Upa,
+    Pra,
+    Para,
+    Apa,
+    Sam,
+    Anu,
+    Ava,
+    Nis,
+    Nir,
+    Dus,
+    Dur,
+    Vi,
+    A,
+    Aa,
+    Ni,
+    Adhi,
+    Api,
+    Ati,
+    Su,
+    Ud,
+    Abhi,
+    Prati,
+    Pari,
+    Upa,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -233,7 +273,16 @@ pub enum ASTNode {
     /// (a DhatuDef calling its own name from within its own body).
     /// Wraps the underlying KriyaCall for recursion-specific analysis in a later phase.
     AvartanaNode {
-        call: Box<ASTNode>,  // always an ASTNode::KriyaCall
+        call: Box<ASTNode>, // always an ASTNode::KriyaCall
+        span: Span,
+    },
+    PanktiNode {
+        elements: Vec<ASTNode>,
+        span: Span,
+    },
+    VinyasaNode {
+        target: Box<ASTNode>,
+        index: Box<ASTNode>,
         span: Span,
     },
 }

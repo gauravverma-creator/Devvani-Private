@@ -2,9 +2,9 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Linga {
-    Pullinga,     // masculine → immutable owned
-    Strilinga,    // feminine  → mutable
-    Napumsaka,    // neuter    → shared ref
+    Pullinga,  // masculine → immutable owned
+    Strilinga, // feminine  → mutable
+    Napumsaka, // neuter    → shared ref
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -70,7 +70,11 @@ impl fmt::Display for Linga {
 
 impl fmt::Display for MutabilityInfo {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "MutabilityInfo(linga={}, mutable={}, shared={})", self.linga, self.is_mutable, self.is_shared)
+        write!(
+            f,
+            "MutabilityInfo(linga={}, mutable={}, shared={})",
+            self.linga, self.is_mutable, self.is_shared
+        )
     }
 }
 

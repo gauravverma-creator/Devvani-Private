@@ -2,16 +2,16 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Lakara {
-    Lat,       // sync
-    Lit,       // pure
-    Lut,       // lazy
-    Lrt,       // async
-    Let,       // optional
-    Lot,       // void/imperative
-    Lan,       // mutable/stateful
-    Vidhilin,  // conditional/Result
-    Asihlin,   // try/fallback
-    Lun,       // transactional
+    Lat,      // sync
+    Lit,      // pure
+    Lut,      // lazy
+    Lrt,      // async
+    Let,      // optional
+    Lot,      // void/imperative
+    Lan,      // mutable/stateful
+    Vidhilin, // conditional/Result
+    Asihlin,  // try/fallback
+    Lun,      // transactional
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -38,13 +38,13 @@ pub struct FunctionScope {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReturnWrapper {
-    None,           // Lot  → ()
-    Direct,         // Lat, Lit, Lan, Lun → T
-    Future,         // Lrt  → Future<T>
-    Option,         // Let  → Option<T>
-    Result,         // Vidhilin → Result<T,E>
-    Lazy,           // Lut  → impl Fn() -> T
-    Fallback,       // Asihlin → T with fallback
+    None,     // Lot  → ()
+    Direct,   // Lat, Lit, Lan, Lun → T
+    Future,   // Lrt  → Future<T>
+    Option,   // Let  → Option<T>
+    Result,   // Vidhilin → Result<T,E>
+    Lazy,     // Lut  → impl Fn() -> T
+    Fallback, // Asihlin → T with fallback
 }
 
 pub fn lakara_from_str(s: &str) -> Option<Lakara> {
@@ -154,7 +154,11 @@ impl fmt::Display for ScopeKind {
 
 impl fmt::Display for FunctionScope {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "FunctionScope(lakara={}, kind={}, async={})", self.lakara, self.kind, self.is_async)
+        write!(
+            f,
+            "FunctionScope(lakara={}, kind={}, async={})",
+            self.lakara, self.kind, self.is_async
+        )
     }
 }
 
@@ -191,8 +195,16 @@ mod tests {
     #[test]
     fn test_round_trip_and_all_lakaras() {
         let lakaras = vec![
-            Lakara::Lat, Lakara::Lit, Lakara::Lut, Lakara::Lrt, Lakara::Let,
-            Lakara::Lot, Lakara::Lan, Lakara::Vidhilin, Lakara::Asihlin, Lakara::Lun
+            Lakara::Lat,
+            Lakara::Lit,
+            Lakara::Lut,
+            Lakara::Lrt,
+            Lakara::Let,
+            Lakara::Lot,
+            Lakara::Lan,
+            Lakara::Vidhilin,
+            Lakara::Asihlin,
+            Lakara::Lun,
         ];
         for l in lakaras {
             let s = format!("{}", l);

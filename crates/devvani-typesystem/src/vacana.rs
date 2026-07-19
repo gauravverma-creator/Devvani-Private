@@ -2,9 +2,9 @@ use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Vacana {
-    Eka,   // singular
-    Dvi,   // dual
-    Bahu,  // plural
+    Eka,  // singular
+    Dvi,  // dual
+    Bahu, // plural
 }
 
 #[derive(Debug, Clone, PartialEq)]

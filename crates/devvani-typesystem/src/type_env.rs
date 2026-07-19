@@ -1,8 +1,8 @@
-use std::collections::HashMap;
-use crate::vibhakti::DevvaniType;
+use crate::linga::Linga;
 use crate::symbol::Symbol;
 use crate::vacana::Vacana;
-use crate::linga::Linga;
+use crate::vibhakti::DevvaniType;
+use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct TypeEnv {

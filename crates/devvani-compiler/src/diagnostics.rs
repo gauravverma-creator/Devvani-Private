@@ -159,6 +159,18 @@ impl DiagnosticEngine {
                 sutra_ref: None,
                 hint: None,
             },
+            TypeCheckError::KramashahAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D053".to_string(),
+                sanskrit_title: "क्रमशः-अप्रयुक्तः".to_string(),
+                roman_title: "Kramasah Aprayuktah".to_string(),
+                message: format!(
+                    "kramasah requires a Pankti (array) as the iterable; found {:?}",
+                    found
+                ),
+                sutra_ref: Some("Kramapatha (Vedic pairwise sequential recitation)".to_string()),
+                hint: None,
+            },
         }
     }
 
@@ -352,5 +364,27 @@ mod tests {
         assert!(diag.display().contains("Vinyasa Sima Langhanam"));
         assert!(diag.message.contains("5"));
         assert!(diag.message.contains("3"));
+    }
+
+    #[test]
+    fn test_from_type_error_kramasah_aprayukta() {
+        let err = TypeCheckError::KramashahAprayukta {
+            found: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D053");
+        assert!(diag.display().contains("Kramasah Aprayuktah"));
+        assert!(diag.sanskrit_title.contains("क्रमशः-अप्रयुक्तः"));
+    }
+
+    #[test]
+    fn test_from_type_error_kramasah_diagnostics_d053() {
+        let err = TypeCheckError::KramashahAprayukta {
+            found: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D053");
+        assert!(diag.message.contains("Pankti (array) as the iterable"));
+        assert!(diag.sutra_ref.unwrap().contains("Kramapatha"));
     }
 }

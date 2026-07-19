@@ -229,9 +229,10 @@ impl<'a> Lexer<'a> {
             "bhavati" | "भवति" => TokenKind::Bhavati,
             "vadati" | "वदति" => TokenKind::Vadati,
             "pathati" | "पठति" => TokenKind::Pathati,
-            "yavat" | "यावत्" => TokenKind::Yavat,
-            "tavat" | "तावत्" => TokenKind::Tavat,
-            "varam" | "वारम्" => TokenKind::Varam,
+"yavat" | "यावत्" => TokenKind::Yavat,
+             "tavat" | "तावत्" => TokenKind::Tavat,
+             "kramasah" | "Kramasah" => TokenKind::Kramasah,
+             "varam" | "वारम्" => TokenKind::Varam,
             "arambhah" | "आरम्भः" => TokenKind::Arambhah,
             "samaptih" | "समाप्तिः" => TokenKind::Samaptih,
             "yoga" | "योग" => TokenKind::Yoga,
@@ -523,5 +524,19 @@ mod tests {
         assert_eq!(tokens[4].kind, TokenKind::Unknown(','));
         assert_eq!(tokens[5].kind, TokenKind::PurnaankLiteral(3));
         assert_eq!(tokens[6].kind, TokenKind::RBracket);
+    }
+
+    #[test]
+    fn test_kramasah_keyword() {
+        let mut lexer = Lexer::new("kramasah");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Kramasah);
+    }
+
+    #[test]
+    fn test_Kramasah_keyword() {
+        let mut lexer = Lexer::new("Kramasah");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Kramasah);
     }
 }

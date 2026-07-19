@@ -39,10 +39,11 @@ impl Parser {
 
         let tok = self.peek().clone();
         match tok.kind {
-            TokenKind::Arambhah => self.parse_karyakram(),
-            TokenKind::Yadi => self.parse_yadi(),
-            TokenKind::Yavat => self.parse_yavat(),
-            TokenKind::Naama(ref name) => {
+TokenKind::Arambhah => self.parse_karyakram(),
+             TokenKind::Yadi => self.parse_yadi(),
+             TokenKind::Yavat => self.parse_yavat(),
+             TokenKind::Kramasah => self.parse_kramasah(),
+             TokenKind::Naama(ref name) => {
                 if name.ends_with("-dhatu") {
                     let lookup = self.symbols.lookup(name);
                     if !matches!(lookup.map(|s| &s.kind), Some(SymbolKind::Dhatu { .. })) {
@@ -451,6 +452,49 @@ impl Parser {
             target: Box::new(target),
             index: Box::new(index),
             span,
+        })
+    }
+
+    fn parse_kramasah(&mut self) -> Result<ASTNode, ParseError> {
+        let start_span = self.peek().span;
+        self.advance(); // consume Kramasah
+        let item_tok = self.expect_identifier()?;
+        let item_name = if let TokenKind::Naama(n) = item_tok.kind {
+            n
+        } else {
+            unreachable!()
+        };
+        let iterable = self.parse_arithmetic()?;
+        self.expect(TokenKind::Tavat)?;
+        self.symbols.push_scope();
+        let _ = self.symbols.define(
+            &item_name,
+            Symbol {
+                name: item_name.clone(),
+                kind: SymbolKind::Param {
+                    role: KarakaRole::Karana,
+                },
+                karaka: KarakaRole::Karana,
+                vibhakti: Vibhakti::Tritiya,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                defined_at: item_tok.span,
+            },
+        );
+        let mut body = Vec::new();
+        while !self.check(&TokenKind::Iti) && !self.is_at_end() {
+            body.push(self.parse_vakya()?);
+        }
+        self.symbols.pop_scope();
+        self.expect(TokenKind::Iti)?;
+        if self.check(&TokenKind::Danda) {
+            self.advance();
+        }
+        Ok(ASTNode::KramashahNode {
+            item_name,
+            iterable: Box::new(iterable),
+            body,
+            span: start_span,
         })
     }
 
@@ -932,6 +976,125 @@ mod tests {
                         );
                     }
                     other => panic!("expected VinyasaNode, got {:?}", other),
+                }
+            }
+other => panic!("expected KaryakramNode, got {:?}", other),
+         }
+     }
+
+    // Basic kramasah parse with array literal iterable
+    #[test]
+    fn test_kramasah_basic_parse() {
+        let tokens = vec![
+            kw(TokenKind::Kramasah),
+            nm("x"),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::PurnaankLiteral(1)),
+            kw(TokenKind::Unknown(',')),
+            kw(TokenKind::PurnaankLiteral(2)),
+            kw(TokenKind::Unknown(',')),
+            kw(TokenKind::PurnaankLiteral(3)),
+            kw(TokenKind::RBracket),
+            kw(TokenKind::Tavat),
+            nm("x"),
+            kw(TokenKind::Vadati),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Iti),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::KramashahNode { item_name, body, .. } => {
+                        assert_eq!(item_name, "x");
+                        assert_eq!(body.len(), 1);
+                    }
+                    other => panic!("expected KramashahNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Kramasah with empty body (immediately followed by tavat and iti)
+    #[test]
+    fn test_kramasah_empty_body() {
+        let tokens = vec![
+            kw(TokenKind::Kramasah),
+            nm("x"),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::RBracket),
+            kw(TokenKind::Tavat),
+            kw(TokenKind::Iti),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_ok(), "empty body kramasah should parse without error");
+    }
+
+    // Kramasah with variable reference as iterable
+    #[test]
+    fn test_kramasah_over_named_pankti() {
+        let tokens = vec![
+            kw(TokenKind::Kramasah),
+            nm("item"),
+            nm("arr"),
+            kw(TokenKind::Tavat),
+            nm("item"),
+            kw(TokenKind::Vadati),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Iti),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::KramashahNode { item_name, iterable, body, .. } => {
+                        assert_eq!(item_name, "item");
+                        assert!(matches!(iterable.as_ref(), ASTNode::Nama { base, .. } if base == "arr"));
+                        assert_eq!(body.len(), 1);
+                    }
+                    other => panic!("expected KramashahNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Kramasah with multiple body statements
+    #[test]
+    fn test_kramasah_nested_body_statements() {
+        let tokens = vec![
+            kw(TokenKind::Kramasah),
+            nm("x"),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::PurnaankLiteral(1)),
+            kw(TokenKind::Unknown(',')),
+            kw(TokenKind::PurnaankLiteral(2)),
+            kw(TokenKind::RBracket),
+            kw(TokenKind::Tavat),
+            nm("x"),
+            kw(TokenKind::Vadati),
+            kw(TokenKind::Danda),
+            nm("x"),
+            kw(TokenKind::Vadati),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Iti),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::KramashahNode { item_name, body, .. } => {
+                        assert_eq!(item_name, "x");
+                        assert_eq!(body.len(), 2, "body should have 2 statements");
+                    }
+                    other => panic!("expected KramashahNode, got {:?}", other),
                 }
             }
             other => panic!("expected KaryakramNode, got {:?}", other),

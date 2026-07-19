@@ -25,6 +25,9 @@ pub enum TypeCheckError {
         index: usize,
         len: usize,
     },
+    KramashahAprayukta {
+        found: DevvaniType,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -68,6 +71,13 @@ impl fmt::Display for TypeCheckError {
                     f,
                     "Vinyasa-sima-langhana: index {} out of bounds for array length {}",
                     index, len
+                )
+            }
+            TypeCheckError::KramashahAprayukta { found } => {
+                write!(
+                    f,
+                    "Kramashah-aprayukta: for-each requires a Pankti (array) as the iterable; found {:?}",
+                    found
                 )
             }
         }
@@ -152,11 +162,15 @@ fn each_child(node: &ASTNode, f: &mut dyn FnMut(&ASTNode)) {
         ASTNode::TaddhitaChain { base, .. } => f(base),
         ASTNode::AvartanaNode { call, .. } => f(call),
         ASTNode::PanktiNode { elements, .. } => elements.iter().for_each(|n| f(n)),
-        ASTNode::VinyasaNode { target, index, .. } => {
-            f(target);
-            f(index);
-        }
-        _ => {}
+ASTNode::VinyasaNode { target, index, .. } => {
+             f(target);
+             f(index);
+         }
+         ASTNode::KramashahNode { iterable, body, .. } => {
+             f(iterable);
+             body.iter().for_each(|n| f(n));
+         }
+         _ => {}
     }
 }
 
@@ -572,6 +586,34 @@ impl TypeChecker {
                         DevvaniType::Unknown
                     }
                 }
+            }
+
+            ASTNode::KramashahNode { item_name, iterable, body, .. } => {
+                let t_iterable = self.check(iterable);
+                let elem_ty = match &t_iterable {
+                    DevvaniType::Pankti(elem_ty, _len) => elem_ty.as_ref().clone(),
+                    _ => {
+                        self.errors.push(TypeCheckError::KramashahAprayukta {
+                            found: t_iterable.clone(),
+                        });
+                        DevvaniType::Unknown
+                    }
+                };
+                let old_env = self.env.clone();
+                self.env = self.env.enter_scope(item_name);
+                let item_symbol = Symbol::new(
+                    item_name,
+                    elem_ty,
+                    &Vacana::Eka,
+                    &Linga::Pullinga,
+                    "i64",
+                );
+                self.env.define_symbol(item_name, item_symbol);
+                for stmt in body {
+                    self.check(stmt);
+                }
+                self.env = old_env;
+                DevvaniType::Unknown
             }
 
             ASTNode::PanktiNode { elements, .. } => {
@@ -1040,5 +1082,176 @@ mod tests {
             "expected NO VinyasaSimaLanghana for variable index, got: {:?}",
             checker.errors
         );
+    }
+
+    // Kramashah (for-each loop) tests
+
+    #[test]
+    fn test_kramasah_over_pankti_ok() {
+        let mut checker = TypeChecker::new();
+        let kramasah = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(ASTNode::PanktiNode {
+                elements: vec![
+                    ASTNode::PurnaankLiteral { value: 1, span: span() },
+                    ASTNode::PurnaankLiteral { value: 2, span: span() },
+                    ASTNode::PurnaankLiteral { value: 3, span: span() },
+                ],
+                span: span(),
+            }),
+            body: vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+            }],
+            span: span(),
+        };
+        checker.check(&kramasah);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::KramashahAprayukta { .. })),
+            "expected no KramashahAprayukta error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_kramasah_item_type_matches_element() {
+        let mut checker = TypeChecker::new();
+        // After entering the loop, x should be typed as Purnaank
+        let kramasah = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(ASTNode::PanktiNode {
+                elements: vec![
+                    ASTNode::PurnaankLiteral { value: 10, span: span() },
+                    ASTNode::PurnaankLiteral { value: 20, span: span() },
+                ],
+                span: span(),
+            }),
+            body: vec![ASTNode::YogaNode {
+                vama: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                dakshina: Box::new(ASTNode::PurnaankLiteral {
+                    value: 5,
+                    span: span(),
+                }),
+            }],
+            span: span(),
+        };
+        checker.check(&kramasah);
+        // Should NOT error because x is Purnaank and can participate in arithmetic
+        assert!(
+            !checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PrakaaraAsangata { .. })),
+            "expected arithmetic to succeed with Purnaank item type, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_kramasah_over_non_pankti_errors() {
+        let mut checker = TypeChecker::new();
+        let kramasah = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(ASTNode::PurnaankLiteral { value: 42, span: span() }),
+            body: vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+            }],
+            span: span(),
+        };
+        let _ty = checker.check(&kramasah);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::KramashahAprayukta { .. })),
+            "expected KramashahAprayukta error for non-Pankti iterable, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_kramasah_empty_pankti() {
+        let mut checker = TypeChecker::new();
+        let kramasah = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(ASTNode::PanktiNode {
+                elements: vec![],
+                span: span(),
+            }),
+            body: vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+            }],
+            span: span(),
+        };
+        checker.check(&kramasah);
+        // Should typecheck without crashing, no error for empty Pankti
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::KramashahAprayukta { .. })),
+            "expected no error for empty Pankti, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_kramasah_scope_isolated() {
+        let mut checker = TypeChecker::new();
+        // First define a symbol to verify scope isolation
+        checker.env.define("outer_var", DevvaniType::Subject("Purnaank".to_string()));
+        assert!(checker.env.lookup("outer_var").is_some());
+
+        let kramasah = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(ASTNode::PanktiNode {
+                elements: vec![ASTNode::PurnaankLiteral { value: 1, span: span() }],
+                span: span(),
+            }),
+            body: vec![],
+            span: span(),
+        };
+        checker.check(&kramasah);
+
+        // After check, x should NOT be in scope (scope was popped)
+        assert!(
+            checker.env.lookup("x").is_none(),
+            "expected item 'x' to be out of scope after KramashahNode, but found it"
+        );
+        // outer_var should still be accessible (scope was properly restored)
+        assert!(
+            checker.env.lookup("outer_var").is_some(),
+            "expected 'outer_var' to still be in scope after KramashahNode"
+        );
+    }
+
+    #[test]
+    fn test_kramasah_diagnostics_d053() {
+        // Verify TypeCheckError::KramashahAprayukta exists and formats correctly
+        let err = TypeCheckError::KramashahAprayukta {
+            found: DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("Pankti"));
     }
 }

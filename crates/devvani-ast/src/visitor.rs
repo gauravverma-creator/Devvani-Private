@@ -21,6 +21,7 @@ pub trait ASTVisitor {
     fn visit_avatarana(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_pankti(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_vinyasa(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_kramasah(&mut self, node: &ASTNode) -> VisitResult;
 
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
@@ -50,6 +51,7 @@ pub trait ASTVisitor {
             ASTNode::AvartanaNode { .. } => self.visit_avatarana(node),
             ASTNode::PanktiNode { .. } => self.visit_pankti(node),
             ASTNode::VinyasaNode { .. } => self.visit_vinyasa(node),
+            ASTNode::KramashahNode { .. } => self.visit_kramasah(node),
             _ => Ok(()),
         }
     }
@@ -208,6 +210,20 @@ impl ASTVisitor for PrettyPrinter {
             self.indent += 1;
             self.visit(target)?;
             self.visit(index)?;
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_kramasah(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::KramashahNode { item_name, iterable, body, .. } = node {
+            self.print_indent();
+            println!("Kramasah [{}]", item_name);
+            self.indent += 1;
+            self.visit(iterable)?;
+            for stmt in body {
+                self.visit(stmt)?;
+            }
             self.indent -= 1;
         }
         Ok(())

@@ -285,4 +285,10 @@ pub enum ASTNode {
         index: Box<ASTNode>,
         span: Span,
     },
+    KramashahNode {
+        item_name: String,
+        iterable: Box<ASTNode>,
+        body: Vec<ASTNode>,
+        span: Span,
+    },
 }

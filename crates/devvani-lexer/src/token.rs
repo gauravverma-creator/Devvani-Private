@@ -112,6 +112,7 @@ pub enum TokenKind {
     Pathati,  // पठति — input
     Yavat,    // यावत् — while condition
     Tavat,    // तावत् — while body start
+    Kramasah, // क्रमशः — for-each iteration start
     Varam,    // वारम् — times
     Arambhah, // आरम्भः — program start
     Samaptih, // समाप्तिः — program end

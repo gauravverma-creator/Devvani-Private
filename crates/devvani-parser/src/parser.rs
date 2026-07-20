@@ -392,8 +392,11 @@ TokenKind::Arambhah => self.parse_karyakram(),
     fn parse_primary(&mut self) -> Result<ASTNode, ParseError> {
         let tok = self.advance();
         match tok.kind {
-            TokenKind::LBracket => return self.parse_pankti_literal(tok.span),
-            TokenKind::PurnaankLiteral(value) => Ok(ASTNode::PurnaankLiteral {
+TokenKind::LBracket => return self.parse_pankti_literal(tok.span),
+             TokenKind::Avali => {
+                 return self.parse_avali_literal(tok.span);
+             }
+             TokenKind::PurnaankLiteral(value) => Ok(ASTNode::PurnaankLiteral {
                 value,
                 span: tok.span,
             }),
@@ -428,22 +431,38 @@ TokenKind::Arambhah => self.parse_karyakram(),
         }
     }
 
-    fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
-        let mut elements = Vec::new();
-        if !self.check(&TokenKind::RBracket) {
-            loop {
-                elements.push(self.parse_arithmetic()?);
-                if !self.check(&TokenKind::Unknown(',')) {
-                    break;
-                }
-                self.advance();
-            }
-        }
-        self.expect(TokenKind::RBracket)?;
-        Ok(ASTNode::PanktiNode { elements, span })
-    }
+fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
+         let mut elements = Vec::new();
+         if !self.check(&TokenKind::RBracket) {
+             loop {
+                 elements.push(self.parse_arithmetic()?);
+                 if !self.check(&TokenKind::Unknown(',')) {
+                     break;
+                 }
+                 self.advance();
+             }
+         }
+         self.expect(TokenKind::RBracket)?;
+         Ok(ASTNode::PanktiNode { elements, span })
+     }
 
-    fn parse_vinyasa_access(&mut self, target: ASTNode, span: Span) -> Result<ASTNode, ParseError> {
+     fn parse_avali_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
+         self.expect(TokenKind::LBracket)?;
+         let mut elements = Vec::new();
+         if !self.check(&TokenKind::RBracket) {
+             loop {
+                 elements.push(self.parse_arithmetic()?);
+                 if !self.check(&TokenKind::Unknown(',')) {
+                     break;
+                 }
+                 self.advance();
+             }
+         }
+         self.expect(TokenKind::RBracket)?;
+         Ok(ASTNode::AvaliNode { elements, span })
+     }
+
+     fn parse_vinyasa_access(&mut self, target: ASTNode, span: Span) -> Result<ASTNode, ParseError> {
         // Consume the LBracket before parsing the inner expression
         self.advance(); // consume LBracket
         let index = self.parse_arithmetic()?;
@@ -1095,6 +1114,94 @@ other => panic!("expected KaryakramNode, got {:?}", other),
                         assert_eq!(body.len(), 2, "body should have 2 statements");
                     }
                     other => panic!("expected KramashahNode, got {:?}", other),
+                }
+            }
+other => panic!("expected KaryakramNode, got {:?}", other),
+         }
+     }
+
+    // Empty avali array literal avali[] parses to AvaliNode with 0 elements
+    #[test]
+    fn test_avali_literal_empty() {
+        let tokens = vec![kw(TokenKind::Avali), kw(TokenKind::LBracket), kw(TokenKind::RBracket)];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                assert!(
+                    matches!(&shareera[0], ASTNode::AvaliNode { elements, .. } if elements.is_empty())
+                );
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Array literal with 3 numeric elements parses correctly
+    #[test]
+    fn test_avali_literal_basic() {
+        let tokens = vec![
+            kw(TokenKind::Avali),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::PurnaankLiteral(1)),
+            kw(TokenKind::Unknown(',')),
+            kw(TokenKind::PurnaankLiteral(2)),
+            kw(TokenKind::Unknown(',')),
+            kw(TokenKind::PurnaankLiteral(3)),
+            kw(TokenKind::RBracket),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::AvaliNode { elements, .. } => {
+                        assert_eq!(elements.len(), 3);
+                        assert!(
+                            matches!(&elements[0], ASTNode::PurnaankLiteral { value, .. } if *value == 1)
+                        );
+                        assert!(
+                            matches!(&elements[1], ASTNode::PurnaankLiteral { value, .. } if *value == 2)
+                        );
+                        assert!(
+                            matches!(&elements[2], ASTNode::PurnaankLiteral { value, .. } if *value == 3)
+                        );
+                    }
+                    other => panic!("expected AvaliNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Nested avali array literal parses correctly
+    #[test]
+    fn test_avali_nested() {
+        let tokens = vec![
+            kw(TokenKind::Avali),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::PurnaankLiteral(1)),
+            kw(TokenKind::Unknown(',')),
+            kw(TokenKind::PurnaankLiteral(2)),
+            kw(TokenKind::RBracket),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::AvaliNode { elements, .. } => {
+                        assert_eq!(elements.len(), 2);
+                        assert!(
+                            matches!(&elements[0], ASTNode::PurnaankLiteral { value, .. } if *value == 1)
+                        );
+                        assert!(
+                            matches!(&elements[1], ASTNode::PurnaankLiteral { value, .. } if *value == 2)
+                        );
+                    }
+                    other => panic!("expected AvaliNode, got {:?}", other),
                 }
             }
             other => panic!("expected KaryakramNode, got {:?}", other),

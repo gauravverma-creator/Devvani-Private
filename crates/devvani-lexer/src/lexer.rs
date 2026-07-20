@@ -241,10 +241,11 @@ impl<'a> Lexer<'a> {
             "bhaga" | "भाग" => TokenKind::Bhaga,
             "sama" | "सम" => TokenKind::Sama,
             "asamah" | "असमः" => TokenKind::AsamaH,
-            "nyunah" | "न्यूनः" => TokenKind::NyuunaH,
-            "adhikah" | "अधिकः" => TokenKind::AdhikaH,
+"nyunah" | "न्यूनः" => TokenKind::NyuunaH,
+             "adhikah" | "अधिकः" => TokenKind::AdhikaH,
+             "avali" => TokenKind::Avali,
 
-            _ => TokenKind::Naama(id),
+             _ => TokenKind::Naama(id),
         };
         Ok(Token {
             kind,
@@ -538,5 +539,26 @@ mod tests {
         let mut lexer = Lexer::new("Kramasah");
         let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
         assert_eq!(tokens[0].kind, TokenKind::Kramasah);
+    }
+
+    #[test]
+    fn test_avali_keyword() {
+        let mut lexer = Lexer::new("avali");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Avali);
+    }
+
+    #[test]
+    fn test_avali_array_literal() {
+        let mut lexer = Lexer::new("avali[1, 2, 3]");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Avali);
+        assert_eq!(tokens[1].kind, TokenKind::LBracket);
+        assert_eq!(tokens[2].kind, TokenKind::PurnaankLiteral(1));
+        assert_eq!(tokens[3].kind, TokenKind::Unknown(','));
+        assert_eq!(tokens[4].kind, TokenKind::PurnaankLiteral(2));
+        assert_eq!(tokens[5].kind, TokenKind::Unknown(','));
+        assert_eq!(tokens[6].kind, TokenKind::PurnaankLiteral(3));
+        assert_eq!(tokens[7].kind, TokenKind::RBracket);
     }
 }

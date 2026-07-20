@@ -28,6 +28,16 @@ pub enum TypeCheckError {
     KramashahAprayukta {
         found: DevvaniType,
     },
+    AvaliAsangata {
+        expected: DevvaniType,
+        found: DevvaniType,
+    },
+    PrakshepaAprayukta {
+        found: DevvaniType,
+    },
+    ApakarshanaAprayukta {
+        found: DevvaniType,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -77,6 +87,27 @@ impl fmt::Display for TypeCheckError {
                 write!(
                     f,
                     "Kramashah-aprayukta: for-each requires a Pankti (array) as the iterable; found {:?}",
+                    found
+                )
+            }
+            TypeCheckError::AvaliAsangata { expected, found } => {
+                write!(
+                    f,
+                    "Avali-asangata: expected {:?}, found {:?}",
+                    expected, found
+                )
+            }
+            TypeCheckError::PrakshepaAprayukta { found } => {
+                write!(
+                    f,
+                    "Prakshepa-aprayukta: push operation requires Avali type as karta; found {:?}",
+                    found
+                )
+            }
+            TypeCheckError::ApakarshanaAprayukta { found } => {
+                write!(
+                    f,
+                    "Apakarshana-aprayukta: pop operation requires Avali type as karta; found {:?}",
                     found
                 )
             }
@@ -162,6 +193,7 @@ fn each_child(node: &ASTNode, f: &mut dyn FnMut(&ASTNode)) {
         ASTNode::TaddhitaChain { base, .. } => f(base),
         ASTNode::AvartanaNode { call, .. } => f(call),
         ASTNode::PanktiNode { elements, .. } => elements.iter().for_each(|n| f(n)),
+         ASTNode::AvaliNode { elements, .. } => elements.iter().for_each(|n| f(n)),
 ASTNode::VinyasaNode { target, index, .. } => {
              f(target);
              f(index);
@@ -537,6 +569,64 @@ impl TypeChecker {
                     }
                 }
 
+                // Special-case handling for prakshepa-dhatu (push) and apakarshana-dhatu (pop)
+                if kriya == "prakshepa-dhatu" {
+                    let t_karta = self.check(karta.as_ref().unwrap());
+                    match &t_karta {
+                        DevvaniType::Avali(inner_ty) => {
+                            // Validate karma has exactly 1 element
+                            if karma.len() != 1 {
+                                self.errors.push(TypeCheckError::PrakshepaAprayukta {
+                                    found: t_karta.clone(),
+                                });
+                                return DevvaniType::Unknown;
+                            }
+                            // Validate karma element type matches inner_type (or inner is Unknown/permissive)
+                            let karma_ty = self.check(&karma[0]);
+                            if !matches!(inner_ty.as_ref(), DevvaniType::Unknown)
+                                && &karma_ty != inner_ty.as_ref()
+                                && !matches!(karma_ty, DevvaniType::Parameter(_))
+                            {
+                                self.errors.push(TypeCheckError::PrakshepaAprayukta {
+                                    found: t_karta.clone(),
+                                });
+                                return DevvaniType::Unknown;
+                            }
+                            // Return type unchanged: Avali(inner_ty)
+                            return DevvaniType::Avali(inner_ty.clone());
+                        }
+                        _ => {
+                            self.errors.push(TypeCheckError::PrakshepaAprayukta {
+                                found: t_karta,
+                            });
+                            return DevvaniType::Unknown;
+                        }
+                    }
+                }
+
+                if kriya == "apakarshana-dhatu" {
+                    let t_karta = self.check(karta.as_ref().unwrap());
+                    match &t_karta {
+                        DevvaniType::Avali(inner_ty) => {
+                            // Validate karma is empty
+                            if !karma.is_empty() {
+                                self.errors.push(TypeCheckError::ApakarshanaAprayukta {
+                                    found: t_karta.clone(),
+                                });
+                                return DevvaniType::Unknown;
+                            }
+                            // Return type is inner element type
+                            return inner_ty.as_ref().clone();
+                        }
+                        _ => {
+                            self.errors.push(TypeCheckError::ApakarshanaAprayukta {
+                                found: t_karta,
+                            });
+                            return DevvaniType::Unknown;
+                        }
+                    }
+                }
+
                 DevvaniType::Subject(kriya.clone())
             }
 
@@ -639,6 +729,31 @@ impl TypeChecker {
                 }
 
                 DevvaniType::Pankti(Box::new(first_type), elements.len())
+            }
+
+            ASTNode::AvaliNode { elements, .. } => {
+                if elements.is_empty() {
+                    return DevvaniType::Avali(Box::new(DevvaniType::Unknown));
+                }
+
+                let mut element_types: Vec<DevvaniType> = Vec::new();
+                for elem in elements {
+                    let elem_ty = self.check(elem);
+                    element_types.push(elem_ty);
+                }
+
+                let first_type = element_types[0].clone();
+                for elem_ty in element_types.iter().skip(1) {
+                    if elem_ty != &first_type {
+                        self.errors.push(TypeCheckError::AvaliAsangata {
+                            expected: first_type.clone(),
+                            found: elem_ty.clone(),
+                        });
+                        return DevvaniType::Unknown;
+                    }
+                }
+
+                DevvaniType::Avali(Box::new(first_type))
             }
 
             _ => DevvaniType::Unknown,
@@ -1253,5 +1368,244 @@ mod tests {
         };
         let msg = format!("{}", err);
         assert!(msg.contains("Pankti"));
+    }
+
+    // Avali (growable array) tests
+
+    #[test]
+    fn test_avali_literal_homogeneous_type() {
+        let mut checker = TypeChecker::new();
+        let avali = ASTNode::AvaliNode {
+            elements: vec![
+                ASTNode::PurnaankLiteral {
+                    value: 1,
+                    span: span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 2,
+                    span: span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 3,
+                    span: span(),
+                },
+            ],
+            span: span(),
+        };
+        let ty = checker.check(&avali);
+        assert!(matches!(ty, DevvaniType::Avali(_)));
+        if let DevvaniType::Avali(elem_ty) = &ty {
+            assert_eq!(*elem_ty, Box::new(DevvaniType::Subject("Purnaank".to_string())));
+        }
+    }
+
+    #[test]
+    fn test_avali_literal_heterogeneous_error() {
+        let mut checker = TypeChecker::new();
+        let avali = ASTNode::AvaliNode {
+            elements: vec![
+                ASTNode::PurnaankLiteral {
+                    value: 1,
+                    span: span(),
+                },
+                ASTNode::VaakLiteral {
+                    value: "text".to_string(),
+                    span: span(),
+                },
+            ],
+            span: span(),
+        };
+        let _ty = checker.check(&avali);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AvaliAsangata { .. })),
+            "expected AvaliAsangata error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_avali_literal_empty_type() {
+        let mut checker = TypeChecker::new();
+        let avali = ASTNode::AvaliNode {
+            elements: vec![],
+            span: span(),
+        };
+        let ty = checker.check(&avali);
+        assert_eq!(ty, DevvaniType::Avali(Box::new(DevvaniType::Unknown)));
+    }
+
+    #[test]
+    fn test_prakshepa_valid() {
+        let mut checker = TypeChecker::new();
+        // Define avali variable
+        let avali_node = ASTNode::AstiNode {
+            naama: "arr".to_string(),
+            mulya: Box::new(ASTNode::AvaliNode {
+                elements: vec![
+                    ASTNode::PurnaankLiteral {
+                        value: 10,
+                        span: span(),
+                    },
+                ],
+                span: span(),
+            }),
+        };
+        checker.check(&avali_node);
+
+        // Push a matching Purnaank value
+        let kriya = ASTNode::KriyaCall {
+            karta: Some(Box::new(ASTNode::Nama {
+                base: "arr".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            })),
+            kriya: "prakshepa-dhatu".to_string(),
+            karma: vec![ASTNode::PurnaankLiteral {
+                value: 20,
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let ty = checker.check(&kriya);
+        assert!(matches!(ty, DevvaniType::Avali(_)));
+        if let DevvaniType::Avali(elem_ty) = &ty {
+            assert_eq!(*elem_ty, Box::new(DevvaniType::Subject("Purnaank".to_string())));
+        }
+    }
+
+    #[test]
+    fn test_prakshepa_on_non_avali_error() {
+        let mut checker = TypeChecker::new();
+        // Define a Pankti (fixed array) instead of Avali
+        let pankti_node = ASTNode::AstiNode {
+            naama: "arr".to_string(),
+            mulya: Box::new(ASTNode::PanktiNode {
+                elements: vec![ASTNode::PurnaankLiteral {
+                    value: 10,
+                    span: span(),
+                }],
+                span: span(),
+            }),
+        };
+        checker.check(&pankti_node);
+
+        // Try prakshepa-dhatu on Pankti
+        let kriya = ASTNode::KriyaCall {
+            karta: Some(Box::new(ASTNode::Nama {
+                base: "arr".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            })),
+            kriya: "prakshepa-dhatu".to_string(),
+            karma: vec![ASTNode::PurnaankLiteral {
+                value: 20,
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let _ty = checker.check(&kriya);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PrakshepaAprayukta { .. })),
+            "expected PrakshepaAprayukta error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_apakarshana_valid() {
+        let mut checker = TypeChecker::new();
+        // Define avali variable
+        let avali_node = ASTNode::AstiNode {
+            naama: "arr".to_string(),
+            mulya: Box::new(ASTNode::AvaliNode {
+                elements: vec![
+                    ASTNode::PurnaankLiteral {
+                        value: 10,
+                        span: span(),
+                    },
+                ],
+                span: span(),
+            }),
+        };
+        checker.check(&avali_node);
+
+        // Pop from Avali
+        let kriya = ASTNode::KriyaCall {
+            karta: Some(Box::new(ASTNode::Nama {
+                base: "arr".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            })),
+            kriya: "apakarshana-dhatu".to_string(),
+            karma: vec![],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let ty = checker.check(&kriya);
+        assert_eq!(ty, DevvaniType::Subject("Purnaank".to_string()));
+    }
+
+    #[test]
+    fn test_apakarshana_on_non_avali_error() {
+        let mut checker = TypeChecker::new();
+        // Define a plain variable
+        let var_node = ASTNode::AstiNode {
+            naama: "x".to_string(),
+            mulya: Box::new(ASTNode::PurnaankLiteral {
+                value: 10,
+                span: span(),
+            }),
+        };
+        checker.check(&var_node);
+
+        // Try apakarshana-dhatu on non-Avali
+        let kriya = ASTNode::KriyaCall {
+            karta: Some(Box::new(ASTNode::Nama {
+                base: "x".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            })),
+            kriya: "apakarshana-dhatu".to_string(),
+            karma: vec![],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let _ty = checker.check(&kriya);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ApakarshanaAprayukta { .. })),
+            "expected ApakarshanaAprayukta error, got: {:?}",
+            checker.errors
+        );
     }
 }

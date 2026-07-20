@@ -28,6 +28,8 @@ pub enum DevvaniType {
     VaakBorrow,
     /// Pankti — fixed-size array type (element type, length)
     Pankti(Box<DevvaniType>, usize),
+    /// Avali — growable array type (element type)
+    Avali(Box<DevvaniType>),
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -95,8 +97,9 @@ impl fmt::Display for DevvaniType {
             DevvaniType::Scope(s) => write!(f, "Scope({})", s),
             DevvaniType::Unknown => write!(f, "Unknown"),
             DevvaniType::Vaak => write!(f, "Vaak"),
-            DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
-            DevvaniType::Pankti(elem_ty, len) => write!(f, "Pankti({}, {})", elem_ty, len),
-        }
+DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
+             DevvaniType::Pankti(elem_ty, len) => write!(f, "Pankti({}, {})", elem_ty, len),
+             DevvaniType::Avali(elem_ty) => write!(f, "Avali({})", elem_ty),
+         }
     }
 }

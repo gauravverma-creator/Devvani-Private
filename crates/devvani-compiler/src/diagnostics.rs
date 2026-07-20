@@ -159,7 +159,7 @@ impl DiagnosticEngine {
                 sutra_ref: None,
                 hint: None,
             },
-            TypeCheckError::KramashahAprayukta { found } => Diagnostic {
+TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 severity: Severity::Dosha,
                 code: "D053".to_string(),
                 sanskrit_title: "क्रमशः-अप्रयुक्तः".to_string(),
@@ -171,6 +171,45 @@ impl DiagnosticEngine {
                 sutra_ref: Some("Kramapatha (Vedic pairwise sequential recitation)".to_string()),
                 hint: None,
             },
+            TypeCheckError::AvaliAsangata { expected, found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D054".to_string(),
+                sanskrit_title: "आवलि-असङ्गति".to_string(),
+                roman_title: "Avali Asangati".to_string(),
+                message: format!(
+                    "Avali mein element types saman hone chahiye. \
+                     Expected {:?}, found {:?}.",
+                    expected, found
+                ),
+                sutra_ref: Some("Ashtadhyayi 1.2.64 (samanya-vishesha)".to_string()),
+                hint: None,
+            },
+            TypeCheckError::PrakshepaAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D055".to_string(),
+                sanskrit_title: "प्रक्षेप-अप्रयुक्तः".to_string(),
+                roman_title: "Prakshepa Aprayuktah".to_string(),
+                message: format!(
+                    "Prakshepa-dhatu (push) operation Avali type ke saath hi prayukt hota hai. \
+                     Found non-Avali type {:?}.",
+                    found
+                ),
+                sutra_ref: None,
+                hint: None,
+            },
+            TypeCheckError::ApakarshanaAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D056".to_string(),
+                sanskrit_title: "अपकर्षण-अप्रयुक्तः".to_string(),
+                roman_title: "Apakarshana Aprayuktah".to_string(),
+                message: format!(
+                    "Apakarshana-dhatu (pop) operation Avali type ke saath hi prayukt hota hai. \
+                     Found non-Avali type {:?}.",
+                    found
+                ),
+                sutra_ref: None,
+                hint: None,
+            }
         }
     }
 
@@ -386,5 +425,39 @@ mod tests {
         assert_eq!(diag.code, "D053");
         assert!(diag.message.contains("Pankti (array) as the iterable"));
         assert!(diag.sutra_ref.unwrap().contains("Kramapatha"));
+    }
+
+    #[test]
+    fn test_from_type_error_avali_asangata() {
+        let err = TypeCheckError::AvaliAsangata {
+            expected: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D054");
+        assert!(diag.display().contains("Avali Asangati"));
+        assert!(diag.sutra_ref.unwrap().contains("Ashtadhyayi 1.2.64"));
+    }
+
+    #[test]
+    fn test_from_type_error_prakshepa_aprayukta() {
+        let err = TypeCheckError::PrakshepaAprayukta {
+            found: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D055");
+        assert!(diag.display().contains("Prakshepa Aprayuktah"));
+        assert!(diag.sanskrit_title.contains("प्रक्षेप-अप्रयुक्तः"));
+    }
+
+    #[test]
+    fn test_from_type_error_apakarshana_aprayukta() {
+        let err = TypeCheckError::ApakarshanaAprayukta {
+            found: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D056");
+        assert!(diag.display().contains("Apakarshana Aprayuktah"));
+        assert!(diag.sanskrit_title.contains("अपकर्षण-अप्रयुक्तः"));
     }
 }

@@ -20,6 +20,7 @@ pub trait ASTVisitor {
     fn visit_krit_chain(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_avatarana(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_pankti(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_avali(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_vinyasa(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_kramasah(&mut self, node: &ASTNode) -> VisitResult;
 
@@ -49,8 +50,9 @@ pub trait ASTVisitor {
             ASTNode::Samasa { .. } => self.visit_samasa(node),
             ASTNode::KritChain { .. } => self.visit_krit_chain(node),
             ASTNode::AvartanaNode { .. } => self.visit_avatarana(node),
-            ASTNode::PanktiNode { .. } => self.visit_pankti(node),
-            ASTNode::VinyasaNode { .. } => self.visit_vinyasa(node),
+ASTNode::PanktiNode { .. } => self.visit_pankti(node),
+             ASTNode::AvaliNode { .. } => self.visit_avali(node),
+             ASTNode::VinyasaNode { .. } => self.visit_vinyasa(node),
             ASTNode::KramashahNode { .. } => self.visit_kramasah(node),
             _ => Ok(()),
         }
@@ -194,6 +196,19 @@ impl ASTVisitor for PrettyPrinter {
         if let ASTNode::PanktiNode { elements, .. } = node {
             self.print_indent();
             println!("Pankti [{} elements]", elements.len());
+            self.indent += 1;
+            for elem in elements {
+                self.visit(elem)?;
+            }
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_avali(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::AvaliNode { elements, .. } = node {
+            self.print_indent();
+            println!("Avali [{} elements]", elements.len());
             self.indent += 1;
             for elem in elements {
                 self.visit(elem)?;

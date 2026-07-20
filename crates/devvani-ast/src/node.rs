@@ -276,11 +276,15 @@ pub enum ASTNode {
         call: Box<ASTNode>, // always an ASTNode::KriyaCall
         span: Span,
     },
-    PanktiNode {
-        elements: Vec<ASTNode>,
-        span: Span,
-    },
-    VinyasaNode {
+PanktiNode {
+         elements: Vec<ASTNode>,
+         span: Span,
+     },
+     AvaliNode {
+         elements: Vec<ASTNode>,
+         span: Span,
+     },
+     VinyasaNode {
         target: Box<ASTNode>,
         index: Box<ASTNode>,
         span: Span,

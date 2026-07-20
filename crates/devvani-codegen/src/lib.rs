@@ -359,27 +359,75 @@ impl Codegen {
                 self.rust_output
                     .push_str(&format!("{}}}\n", self.indent_str()));
             }
-            ASTNode::KriyaCall { kriya, karma, .. } => {
-                self.instructions.push(Instruction::Call {
-                    subject: String::new(),
-                    verb: kriya.clone(),
-                    args: Vec::new(),
-                });
-
-                self.rust_output.push_str(&self.indent_str());
-                self.rust_output.push_str(kriya);
-                self.rust_output.push_str("(");
-                for (i, arg) in karma.iter().enumerate() {
-                    if i > 0 {
-                        self.rust_output.push_str(", ");
+            ASTNode::KriyaCall { karta, kriya, karma, .. } => {
+                // Special-case handling for prakshepa-dhatu and apakarshana-dhatu
+                if kriya == "prakshepa-dhatu" {
+                    if let Some(karta_node) = karta {
+                        // Emit just the variable name for karta (method receiver)
+                        if let ASTNode::Nama { base, .. } = karta_node.as_ref() {
+                            let display_name = if base.to_lowercase().ends_with("ah") {
+                                &base[..base.len() - 2]
+                            } else {
+                                base
+                            };
+                            self.rust_output.push_str(display_name);
+                        } else {
+                            self.emit(karta_node)?;
+                        }
+                        self.rust_output.push_str(".push(");
+                        if !karma.is_empty() {
+                            self.emit(&karma[0])?;
+                        }
+                        self.rust_output.push_str(")");
+                        self.rust_output.push_str(";\n");
                     }
-                    self.emit(arg)?;
+                } else if kriya == "apakarshana-dhatu" {
+                    if let Some(karta_node) = karta {
+                        // Emit just the variable name for karta (method receiver)
+                        if let ASTNode::Nama { base, .. } = karta_node.as_ref() {
+                            let display_name = if base.to_lowercase().ends_with("ah") {
+                                &base[..base.len() - 2]
+                            } else {
+                                base
+                            };
+                            self.rust_output.push_str(display_name);
+                        } else {
+                            self.emit(karta_node)?;
+                        }
+                        self.rust_output.push_str(".pop().unwrap()");
+                    }
+                } else {
+                    self.instructions.push(Instruction::Call {
+                        subject: String::new(),
+                        verb: kriya.clone(),
+                        args: Vec::new(),
+                    });
+
+                    self.rust_output.push_str(&self.indent_str());
+                    self.rust_output.push_str(kriya);
+                    self.rust_output.push_str("(");
+                    for (i, arg) in karma.iter().enumerate() {
+                        if i > 0 {
+                            self.rust_output.push_str(", ");
+                        }
+                        self.emit(arg)?;
+                    }
+                    self.rust_output.push_str(");\n");
                 }
-                self.rust_output.push_str(");\n");
             }
             ASTNode::AvartanaNode { call, .. } => self.emit(call.as_ref())?,
             ASTNode::PanktiNode { elements, .. } => {
                 self.rust_output.push_str("[");
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        self.rust_output.push_str(", ");
+                    }
+                    self.emit(elem)?;
+                }
+                self.rust_output.push_str("]");
+            }
+            ASTNode::AvaliNode { elements, .. } => {
+                self.rust_output.push_str("vec![");
                 for (i, elem) in elements.iter().enumerate() {
                     if i > 0 {
                         self.rust_output.push_str(", ");
@@ -393,6 +441,24 @@ impl Codegen {
                 self.rust_output.push_str("[");
                 self.emit(index)?;
                 self.rust_output.push_str("]");
+            }
+            ASTNode::KramashahNode {
+                item_name,
+                iterable,
+                body,
+                ..
+            } => {
+                self.rust_output
+                    .push_str(&format!("{}for {} in ", self.indent_str(), item_name));
+                self.emit(iterable)?;
+                self.rust_output.push_str(".iter() {\n");
+                self.indent += 1;
+                for stmt in body {
+                    self.emit(stmt)?;
+                }
+                self.indent -= 1;
+                self.rust_output
+                    .push_str(&format!("{}}}\n", self.indent_str()));
             }
             ASTNode::DhatuDef {
                 name,
@@ -683,5 +749,229 @@ mod tests {
         assert!(codegen.emit(&node).is_ok());
         let output = codegen.rust_source();
         assert!(output.contains("add(1, 2)"));
+    }
+
+    #[test]
+    fn test_kramashah_basic_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let body_stmt = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "println".to_string(),
+            karma: vec![ASTNode::PurnaankLiteral {
+                value: 1,
+                span: dummy_span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        let iterable = ASTNode::PanktiNode {
+            elements: vec![ASTNode::PurnaankLiteral {
+                value: 1,
+                span: dummy_span(),
+            }],
+            span: dummy_span(),
+        };
+        let node = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(iterable),
+            body: vec![body_stmt],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("for x in [1].iter() {"));
+        assert!(output.contains("println(1);"));
+        assert!(output.contains("}"));
+    }
+
+    #[test]
+    fn test_kramashah_empty_body_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let iterable = ASTNode::PanktiNode {
+            elements: vec![ASTNode::PurnaankLiteral {
+                value: 1,
+                span: dummy_span(),
+            }],
+            span: dummy_span(),
+        };
+        let node = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(iterable),
+            body: vec![],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("for x in [1].iter() {"));
+        assert!(output.contains("}"));
+    }
+
+    #[test]
+    fn test_kramashah_over_pankti_literal_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let body_stmt = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "println".to_string(),
+            karma: vec![ASTNode::PurnaankLiteral {
+                value: 1,
+                span: dummy_span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        let iterable = ASTNode::PanktiNode {
+            elements: vec![
+                ASTNode::PurnaankLiteral {
+                    value: 1,
+                    span: dummy_span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 2,
+                    span: dummy_span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 3,
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+        let node = ASTNode::KramashahNode {
+            item_name: "x".to_string(),
+            iterable: Box::new(iterable),
+            body: vec![body_stmt],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("[1, 2, 3].iter()"));
+    }
+
+    #[test]
+    fn test_avali_literal_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let elements = vec![
+            ASTNode::PurnaankLiteral {
+                value: 1,
+                span: dummy_span(),
+            },
+            ASTNode::PurnaankLiteral {
+                value: 2,
+                span: dummy_span(),
+            },
+            ASTNode::PurnaankLiteral {
+                value: 3,
+                span: dummy_span(),
+            },
+        ];
+        let node = ASTNode::AvaliNode {
+            elements,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "vec![1, 2, 3]");
+    }
+
+    #[test]
+    fn test_avali_literal_empty_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::AvaliNode {
+            elements: vec![],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "vec![]");
+    }
+
+    #[test]
+    fn test_avali_nested_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let inner_elements = vec![
+            ASTNode::PurnaankLiteral {
+                value: 4,
+                span: dummy_span(),
+            },
+            ASTNode::PurnaankLiteral {
+                value: 5,
+                span: dummy_span(),
+            },
+        ];
+        let elements = vec![
+            ASTNode::PurnaankLiteral {
+                value: 1,
+                span: dummy_span(),
+            },
+            ASTNode::AvaliNode {
+                elements: inner_elements,
+                span: dummy_span(),
+            },
+            ASTNode::PurnaankLiteral {
+                value: 6,
+                span: dummy_span(),
+            },
+        ];
+        let node = ASTNode::AvaliNode {
+            elements,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "vec![1, vec![4, 5], 6]");
+    }
+
+    #[test]
+    fn test_prakshepa_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::KriyaCall {
+            karta: Some(Box::new(ASTNode::Nama {
+                base: "myavali".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: devvani_ast::Linga::Pullinga,
+                vacana: devvani_ast::Vacana::Eka,
+                span: dummy_span(),
+            })),
+            kriya: String::from("prakshepa-dhatu"),
+            karma: vec![ASTNode::PurnaankLiteral {
+                value: 10,
+                span: dummy_span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("myavali.push(10)"));
+    }
+
+    #[test]
+    fn test_apakarshana_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::KriyaCall {
+            karta: Some(Box::new(ASTNode::Nama {
+                base: "myavali".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: devvani_ast::Linga::Pullinga,
+                vacana: devvani_ast::Vacana::Eka,
+                span: dummy_span(),
+            })),
+            kriya: String::from("apakarshana-dhatu"),
+            karma: vec![],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("myavali.pop().unwrap()"));
     }
 }

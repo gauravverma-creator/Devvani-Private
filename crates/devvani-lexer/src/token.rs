@@ -120,12 +120,13 @@ pub enum TokenKind {
     Viyoga,   // वियोग — subtraction
     Guna,     // गुण — multiplication
     Bhaga,    // भाग — division
-    Sama,     // सम — equals
-    AsamaH,   // असमः — not equals
-    NyuunaH,  // न्यूनः — less than
-    AdhikaH,  // अधिकः — greater than
+Sama,     // सम — equals
+     AsamaH,   // असमः — not equals
+     NyuunaH,  // न्यूनः — less than
+     AdhikaH,  // अधिकः — greater than
+     Avali,    // growable array literal keyword
 
-    // --- SANDHI SPECIAL TOKENS ---
+     // --- SANDHI SPECIAL TOKENS ---
     Visarga,  // ḥ character standalone
     Anusvara, // ṃ character standalone
 

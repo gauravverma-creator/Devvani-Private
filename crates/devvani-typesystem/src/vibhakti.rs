@@ -30,6 +30,8 @@ pub enum DevvaniType {
     Pankti(Box<DevvaniType>, usize),
     /// Avali — growable array type (element type)
     Avali(Box<DevvaniType>),
+    /// Dravya — struct type (name, [(anga_name, ang_type), ...])
+    Dravya(String, Vec<(String, DevvaniType)>),
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -100,6 +102,7 @@ impl fmt::Display for DevvaniType {
 DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
              DevvaniType::Pankti(elem_ty, len) => write!(f, "Pankti({}, {})", elem_ty, len),
              DevvaniType::Avali(elem_ty) => write!(f, "Avali({})", elem_ty),
+             DevvaniType::Dravya(name, _angas) => write!(f, "Dravya({})", name),
          }
     }
 }

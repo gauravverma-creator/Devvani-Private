@@ -209,6 +209,50 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 ),
                 sutra_ref: None,
                 hint: None,
+            },
+            TypeCheckError::DravyaApariyata { name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D057".to_string(),
+                sanskrit_title: "द्रव्य-अपरिज्ञातम्".to_string(),
+                roman_title: "Dravya Aparijnatam".to_string(),
+                message: format!(
+                    "Dravya (struct) type '{}' parichit nahi hai. \
+                     Pehle ise define karo ya spelling check karo.",
+                    name
+                ),
+                sutra_ref: Some(
+                    "Vaiśeṣika Sūtra (Dravya as one of the seven categories)".to_string()
+                ),
+                hint: Some(format!("'{}' naam ka dravya pehle define karo.", name)),
+            },
+            TypeCheckError::AngaApraapya { dravya_name, anga_name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D058".to_string(),
+                sanskrit_title: "अङ्ग-अप्राप्यम्".to_string(),
+                roman_title: "Anga Aprapyam".to_string(),
+                message: format!(
+                    "Struct '{}' mein '{}' naam ka anga (field) nahi hai.",
+                    dravya_name, anga_name
+                ),
+                sutra_ref: Some(
+                    "Vaiśeṣika Sūtra (Anga as constituent of Dravya)".to_string()
+                ),
+                hint: Some(format!("'{}' ke defined angas check karo.", dravya_name)),
+            },
+            TypeCheckError::SamavayaAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D059".to_string(),
+                sanskrit_title: "समवाय-अप्रयुक्तः".to_string(),
+                roman_title: "Samavaya Aprayuktah".to_string(),
+                message: format!(
+                    "Samavaya (field access) sirf Dravya (struct) par apply hota hai. \
+                     Found type: {}.",
+                    found
+                ),
+                sutra_ref: Some(
+                    "Vaiśeṣika Sūtra (Samavaya as inherence relation)".to_string()
+                ),
+                hint: None,
             }
         }
     }
@@ -459,5 +503,42 @@ mod tests {
         assert_eq!(diag.code, "D056");
         assert!(diag.display().contains("Apakarshana Aprayuktah"));
         assert!(diag.sanskrit_title.contains("अपकर्षण-अप्रयुक्तः"));
+    }
+
+    #[test]
+    fn test_from_type_error_dravya_apariyata() {
+        let err = TypeCheckError::DravyaApariyata {
+            name: "gadha".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D057");
+        assert!(diag.display().contains("Dravya Aparijnatam"));
+        assert!(diag.sanskrit_title.contains("द्रव्य-अपरिज्ञातम्"));
+        assert!(diag.sutra_ref.unwrap().contains("Vaiśeṣika Sūtra"));
+    }
+
+    #[test]
+    fn test_from_type_error_anga_apraapya() {
+        let err = TypeCheckError::AngaApraapya {
+            dravya_name: "manushya".to_string(),
+            anga_name: "agaj".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D058");
+        assert!(diag.display().contains("Anga Aprapyam"));
+        assert!(diag.sanskrit_title.contains("अङ्ग-अप्राप्यम्"));
+        assert!(diag.sutra_ref.unwrap().contains("Vaiśeṣika Sūtra"));
+    }
+
+    #[test]
+    fn test_from_type_error_samavaya_aprayukta() {
+        let err = TypeCheckError::SamavayaAprayukta {
+            found: "Purnaank".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D059");
+        assert!(diag.display().contains("Samavaya Aprayuktah"));
+        assert!(diag.sanskrit_title.contains("समवाय-अप्रयुक्तः"));
+        assert!(diag.sutra_ref.unwrap().contains("Vaiśeṣika Sūtra"));
     }
 }

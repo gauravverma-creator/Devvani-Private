@@ -122,18 +122,22 @@ impl<'a> Lexer<'a> {
                 self.advance();
                 TokenKind::Anusvara
             }
-            '[' => {
-                self.advance();
-                TokenKind::LBracket
-            }
-            ']' => {
-                self.advance();
-                TokenKind::RBracket
-            }
-            _ => {
-                self.advance();
-                TokenKind::Unknown(c)
-            }
+              '[' => {
+                  self.advance();
+                  TokenKind::LBracket
+              }
+              ']' => {
+                  self.advance();
+                  TokenKind::RBracket
+              }
+              '.' => {
+                  self.advance();
+                  TokenKind::Dot
+              }
+             _ => {
+                 self.advance();
+                 TokenKind::Unknown(c)
+             }
         };
 
         Ok(Some(Token {
@@ -244,6 +248,8 @@ impl<'a> Lexer<'a> {
 "nyunah" | "न्यूनः" => TokenKind::NyuunaH,
              "adhikah" | "अधिकः" => TokenKind::AdhikaH,
              "avali" => TokenKind::Avali,
+             "dravya" | "Dravya" => TokenKind::Dravya,
+             "anga" | "Anga" => TokenKind::Anga,
 
              _ => TokenKind::Naama(id),
         };

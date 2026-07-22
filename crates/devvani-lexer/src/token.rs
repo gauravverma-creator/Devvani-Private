@@ -104,38 +104,41 @@ pub enum TokenKind {
     Atha,    // now/begin
     Alam,    // enough/return
 
-    // --- NEW SANSKRIT SYNTAX TOKENS ---
-    Danda,    // । — statement terminator
-    Asti,     // अस्ति — assignment (fixed)
-    Bhavati,  // भवति — assignment (mutable)
-    Vadati,   // वदति — output
-    Pathati,  // पठति — input
-    Yavat,    // यावत् — while condition
-    Tavat,    // तावत् — while body start
-    Kramasah, // क्रमशः — for-each iteration start
-    Varam,    // वारम् — times
-    Arambhah, // आरम्भः — program start
-    Samaptih, // समाप्तिः — program end
-    Yoga,     // योग — addition
-    Viyoga,   // वियोग — subtraction
-    Guna,     // गुण — multiplication
-    Bhaga,    // भाग — division
-Sama,     // सम — equals
+     // --- NEW SANSKRIT SYNTAX TOKENS ---
+     Danda,    // । — statement terminator
+     Asti,     // अस्ति — assignment (fixed)
+     Bhavati,  // भवति — assignment (mutable)
+     Vadati,   // वदति — output
+     Pathati,  // पठति — input
+     Yavat,    // यावत् — while condition
+     Tavat,    // तावत् — while body start
+     Kramasah, // क्रमशः — for-each iteration start
+     Varam,    // वारम् — times
+     Arambhah, // आरम्भः — program start
+     Samaptih, // समाप्तिः — program end
+     Yoga,     // योग — addition
+     Viyoga,   // वियोग — subtraction
+     Guna,     // गुण — multiplication
+     Bhaga,    // भाग — division
+     Sama,     // सम — equals
      AsamaH,   // असमः — not equals
      NyuunaH,  // न्यूनः — less than
      AdhikaH,  // अधिकः — greater than
      Avali,    // growable array literal keyword
+     Dravya,   // struct definition keyword
+     Anga,     // struct field keyword
 
      // --- SANDHI SPECIAL TOKENS ---
-    Visarga,  // ḥ character standalone
-    Anusvara, // ṃ character standalone
+     Visarga,  // ḥ character standalone
+     Anusvara, // ṃ character standalone
 
-    // --- META ---
-    NavaPankti, // Newline
-    Aavakaasha, // Whitespace
-    Tippani,    // Comment
-    Samaapti,   // EOF
-    Unknown(char),
-    LBracket, // [
-    RBracket, // ]
+     // --- META ---
+     NavaPankti, // Newline
+     Aavakaasha, // Whitespace
+     Tippani,    // Comment
+     Samaapti,   // EOF
+     Unknown(char),
+      LBracket, // [
+      RBracket, // ]
+      Dot,      // .
 }

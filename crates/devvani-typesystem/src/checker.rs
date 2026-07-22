@@ -38,6 +38,16 @@ pub enum TypeCheckError {
     ApakarshanaAprayukta {
         found: DevvaniType,
     },
+    SamavayaAprayukta {
+        found: String,
+    },
+    DravyaApariyata {
+        name: String,
+    },
+    AngaApraapya {
+        dravya_name: String,
+        anga_name: String,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -109,6 +119,27 @@ impl fmt::Display for TypeCheckError {
                     f,
                     "Apakarshana-aprayukta: pop operation requires Avali type as karta; found {:?}",
                     found
+                )
+            }
+            TypeCheckError::SamavayaAprayukta { found } => {
+                write!(
+                    f,
+                    "Samavaya-aprayukta: field access applied to non-struct type {}",
+                    found
+                )
+            }
+            TypeCheckError::DravyaApariyata { name } => {
+                write!(
+                    f,
+                    "Dravya-apariyata: struct type '{}' not found",
+                    name
+                )
+            }
+            TypeCheckError::AngaApraapya { dravya_name, anga_name } => {
+                write!(
+                    f,
+                    "Anga-apraapya: field '{}' not found on struct '{}'",
+                    anga_name, dravya_name
                 )
             }
         }
@@ -202,6 +233,8 @@ ASTNode::VinyasaNode { target, index, .. } => {
              f(iterable);
              body.iter().for_each(|n| f(n));
          }
+         ASTNode::SamavayaNode { target, .. } => f(target),
+         ASTNode::DravyaDef { .. } => {}
          _ => {}
     }
 }
@@ -275,6 +308,18 @@ fn has_reachable_base_case(body: &[ASTNode]) -> bool {
         return false;
     }
     true
+}
+
+fn resolve_type_name(env: &TypeEnv, type_name: &str) -> Option<DevvaniType> {
+    if let Some(sym) = env.lookup(type_name) {
+        return Some(sym.devvani_type.clone());
+    }
+    match type_name {
+        "sankhya" | "purnaank" => Some(DevvaniType::Subject("Purnaank".to_string())),
+        "dashaamsha" => Some(DevvaniType::Subject("Dashaamsha".to_string())),
+        "vaak" => Some(DevvaniType::Vaak),
+        _ => None,
+    }
 }
 
 pub struct TypeChecker {
@@ -538,6 +583,24 @@ impl TypeChecker {
                 }
             }
 
+            ASTNode::DravyaDef { name, angas, .. } => {
+                let mut resolved_angas: Vec<(String, DevvaniType)> = Vec::new();
+                for anga in angas {
+                    match resolve_type_name(&self.env, &anga.type_name) {
+                        Some(ty) => resolved_angas.push((anga.name.clone(), ty)),
+                        None => {
+                            self.errors.push(TypeCheckError::DravyaApariyata {
+                                name: anga.type_name.clone(),
+                            });
+                            return DevvaniType::Unknown;
+                        }
+                    }
+                }
+                let dravya_ty = DevvaniType::Dravya(name.clone(), resolved_angas);
+                self.env.define(name, dravya_ty.clone());
+                dravya_ty
+            }
+
             ASTNode::KriyaCall {
                 karta,
                 kriya,
@@ -678,6 +741,30 @@ impl TypeChecker {
                 }
             }
 
+            ASTNode::SamavayaNode { target, anga_name, .. } => {
+                let t_target = self.check(target);
+                match t_target {
+                    DevvaniType::Dravya(_dravya_name, angas) => {
+                        for (name, ty) in angas {
+                            if name == *anga_name {
+                                return ty;
+                            }
+                        }
+                        self.errors.push(TypeCheckError::AngaApraapya {
+                            dravya_name: _dravya_name.clone(),
+                            anga_name: anga_name.clone(),
+                        });
+                        DevvaniType::Unknown
+                    }
+                    _ => {
+                        self.errors.push(TypeCheckError::SamavayaAprayukta {
+                            found: format!("{:?}", t_target),
+                        });
+                        DevvaniType::Unknown
+                    }
+                }
+            }
+
             ASTNode::KramashahNode { item_name, iterable, body, .. } => {
                 let t_iterable = self.check(iterable);
                 let elem_ty = match &t_iterable {
@@ -769,7 +856,7 @@ impl TypeChecker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devvani_ast::{ASTNode, Gana, Lakara, Linga, Span, Vacana};
+    use devvani_ast::{ASTNode, AngaField, Gana, Lakara, Linga, Span, Vacana};
 
     fn span() -> Span {
         Span {
@@ -1607,5 +1694,223 @@ mod tests {
             "expected ApakarshanaAprayukta error, got: {:?}",
             checker.errors
         );
+    }
+
+    fn dravya_def(name: &str, angas: Vec<AngaField>) -> ASTNode {
+        ASTNode::DravyaDef {
+            name: name.to_string(),
+            angas,
+            span: span(),
+        }
+    }
+
+    fn anga_field(name: &str, type_name: &str) -> AngaField {
+        AngaField {
+            name: name.to_string(),
+            type_name: type_name.to_string(),
+            span: span(),
+        }
+    }
+
+    // Dravya (struct) tests
+
+    #[test]
+    fn test_dravya_def_valid_fields() {
+        let mut checker = TypeChecker::new();
+        let def = dravya_def(
+            "manushya",
+            vec![anga_field("naama", "vaak"), anga_field("sankhya", "sankhya")],
+        );
+        let ty = checker.check(&def);
+        assert!(matches!(ty, DevvaniType::Dravya(_, _)));
+        if let DevvaniType::Dravya(name, angas) = &ty {
+            assert_eq!(name, "manushya");
+            assert_eq!(angas.len(), 2);
+            assert_eq!(angas[0], ("naama".to_string(), DevvaniType::Vaak));
+            assert_eq!(angas[1], ("sankhya".to_string(), DevvaniType::Subject("Purnaank".to_string())));
+        }
+    }
+
+    #[test]
+    fn test_dravya_def_empty_fields() {
+        let mut checker = TypeChecker::new();
+        let def = dravya_def("shunya", vec![]);
+        let ty = checker.check(&def);
+        assert!(matches!(ty, DevvaniType::Dravya(_, _)));
+        if let DevvaniType::Dravya(name, angas) = &ty {
+            assert_eq!(name, "shunya");
+            assert!(angas.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_dravya_def_unknown_field_type() {
+        let mut checker = TypeChecker::new();
+        let def = dravya_def("gadha", vec![anga_field("x", "agjadravya")]);
+        let _ty = checker.check(&def);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::DravyaApariyata { .. })),
+            "expected DravyaApariyata error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_samavaya_valid_access() {
+        let mut checker = TypeChecker::new();
+        // Define the struct type first
+        let def = dravya_def(
+            "manushya",
+            vec![anga_field("naama", "vaak"), anga_field("sankhya", "sankhya")],
+        );
+        checker.check(&def);
+
+        // Create a variable whose type is the struct
+        let obj = ASTNode::AstiNode {
+            naama: "m".to_string(),
+            mulya: Box::new(ASTNode::Nama {
+                base: "manushya".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+        };
+        checker.check(&obj);
+
+        // Access field
+        let access = ASTNode::SamavayaNode {
+            target: Box::new(ASTNode::Nama {
+                base: "m".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            anga_name: "naama".to_string(),
+            span: span(),
+        };
+        let ty = checker.check(&access);
+        assert_eq!(ty, DevvaniType::Vaak);
+    }
+
+    #[test]
+    fn test_samavaya_unknown_field() {
+        let mut checker = TypeChecker::new();
+        let def = dravya_def(
+            "manushya",
+            vec![anga_field("naama", "vaak")],
+        );
+        checker.check(&def);
+
+        let obj = ASTNode::AstiNode {
+            naama: "m".to_string(),
+            mulya: Box::new(ASTNode::Nama {
+                base: "manushya".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+        };
+        checker.check(&obj);
+
+        let access = ASTNode::SamavayaNode {
+            target: Box::new(ASTNode::Nama {
+                base: "m".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            anga_name: "agaj".to_string(),
+            span: span(),
+        };
+        let _ty = checker.check(&access);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AngaApraapya { .. })),
+            "expected AngaApraapya error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_samavaya_on_non_dravya() {
+        let mut checker = TypeChecker::new();
+        let access = ASTNode::SamavayaNode {
+            target: Box::new(ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }),
+            anga_name: "x".to_string(),
+            span: span(),
+        };
+        let _ty = checker.check(&access);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SamavayaAprayukta { .. })),
+            "expected SamavayaAprayukta error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_samavaya_chained_access() {
+        let mut checker = TypeChecker::new();
+        // Define two structs: pura (with field 'sthal') and khetra (with field 'pura')
+        checker.check(&dravya_def(
+            "pura",
+            vec![anga_field("sthal", "vaak")],
+        ));
+        let def2 = dravya_def(
+            "khetra",
+            vec![anga_field("pura", "pura")],
+        );
+        checker.check(&def2);
+
+        // Create a variable of type khetra
+        let obj = ASTNode::AstiNode {
+            naama: "k".to_string(),
+            mulya: Box::new(ASTNode::Nama {
+                base: "khetra".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+        };
+        checker.check(&obj);
+
+        // First access: k.pura -> Dravya("pura", [(sthal, Vaak)])
+        let access1 = ASTNode::SamavayaNode {
+            target: Box::new(ASTNode::Nama {
+                base: "k".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            anga_name: "pura".to_string(),
+            span: span(),
+        };
+        let ty1 = checker.check(&access1);
+        assert_eq!(ty1, DevvaniType::Dravya("pura".to_string(), vec![("sthal".to_string(), DevvaniType::Vaak)]));
+
+        // Second access: (k.pura).sthal -> Vaak
+        let access2 = ASTNode::SamavayaNode {
+            target: Box::new(access1),
+            anga_name: "sthal".to_string(),
+            span: span(),
+        };
+        let ty2 = checker.check(&access2);
+        assert_eq!(ty2, DevvaniType::Vaak);
     }
 }

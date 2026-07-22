@@ -5,6 +5,8 @@ pub type VisitResult = Result<(), String>;
 pub trait ASTVisitor {
     fn visit_karyakram(&mut self, shareera: &[ASTNode]) -> VisitResult;
     fn visit_dhatu_def(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_dravya_def(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_samavaya(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_kriya_call(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_nama(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_asti(&mut self, node: &ASTNode) -> VisitResult;
@@ -28,6 +30,8 @@ pub trait ASTVisitor {
         match node {
             ASTNode::KaryakramNode { shareera, .. } => self.visit_karyakram(shareera),
             ASTNode::DhatuDef { .. } => self.visit_dhatu_def(node),
+            ASTNode::DravyaDef { .. } => self.visit_dravya_def(node),
+            ASTNode::SamavayaNode { .. } => self.visit_samavaya(node),
             ASTNode::KriyaCall { .. } => self.visit_kriya_call(node),
             ASTNode::Nama { .. } => self.visit_nama(node),
             ASTNode::AstiNode { .. } => self.visit_asti(node),
@@ -89,6 +93,25 @@ impl ASTVisitor for PrettyPrinter {
         if let ASTNode::DhatuDef { name, lakara, .. } = node {
             self.print_indent();
             println!("DhatuDef [{}] lakara={:?}", name, lakara);
+        }
+        Ok(())
+    }
+
+    fn visit_dravya_def(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::DravyaDef { name, angas, .. } = node {
+            self.print_indent();
+            println!("DravyaDef [{}] {} angas", name, angas.len());
+        }
+        Ok(())
+    }
+
+    fn visit_samavaya(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::SamavayaNode { anga_name, target, .. } = node {
+            self.print_indent();
+            println!("Samavaya .{}", anga_name);
+            self.indent += 1;
+            self.visit(target)?;
+            self.indent -= 1;
         }
         Ok(())
     }

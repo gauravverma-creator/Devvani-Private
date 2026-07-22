@@ -18,6 +18,7 @@ pub enum SymbolKind {
     Nama { linga: Linga },
     Param { role: KarakaRole },
     Upasarga(Upasarga),
+    Dravya,
 }
 
 pub struct SymbolTable {

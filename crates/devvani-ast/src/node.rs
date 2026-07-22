@@ -126,6 +126,13 @@ pub struct KarakaParam {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct AngaField {
+    pub name: String,
+    pub type_name: String,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ASTNode {
     KaryakramNode {
         shareera: Vec<ASTNode>,
@@ -140,6 +147,11 @@ pub enum ASTNode {
         upasargas: Vec<Upasarga>,
         return_karaka: Option<KarakaRole>,
         body: Vec<ASTNode>,
+        span: Span,
+    },
+    DravyaDef {
+        name: String,
+        angas: Vec<AngaField>,
         span: Span,
     },
     KriyaCall {
@@ -284,12 +296,17 @@ PanktiNode {
          elements: Vec<ASTNode>,
          span: Span,
      },
-     VinyasaNode {
-        target: Box<ASTNode>,
-        index: Box<ASTNode>,
-        span: Span,
-    },
-    KramashahNode {
+      VinyasaNode {
+         target: Box<ASTNode>,
+         index: Box<ASTNode>,
+         span: Span,
+     },
+     SamavayaNode {
+         target: Box<ASTNode>,
+         anga_name: String,
+         span: Span,
+     },
+     KramashahNode {
         item_name: String,
         iterable: Box<ASTNode>,
         body: Vec<ASTNode>,

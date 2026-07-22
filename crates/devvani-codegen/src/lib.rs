@@ -3,7 +3,7 @@ use devvani_ast::KarakaRole;
 use devvani_typesystem::{
     lakara_from_str, lakara_to_scope,
     vaak::{MoveChecker, VaakOwnership},
-    Lakara, TypeChecker,
+    Lakara, TypeChecker, DevvaniType,
 };
 
 // ── Error type ──────────────────────────────────────────────
@@ -506,6 +506,36 @@ impl Codegen {
 
                 self.instructions.push(Instruction::ExitScope);
             }
+            ASTNode::DravyaDef { name, angas, .. } => {
+                self.rust_output
+                    .push_str(&format!("{}#[derive(Debug, Clone)]\n", self.indent_str()));
+                if angas.is_empty() {
+                    self.rust_output
+                        .push_str(&format!("{}struct {} {{}}\n", self.indent_str(), name));
+                } else {
+                    self.rust_output
+                        .push_str(&format!("{}struct {} {{\n", self.indent_str(), name));
+
+                    self.indent += 1;
+                    for (i, anga) in angas.iter().enumerate() {
+                        if i > 0 {
+                            self.rust_output.push_str(",\n");
+                        }
+                        let rust_ty = self.type_name_to_rust_type(&anga.type_name);
+                        self.rust_output.push_str(&format!(
+                            "{}{}: {}",
+                            self.indent_str(),
+                            anga.name,
+                            rust_ty
+                        ));
+                    }
+                    self.rust_output.push_str("\n");
+                    self.indent -= 1;
+
+                    self.rust_output
+                        .push_str(&format!("{}}}\n", self.indent_str()));
+                }
+            }
             ASTNode::Samasa {
                 components,
                 resolved,
@@ -519,6 +549,11 @@ impl Codegen {
                     "samasa: {}",
                     components.join(".")
                 )));
+            }
+            ASTNode::SamavayaNode { target, anga_name, .. } => {
+                self.emit(target)?;
+                self.rust_output.push_str(".");
+                self.rust_output.push_str(anga_name);
             }
             _ => {
                 let msg = format!("Unhandled node: {:?}", node);
@@ -534,6 +569,59 @@ impl Codegen {
         "    ".repeat(self.indent)
     }
 
+    fn type_name_to_rust_type(&self, type_name: &str) -> String {
+        if let Some(ty) = self.type_checker.env.lookup_type(type_name) {
+            match ty {
+                DevvaniType::Vaak => "String".to_string(),
+                DevvaniType::VaakBorrow => "&str".to_string(),
+                DevvaniType::Subject(ref s) => match s.as_str() {
+                    "Purnaank" => "i64".to_string(),
+                    "Dashaamsha" => "f64".to_string(),
+                    _ => s.clone(),
+                },
+                DevvaniType::Dravya(ref name, _) => name.clone(),
+                DevvaniType::Pankti(ref elem, len) => {
+                    let elem_ty = self.type_name_to_rust_type_by_type(elem);
+                    format!("[{}; {}]", elem_ty, len)
+                }
+                DevvaniType::Avali(ref elem) => {
+                    let elem_ty = self.type_name_to_rust_type_by_type(elem);
+                    format!("Vec<{}>", elem_ty)
+                }
+                _ => type_name.to_string(),
+            }
+        } else {
+            match type_name {
+                "sankhya" | "purnaank" => "i64".to_string(),
+                "dashaamsha" => "f64".to_string(),
+                "vaak" => "String".to_string(),
+                _ => type_name.to_string(),
+            }
+        }
+    }
+
+    fn type_name_to_rust_type_by_type(&self, ty: &DevvaniType) -> String {
+        match ty {
+            DevvaniType::Vaak => "String".to_string(),
+            DevvaniType::VaakBorrow => "&str".to_string(),
+            DevvaniType::Subject(ref s) => match s.as_str() {
+                "Purnaank" => "i64".to_string(),
+                "Dashaamsha" => "f64".to_string(),
+                _ => s.clone(),
+            },
+            DevvaniType::Dravya(ref name, _) => name.clone(),
+            DevvaniType::Pankti(ref elem, len) => {
+                let elem_ty = self.type_name_to_rust_type_by_type(elem);
+                format!("[{}; {}]", elem_ty, len)
+            }
+            DevvaniType::Avali(ref elem) => {
+                let elem_ty = self.type_name_to_rust_type_by_type(elem);
+                format!("Vec<{}>", elem_ty)
+            }
+            _ => "auto".to_string(),
+        }
+    }
+
     pub fn rust_source(&self) -> &str {
         &self.rust_output
     }
@@ -546,7 +634,7 @@ impl Codegen {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use devvani_ast::{ASTNode, Linga as AstLinga, Span, Vacana as AstVacana, Vibhakti};
+    use devvani_ast::{ASTNode, AngaField, Linga as AstLinga, Span, Vacana as AstVacana, Vibhakti};
 
     fn dummy_span() -> Span {
         Span {
@@ -973,5 +1061,104 @@ mod tests {
         assert!(codegen.emit(&node).is_ok());
         let output = codegen.rust_source();
         assert!(output.contains("myavali.pop().unwrap()"));
+    }
+
+    #[test]
+    fn test_dravya_def_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let angas = vec![
+            AngaField {
+                name: "naama".to_string(),
+                type_name: "vaak".to_string(),
+                span: dummy_span(),
+            },
+            AngaField {
+                name: "sankhya".to_string(),
+                type_name: "sankhya".to_string(),
+                span: dummy_span(),
+            },
+        ];
+        let node = ASTNode::DravyaDef {
+            name: "manushya".to_string(),
+            angas,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("#[derive(Debug, Clone)]"));
+        assert!(output.contains("struct manushya {"));
+        assert!(output.contains("naama: String,"));
+        assert!(output.contains("sankhya: i64"));
+        assert!(output.contains("}"));
+    }
+
+    #[test]
+    fn test_dravya_def_empty_fields_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::DravyaDef {
+            name: "shunya".to_string(),
+            angas: vec![],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source().trim();
+        assert!(output.contains("struct shunya {}"));
+    }
+
+    #[test]
+    fn test_samavaya_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let target = ASTNode::PurnaankLiteral {
+            value: 1,
+            span: dummy_span(),
+        };
+        let node = ASTNode::SamavayaNode {
+            target: Box::new(target),
+            anga_name: "naama".to_string(),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "1.naama");
+    }
+
+    #[test]
+    fn test_samavaya_chained_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let inner = ASTNode::SamavayaNode {
+            target: Box::new(ASTNode::PurnaankLiteral {
+                value: 1,
+                span: dummy_span(),
+            }),
+            anga_name: "a".to_string(),
+            span: dummy_span(),
+        };
+        let outer = ASTNode::SamavayaNode {
+            target: Box::new(inner),
+            anga_name: "b".to_string(),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&outer).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "1.a.b");
+    }
+
+    #[test]
+    fn test_dravya_with_dravya_typed_field_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let angas = vec![
+            AngaField {
+                name: "inner".to_string(),
+                type_name: "outer".to_string(),
+                span: dummy_span(),
+            },
+        ];
+        let node = ASTNode::DravyaDef {
+            name: "wrapper".to_string(),
+            angas,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("inner: outer"));
+        assert!(output.contains("struct wrapper {"));
     }
 }

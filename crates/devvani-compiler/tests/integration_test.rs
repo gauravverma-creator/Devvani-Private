@@ -165,3 +165,17 @@ fn test_vibhakti_dvitiya_parameter_type() {
     let result = vibhakti_to_type(&VibhaktiRole::Dvitiya, "ganana");
     assert_eq!(result, DevvaniType::Parameter("ganana".to_string()));
 }
+
+#[test]
+fn test_nirmana_codegen_pipeline() {
+    let source = "manushya dravya sankhya1 sankhya sankhya2 sankhya । manushya nirmāṇa 25 180 ।";
+    let _ = fs::write("examples/nirmana_integration.dvn", source);
+    let result = Compiler::new("examples/nirmana_integration.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        code.contains("manushya { sankhya1: 25, sankhya2: 180 }"),
+        "expected nirmana struct literal in generated code:\n{}",
+        code
+    );
+}

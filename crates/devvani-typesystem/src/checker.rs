@@ -48,6 +48,15 @@ pub enum TypeCheckError {
         dravya_name: String,
         anga_name: String,
     },
+    NirmanaAsangati {
+        dravya_name: String,
+        expected_count: usize,
+        found_count: usize,
+        anga_name: String,
+        position: usize,
+        expected_type: DevvaniType,
+        found_type: DevvaniType,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -142,6 +151,21 @@ impl fmt::Display for TypeCheckError {
                     anga_name, dravya_name
                 )
             }
+            TypeCheckError::NirmanaAsangati { dravya_name, expected_count, found_count, anga_name, position, expected_type, found_type } => {
+                if expected_count != found_count {
+                    write!(
+                        f,
+                        "Nirmana-asangati: expected {} values for struct '{}', found {}",
+                        expected_count, dravya_name, found_count
+                    )
+                } else {
+                    write!(
+                        f,
+                        "Nirmana-asangati: at position {} (field '{}') on '{}', expected {:?}, found {:?}",
+                        position, anga_name, dravya_name, expected_type, found_type
+                    )
+                }
+            }
         }
     }
 }
@@ -235,6 +259,9 @@ ASTNode::VinyasaNode { target, index, .. } => {
          }
          ASTNode::SamavayaNode { target, .. } => f(target),
          ASTNode::DravyaDef { .. } => {}
+         ASTNode::NirmanaNode { values, .. } => {
+             values.iter().for_each(|n| f(n));
+         }
          _ => {}
     }
 }
@@ -599,6 +626,57 @@ impl TypeChecker {
                 let dravya_ty = DevvaniType::Dravya(name.clone(), resolved_angas);
                 self.env.define(name, dravya_ty.clone());
                 dravya_ty
+            }
+
+            ASTNode::NirmanaNode { dravya_name, values, .. } => {
+                let sym = match self.env.lookup(dravya_name) {
+                    Some(s) => s,
+                    None => {
+                        self.errors.push(TypeCheckError::DravyaApariyata {
+                            name: dravya_name.clone(),
+                        });
+                        return DevvaniType::Unknown;
+                    }
+                };
+                let (_dravya_type_name, angas): (String, Vec<(String, DevvaniType)>) = match &sym.devvani_type {
+                    DevvaniType::Dravya(name, angas) => (name.clone(), angas.clone()),
+                    _ => {
+                        self.errors.push(TypeCheckError::DravyaApariyata {
+                            name: dravya_name.clone(),
+                        });
+                        return DevvaniType::Unknown;
+                    }
+                };
+                let expected_count = angas.len();
+                let found_count = values.len();
+                if expected_count != found_count {
+                    self.errors.push(TypeCheckError::NirmanaAsangati {
+                        dravya_name: dravya_name.clone(),
+                        expected_count,
+                        found_count,
+                        anga_name: String::new(),
+                        position: 0,
+                        expected_type: DevvaniType::Unknown,
+                        found_type: DevvaniType::Unknown,
+                    });
+                    return DevvaniType::Unknown;
+                }
+                for (i, (anga_name, expected_ty)) in angas.iter().enumerate() {
+                    let found_ty = self.check(&values[i]);
+                    if found_ty != *expected_ty {
+                        self.errors.push(TypeCheckError::NirmanaAsangati {
+                            dravya_name: dravya_name.clone(),
+                            expected_count,
+                            found_count,
+                            anga_name: anga_name.clone(),
+                            position: i,
+                            expected_type: expected_ty.clone(),
+                            found_type: found_ty.clone(),
+                        });
+                        return DevvaniType::Unknown;
+                    }
+                }
+                DevvaniType::Dravya(dravya_name.clone(), angas)
             }
 
             ASTNode::KriyaCall {
@@ -1912,5 +1990,129 @@ mod tests {
         };
         let ty2 = checker.check(&access2);
         assert_eq!(ty2, DevvaniType::Vaak);
+    }
+
+    // Nirmāṇa (struct instantiation) tests
+
+    fn nirmana(dravya_name: &str, values: Vec<ASTNode>) -> ASTNode {
+        ASTNode::NirmanaNode {
+            dravya_name: dravya_name.to_string(),
+            values,
+            span: span(),
+        }
+    }
+
+    #[test]
+    fn test_nirmana_valid_instantiation() {
+        let mut checker = TypeChecker::new();
+        checker.check(&dravya_def(
+            "manushya",
+            vec![anga_field("sankhya", "sankhya"), anga_field("dashaamsha", "dashaamsha")],
+        ));
+
+        let instantiation = nirmana(
+            "manushya",
+            vec![
+                ASTNode::PurnaankLiteral { value: 5, span: span() },
+                ASTNode::DashaamshaLiteral { value: 3.0, span: span() },
+            ],
+        );
+        let ty = checker.check(&instantiation);
+        assert!(matches!(ty, DevvaniType::Dravya(_, _)));
+        assert_eq!(
+            ty,
+            DevvaniType::Dravya(
+                "manushya".to_string(),
+                vec![
+                    ("sankhya".to_string(), DevvaniType::Subject("Purnaank".to_string())),
+                    ("dashaamsha".to_string(), DevvaniType::Subject("Dashaamsha".to_string())),
+                ]
+            )
+        );
+    }
+
+    #[test]
+    fn test_nirmana_value_count_mismatch() {
+        let mut checker = TypeChecker::new();
+        checker.check(&dravya_def(
+            "manushya",
+            vec![anga_field("sankhya", "sankhya"), anga_field("dashaamsha", "dashaamsha")],
+        ));
+
+        let instantiation = nirmana(
+            "manushya",
+            vec![ASTNode::PurnaankLiteral { value: 5, span: span() }],
+        );
+        let _ty = checker.check(&instantiation);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::NirmanaAsangati { .. })),
+            "expected NirmanaAsangati error, got: {:?}",
+            checker.errors
+        );
+        if let Some(TypeCheckError::NirmanaAsangati { expected_count, found_count, .. }) = checker.errors.iter().find(|e| matches!(e, TypeCheckError::NirmanaAsangati { .. })) {
+            assert_eq!(*expected_count, 2);
+            assert_eq!(*found_count, 1);
+        }
+    }
+
+    #[test]
+    fn test_nirmana_type_mismatch_at_position() {
+        let mut checker = TypeChecker::new();
+        checker.check(&dravya_def(
+            "manushya",
+            vec![anga_field("sankhya", "sankhya"), anga_field("dashaamsha", "dashaamsha")],
+        ));
+
+        let instantiation = nirmana(
+            "manushya",
+            vec![
+                ASTNode::PurnaankLiteral { value: 5, span: span() },
+                ASTNode::PurnaankLiteral { value: 3, span: span() },
+            ],
+        );
+        let _ty = checker.check(&instantiation);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::NirmanaAsangati { .. })),
+            "expected NirmanaAsangati error, got: {:?}",
+            checker.errors
+        );
+        if let Some(TypeCheckError::NirmanaAsangati { anga_name, position, expected_type, found_type, .. }) = checker.errors.iter().find(|e| matches!(e, TypeCheckError::NirmanaAsangati { .. })) {
+            assert_eq!(anga_name, "dashaamsha");
+            assert_eq!(*position, 1);
+            assert_eq!(*expected_type, DevvaniType::Subject("Dashaamsha".to_string()));
+            assert_eq!(*found_type, DevvaniType::Subject("Purnaank".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_nirmana_undefined_dravya_name() {
+        let mut checker = TypeChecker::new();
+        let instantiation = nirmana(
+            "agadravya",
+            vec![ASTNode::PurnaankLiteral { value: 1, span: span() }],
+        );
+        let _ty = checker.check(&instantiation);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::DravyaApariyata { .. })),
+            "expected DravyaApariyata error, got: {:?}",
+            checker.errors
+        );
+        assert!(
+            !checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::NirmanaAsangati { .. })),
+            "expected no NirmanaAsangati error for undefined dravya, got: {:?}",
+            checker.errors
+        );
     }
 }

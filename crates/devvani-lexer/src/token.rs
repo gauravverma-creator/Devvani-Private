@@ -127,6 +127,7 @@ pub enum TokenKind {
      Avali,    // growable array literal keyword
      Dravya,   // struct definition keyword
      Anga,     // struct field keyword
+     Nirmana,  // struct instantiation keyword
 
      // --- SANDHI SPECIAL TOKENS ---
      Visarga,  // ḥ character standalone

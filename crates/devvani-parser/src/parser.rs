@@ -63,9 +63,11 @@ TokenKind::Arambhah => self.parse_karyakram(),
                              Ok(expr)
                          }
                      }
-                 } else if self.check_ahead(1, &TokenKind::Dravya) {
-                     self.parse_dravya_def()
-                 } else if self.check_ahead(1, &TokenKind::Asti) {
+                  } else if self.check_ahead(1, &TokenKind::Dravya) {
+                      self.parse_dravya_def()
+                  } else if self.check_ahead(1, &TokenKind::Nirmana) {
+                      self.parse_nirmana()
+                  } else if self.check_ahead(1, &TokenKind::Asti) {
                     self.parse_asti()
                 } else if self.check_ahead(1, &TokenKind::Bhavati) {
                     self.parse_bhavati()
@@ -261,6 +263,31 @@ TokenKind::Arambhah => self.parse_karyakram(),
         Ok(ASTNode::DravyaDef {
             name,
             angas,
+            span: name_tok.span,
+        })
+    }
+
+    fn parse_nirmana(&mut self) -> Result<ASTNode, ParseError> {
+        let name_tok = self.expect_identifier()?;
+        let dravya_name = if let TokenKind::Naama(n) = name_tok.kind {
+            n
+        } else {
+            unreachable!()
+        };
+
+        self.advance();
+
+        let mut values = Vec::new();
+        while !self.check(&TokenKind::Danda) && !self.is_at_end() {
+            let expr = self.parse_arithmetic()?;
+            values.push(expr);
+        }
+
+        self.expect(TokenKind::Danda)?;
+
+        Ok(ASTNode::NirmanaNode {
+            dravya_name,
+            values,
             span: name_tok.span,
         })
     }
@@ -1444,5 +1471,83 @@ other => panic!("expected KaryakramNode, got {:?}", other),
         ];
         let result = parse_tokens(tokens);
         assert!(result.is_err(), "odd number of field tokens before Danda should error");
+    }
+
+    // Nirmana with values parses correctly
+    #[test]
+    fn test_parse_nirmana_with_values() {
+        let tokens = vec![
+            nm("manushya"),
+            kw(TokenKind::Nirmana),
+            Token {
+                kind: TokenKind::VaakLiteral("raam".to_string()),
+                span: span(),
+            },
+            kw(TokenKind::PurnaankLiteral(25)),
+            kw(TokenKind::PurnaankLiteral(180)),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::NirmanaNode { dravya_name, values, .. } => {
+                        assert_eq!(dravya_name, "manushya");
+                        assert_eq!(values.len(), 3);
+                        assert!(
+                            matches!(&values[0], ASTNode::VaakLiteral { value, .. } if value == "raam")
+                        );
+                        assert!(
+                            matches!(&values[1], ASTNode::PurnaankLiteral { value, .. } if *value == 25)
+                        );
+                        assert!(
+                            matches!(&values[2], ASTNode::PurnaankLiteral { value, .. } if *value == 180)
+                        );
+                    }
+                    other => panic!("expected NirmanaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Nirmana without trailing Danda should error
+    #[test]
+    fn test_parse_nirmana_missing_danda() {
+        let tokens = vec![
+            nm("manushya"),
+            kw(TokenKind::Nirmana),
+            kw(TokenKind::PurnaankLiteral(1)),
+            kw(TokenKind::PurnaankLiteral(2)),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "missing Danda before EOF should error");
+    }
+
+    // Nirmana with zero values parses correctly at parser level
+    #[test]
+    fn test_parse_nirmana_zero_values() {
+        let tokens = vec![
+            nm("manushya"),
+            kw(TokenKind::Nirmana),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::NirmanaNode { dravya_name, values, .. } => {
+                        assert_eq!(dravya_name, "manushya");
+                        assert!(values.is_empty());
+                    }
+                    other => panic!("expected NirmanaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
     }
 }

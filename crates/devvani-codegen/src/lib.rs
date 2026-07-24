@@ -555,6 +555,46 @@ impl Codegen {
                 self.rust_output.push_str(".");
                 self.rust_output.push_str(anga_name);
             }
+            ASTNode::NirmanaNode {
+                dravya_name,
+                values,
+                ..
+            } => {
+                let sym = match self.type_checker.env.lookup(dravya_name) {
+                    Some(s) => s,
+                    None => {
+                        return Err(CodegenError::UnsupportedNode(format!(
+                            "Unknown dravya: {}",
+                            dravya_name
+                        )));
+                    }
+                };
+                let angas = match &sym.devvani_type {
+                    DevvaniType::Dravya(_name, angas) => angas.clone(),
+                    _ => {
+                        return Err(CodegenError::UnsupportedNode(format!(
+                            "{} is not a dravya",
+                            dravya_name
+                        )));
+                    }
+                };
+
+                if angas.is_empty() {
+                    self.rust_output
+                        .push_str(&format!("{}{} {{}}", self.indent_str(), dravya_name));
+                } else {
+                    self.rust_output
+                        .push_str(&format!("{}{} {{ ", self.indent_str(), dravya_name));
+                    for (i, (field_name, _)) in angas.iter().enumerate() {
+                        if i > 0 {
+                            self.rust_output.push_str(", ");
+                        }
+                        self.rust_output.push_str(&format!("{}: ", field_name));
+                        self.emit(&values[i])?;
+                    }
+                    self.rust_output.push_str(" }");
+                }
+            }
             _ => {
                 let msg = format!("Unhandled node: {:?}", node);
                 self.instructions.push(Instruction::Comment(msg.clone()));
@@ -1061,6 +1101,105 @@ mod tests {
         assert!(codegen.emit(&node).is_ok());
         let output = codegen.rust_source();
         assert!(output.contains("myavali.pop().unwrap()"));
+    }
+
+    #[test]
+    fn test_nirmana_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.type_checker.env.define(
+            "manushya",
+            DevvaniType::Dravya(
+                "manushya".to_string(),
+                vec![
+                    ("naama".to_string(), DevvaniType::Vaak),
+                    ("sankhya".to_string(), DevvaniType::Subject("Purnaank".to_string())),
+                ],
+            ),
+        );
+        let node = ASTNode::NirmanaNode {
+            dravya_name: "manushya".to_string(),
+            values: vec![
+                ASTNode::VaakLiteral {
+                    value: "raamah".to_string(),
+                    span: dummy_span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 25,
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "manushya { naama: \"raamah\", sankhya: 25 }");
+    }
+
+    #[test]
+    fn test_nirmana_field_ordering() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.type_checker.env.define(
+            "manushya",
+            DevvaniType::Dravya(
+                "manushya".to_string(),
+                vec![
+                    ("naama".to_string(), DevvaniType::Vaak),
+                    ("sankhya1".to_string(), DevvaniType::Subject("Purnaank".to_string())),
+                    ("sankhya2".to_string(), DevvaniType::Subject("Purnaank".to_string())),
+                ],
+            ),
+        );
+        let node = ASTNode::NirmanaNode {
+            dravya_name: "manushya".to_string(),
+            values: vec![
+                ASTNode::VaakLiteral {
+                    value: "raamah".to_string(),
+                    span: dummy_span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 25,
+                    span: dummy_span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 180,
+                    span: dummy_span(),
+                },
+            ],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        let naama_pos = output.find("naama:").unwrap();
+        let sankhya1_pos = output.find("sankhya1:").unwrap();
+        let sankhya2_pos = output.find("sankhya2:").unwrap();
+        assert!(naama_pos < sankhya1_pos);
+        assert!(sankhya1_pos < sankhya2_pos);
+    }
+
+    #[test]
+    fn test_nirmana_empty_dravya_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.type_checker.env.define(
+            "shunya",
+            DevvaniType::Dravya("shunya".to_string(), vec![]),
+        );
+        let node = ASTNode::NirmanaNode {
+            dravya_name: "shunya".to_string(),
+            values: vec![],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "shunya {}");
+    }
+
+    #[test]
+    fn test_nirmana_unknown_dravya_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::NirmanaNode {
+            dravya_name: "unknown".to_string(),
+            values: vec![],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_err());
     }
 
     #[test]

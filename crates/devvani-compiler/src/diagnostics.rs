@@ -246,13 +246,37 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 roman_title: "Samavaya Aprayuktah".to_string(),
                 message: format!(
                     "Samavaya (field access) sirf Dravya (struct) par apply hota hai. \
-                     Found type: {}.",
+                      Found type: {}.",
                     found
                 ),
                 sutra_ref: Some(
                     "Vaiśeṣika Sūtra (Samavaya as inherence relation)".to_string()
                 ),
                 hint: None,
+            },
+            TypeCheckError::NirmanaAsangati { dravya_name, expected_count, found_count, anga_name, position, expected_type, found_type } => {
+                let message = if expected_count != found_count {
+                    format!(
+                        "Nirmāṇa (struct instantiation) mein values ki sankhya match nahi \
+                         karti. Struct '{}' ke liye {} values apekshit the, par {} mile.",
+                        dravya_name, expected_count, found_count
+                    )
+                } else {
+                    format!(
+                        "Nirmāṇa (struct instantiation) mein field '{}' (sthaan {}) ki \
+                         prakara asangata hai struct '{}' mein. Expected {:?}, found {:?}.",
+                        anga_name, position, dravya_name, expected_type, found_type
+                    )
+                };
+                Diagnostic {
+                    severity: Severity::Dosha,
+                    code: "D060".to_string(),
+                    sanskrit_title: "निर्माण-असङ्गति".to_string(),
+                    roman_title: "Nirmana Asangati".to_string(),
+                    message,
+                    sutra_ref: None,
+                    hint: None,
+                }
             }
         }
     }
@@ -540,5 +564,44 @@ mod tests {
         assert!(diag.display().contains("Samavaya Aprayuktah"));
         assert!(diag.sanskrit_title.contains("समवाय-अप्रयुक्तः"));
         assert!(diag.sutra_ref.unwrap().contains("Vaiśeṣika Sūtra"));
+    }
+
+    #[test]
+    fn test_from_type_error_nirmana_asangati_count() {
+        let err = TypeCheckError::NirmanaAsangati {
+            dravya_name: "manushya".to_string(),
+            expected_count: 2,
+            found_count: 1,
+            anga_name: String::new(),
+            position: 0,
+            expected_type: devvani_typesystem::DevvaniType::Unknown,
+            found_type: devvani_typesystem::DevvaniType::Unknown,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D060");
+        assert!(diag.display().contains("Nirmana Asangati"));
+        assert!(diag.sanskrit_title.contains("निर्माण-असङ्गति"));
+        assert!(diag.message.contains("2 values"));
+        assert!(diag.message.contains("1 mile"));
+        assert!(diag.message.contains("manushya"));
+    }
+
+    #[test]
+    fn test_from_type_error_nirmana_asangati_type() {
+        let err = TypeCheckError::NirmanaAsangati {
+            dravya_name: "manushya".to_string(),
+            expected_count: 2,
+            found_count: 2,
+            anga_name: "sankhya".to_string(),
+            position: 1,
+            expected_type: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+            found_type: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D060");
+        assert!(diag.display().contains("Nirmana Asangati"));
+        assert!(diag.message.contains("sthaan 1"));
+        assert!(diag.message.contains("sankhya"));
+        assert!(diag.message.contains("manushya"));
     }
 }

@@ -250,6 +250,7 @@ impl<'a> Lexer<'a> {
              "avali" => TokenKind::Avali,
              "dravya" | "Dravya" => TokenKind::Dravya,
              "anga" | "Anga" => TokenKind::Anga,
+             "nirmāṇa" | "Nirmāṇa" => TokenKind::Nirmana,
 
              _ => TokenKind::Naama(id),
         };

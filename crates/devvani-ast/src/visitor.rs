@@ -6,6 +6,7 @@ pub trait ASTVisitor {
     fn visit_karyakram(&mut self, shareera: &[ASTNode]) -> VisitResult;
     fn visit_dhatu_def(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_dravya_def(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_nirmana(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_samavaya(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_kriya_call(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_nama(&mut self, node: &ASTNode) -> VisitResult;
@@ -31,6 +32,7 @@ pub trait ASTVisitor {
             ASTNode::KaryakramNode { shareera, .. } => self.visit_karyakram(shareera),
             ASTNode::DhatuDef { .. } => self.visit_dhatu_def(node),
             ASTNode::DravyaDef { .. } => self.visit_dravya_def(node),
+             ASTNode::NirmanaNode { .. } => self.visit_nirmana(node),
             ASTNode::SamavayaNode { .. } => self.visit_samavaya(node),
             ASTNode::KriyaCall { .. } => self.visit_kriya_call(node),
             ASTNode::Nama { .. } => self.visit_nama(node),
@@ -101,6 +103,14 @@ impl ASTVisitor for PrettyPrinter {
         if let ASTNode::DravyaDef { name, angas, .. } = node {
             self.print_indent();
             println!("DravyaDef [{}] {} angas", name, angas.len());
+        }
+        Ok(())
+    }
+
+    fn visit_nirmana(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::NirmanaNode { dravya_name, values, .. } = node {
+            self.print_indent();
+            println!("NirmanaNode [{}] {} values", dravya_name, values.len());
         }
         Ok(())
     }

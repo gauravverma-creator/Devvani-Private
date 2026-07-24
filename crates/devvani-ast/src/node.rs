@@ -154,7 +154,12 @@ pub enum ASTNode {
         angas: Vec<AngaField>,
         span: Span,
     },
-    KriyaCall {
+     NirmanaNode {
+         dravya_name: String,
+         values: Vec<ASTNode>,
+         span: Span,
+     },
+     KriyaCall {
         karta: Option<Box<ASTNode>>,
         kriya: String,
         karma: Vec<ASTNode>,

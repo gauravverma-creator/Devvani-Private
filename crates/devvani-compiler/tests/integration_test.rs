@@ -5,7 +5,7 @@ use std::fs;
 fn test_pipeline_hello() {
     let _ = fs::write(
         "examples/hello_integration.dvn",
-        "phalam asti 5 । phalam vadati ।",
+        "phalamulya asti 5 । phalamulya vadati ।",
     );
     let result = Compiler::new("examples/hello_integration.dvn").compile();
     assert!(result.is_ok(), "{:?}", result.err());
@@ -20,7 +20,7 @@ fn test_pipeline_samasa() {
 
 #[test]
 fn test_rust_output_not_empty() {
-    let _ = fs::write("examples/hello_integration.dvn", "phalam asti 5 ।");
+    let _ = fs::write("examples/hello_integration.dvn", "phalamulya asti 5 ।");
     let result = Compiler::new("examples/hello_integration.dvn").compile();
     if let Ok(output) = result {
         assert!(!output.trim().is_empty());

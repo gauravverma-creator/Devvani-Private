@@ -128,6 +128,11 @@ pub enum TokenKind {
      Dravya,   // struct definition keyword
      Anga,     // struct field keyword
      Nirmana,  // struct instantiation keyword
+     Phalam,   // function return type keyword (Phalam-Samprapti pattern)
+     Arogya,   // error-handling success constructor
+     Dosha,    // error-handling failure constructor
+     Nidana,   // error-handling match/inspection keyword
+     Samprapti, // error-propagation postfix (? operator)
 
      // --- SANDHI SPECIAL TOKENS ---
      Visarga,  // ḥ character standalone

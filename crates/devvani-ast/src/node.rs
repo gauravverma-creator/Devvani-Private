@@ -146,6 +146,7 @@ pub enum ASTNode {
         params: Vec<KarakaParam>,
         upasargas: Vec<Upasarga>,
         return_karaka: Option<KarakaRole>,
+        return_type: Option<Box<ASTNode>>,
         body: Vec<ASTNode>,
         span: Span,
     },
@@ -157,6 +158,31 @@ pub enum ASTNode {
      NirmanaNode {
          dravya_name: String,
          values: Vec<ASTNode>,
+         span: Span,
+     },
+     PhalamType {
+         success_type: String,
+         error_type: String,
+         span: Span,
+     },
+     ArogyaNode {
+         value: Box<ASTNode>,
+         span: Span,
+     },
+     DoshaNode {
+         value: Box<ASTNode>,
+         span: Span,
+     },
+     NidanaNode {
+         target: Box<ASTNode>,
+         arogya_bind: String,
+         arogya_body: Vec<ASTNode>,
+         dosha_bind: String,
+         dosha_body: Vec<ASTNode>,
+         span: Span,
+     },
+     SamprapatiNode {
+         expr: Box<ASTNode>,
          span: Span,
      },
      KriyaCall {

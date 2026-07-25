@@ -17,7 +17,7 @@ fn test_pipeline_simple_function() {
 
     let ast = ASTNode::KaryakramNode {
         shareera: vec![ASTNode::DhatuDef {
-            name: "main".to_string(),
+            name: "test_pipeline".to_string(),
             lakara: Lakara::Lat,
             gana: Gana::Bhvadi,
             linga: Linga::Pullinga,
@@ -25,6 +25,7 @@ fn test_pipeline_simple_function() {
             params: vec![],
             upasargas: vec![],
             return_karaka: None,
+            return_type: None,
             body: vec![ASTNode::PurnaankLiteral {
                 value: 0,
                 span: dummy_span(),
@@ -45,7 +46,7 @@ fn test_pipeline_with_variables() {
 
     let ast = ASTNode::KaryakramNode {
         shareera: vec![ASTNode::DhatuDef {
-            name: "test".to_string(),
+            name: "test_vars".to_string(),
             lakara: Lakara::Lat,
             gana: Gana::Bhvadi,
             linga: Linga::Pullinga,
@@ -53,6 +54,7 @@ fn test_pipeline_with_variables() {
             params: vec![],
             upasargas: vec![],
             return_karaka: None,
+            return_type: None,
             body: vec![
                 ASTNode::AstiNode {
                     naama: "x".to_string(),

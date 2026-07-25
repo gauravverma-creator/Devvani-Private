@@ -110,7 +110,7 @@ mod tests {
     #[test]
     fn test_compile_hello() {
         let _ = fs::create_dir_all("examples");
-        let _ = fs::write("examples/hello_test.dvn", "phalam asti 5 ।");
+        let _ = fs::write("examples/hello_test.dvn", "phalamulya asti 5 ।");
 
         let compiler = Compiler::new("examples/hello_test.dvn");
         let result = compiler.compile();

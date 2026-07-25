@@ -7,6 +7,11 @@ pub trait ASTVisitor {
     fn visit_dhatu_def(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_dravya_def(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_nirmana(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_phalam_type(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_arogya(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_dosha(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_nidana(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_samavaya(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_kriya_call(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_nama(&mut self, node: &ASTNode) -> VisitResult;
@@ -33,7 +38,12 @@ pub trait ASTVisitor {
             ASTNode::DhatuDef { .. } => self.visit_dhatu_def(node),
             ASTNode::DravyaDef { .. } => self.visit_dravya_def(node),
              ASTNode::NirmanaNode { .. } => self.visit_nirmana(node),
-            ASTNode::SamavayaNode { .. } => self.visit_samavaya(node),
+             ASTNode::PhalamType { .. } => self.visit_phalam_type(node),
+             ASTNode::ArogyaNode { .. } => self.visit_arogya(node),
+             ASTNode::DoshaNode { .. } => self.visit_dosha(node),
+             ASTNode::NidanaNode { .. } => self.visit_nidana(node),
+             ASTNode::SamprapatiNode { .. } => self.visit_samprapti(node),
+             ASTNode::SamavayaNode { .. } => self.visit_samavaya(node),
             ASTNode::KriyaCall { .. } => self.visit_kriya_call(node),
             ASTNode::Nama { .. } => self.visit_nama(node),
             ASTNode::AstiNode { .. } => self.visit_asti(node),
@@ -111,6 +121,63 @@ impl ASTVisitor for PrettyPrinter {
         if let ASTNode::NirmanaNode { dravya_name, values, .. } = node {
             self.print_indent();
             println!("NirmanaNode [{}] {} values", dravya_name, values.len());
+        }
+        Ok(())
+    }
+
+    fn visit_phalam_type(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::PhalamType { success_type, error_type, .. } = node {
+            self.print_indent();
+            println!("PhalamType <{}, {}>", success_type, error_type);
+        }
+        Ok(())
+    }
+
+    fn visit_arogya(&mut self, node: &ASTNode) -> VisitResult {
+        self.print_indent();
+        println!("Arogya");
+        self.indent += 1;
+        if let ASTNode::ArogyaNode { value, .. } = node {
+            self.visit(value)?;
+        }
+        self.indent -= 1;
+        Ok(())
+    }
+
+    fn visit_dosha(&mut self, node: &ASTNode) -> VisitResult {
+        self.print_indent();
+        println!("Dosha");
+        self.indent += 1;
+        if let ASTNode::DoshaNode { value, .. } = node {
+            self.visit(value)?;
+        }
+        self.indent -= 1;
+        Ok(())
+    }
+
+    fn visit_nidana(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::NidanaNode { arogya_bind, dosha_bind, arogya_body, dosha_body, .. } = node {
+            self.print_indent();
+            println!("Nidana [arogya:{}] [dosha:{}]", arogya_bind, dosha_bind);
+            self.indent += 1;
+            for stmt in arogya_body {
+                self.visit(stmt)?;
+            }
+            for stmt in dosha_body {
+                self.visit(stmt)?;
+            }
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::SamprapatiNode { expr, .. } = node {
+            self.print_indent();
+            println!("Samprapti");
+            self.indent += 1;
+            self.visit(expr)?;
+            self.indent -= 1;
         }
         Ok(())
     }

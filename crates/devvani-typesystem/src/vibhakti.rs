@@ -32,6 +32,8 @@ pub enum DevvaniType {
     Avali(Box<DevvaniType>),
     /// Dravya — struct type (name, [(anga_name, ang_type), ...])
     Dravya(String, Vec<(String, DevvaniType)>),
+    /// Phalam — result type (success type, error type)
+    Phalam(Box<DevvaniType>, Box<DevvaniType>),
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -103,6 +105,7 @@ DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
              DevvaniType::Pankti(elem_ty, len) => write!(f, "Pankti({}, {})", elem_ty, len),
              DevvaniType::Avali(elem_ty) => write!(f, "Avali({})", elem_ty),
              DevvaniType::Dravya(name, _angas) => write!(f, "Dravya({})", name),
+             DevvaniType::Phalam(success, error) => write!(f, "Phalam({}, {})", success, error),
          }
     }
 }

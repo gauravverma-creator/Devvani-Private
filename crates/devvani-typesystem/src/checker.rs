@@ -57,6 +57,18 @@ pub enum TypeCheckError {
         expected_type: DevvaniType,
         found_type: DevvaniType,
     },
+    PhalaVisamgati {
+        expected: DevvaniType,
+        found: DevvaniType,
+    },
+    NidanaAparichaya,
+    PancakaAvishishtata,
+    SamprāptiAyogyatā,
+    DoshaAsangati {
+        expected: DevvaniType,
+        found: DevvaniType,
+    },
+    PhalaSandarbhaAbhava,
 }
 
 impl fmt::Display for TypeCheckError {
@@ -166,6 +178,24 @@ impl fmt::Display for TypeCheckError {
                     )
                 }
             }
+            TypeCheckError::PhalaVisamgati { expected, found } => {
+                write!(f, "Phala-visamgati: expected {:?}, found {:?}", expected, found)
+            }
+            TypeCheckError::NidanaAparichaya => {
+                write!(f, "Nidana-aparichaya: Nidana target not Phalam type")
+            }
+            TypeCheckError::PancakaAvishishtata => {
+                write!(f, "Pancaka-avishishtata: Nidana missing arogya or dosha arm")
+            }
+            TypeCheckError::SamprāptiAyogyatā => {
+                write!(f, "Samprāpti-ayogyatā: Samprapti outside Phalam-returning function")
+            }
+            TypeCheckError::DoshaAsangati { expected, found } => {
+                write!(f, "Dosha-asangati: expected {:?}, found {:?}", expected, found)
+            }
+            TypeCheckError::PhalaSandarbhaAbhava => {
+                write!(f, "Phala-sandarbha-abhava: Arogya/Dosha without Phalam context")
+            }
         }
     }
 }
@@ -257,12 +287,21 @@ ASTNode::VinyasaNode { target, index, .. } => {
              f(iterable);
              body.iter().for_each(|n| f(n));
          }
-         ASTNode::SamavayaNode { target, .. } => f(target),
-         ASTNode::DravyaDef { .. } => {}
-         ASTNode::NirmanaNode { values, .. } => {
-             values.iter().for_each(|n| f(n));
-         }
-         _ => {}
+          ASTNode::SamavayaNode { target, .. } => f(target),
+          ASTNode::DravyaDef { .. } => {}
+          ASTNode::NirmanaNode { values, .. } => {
+              values.iter().for_each(|n| f(n));
+          }
+          ASTNode::PhalamType { .. } => {}
+          ASTNode::ArogyaNode { value, .. } => f(value),
+          ASTNode::DoshaNode { value, .. } => f(value),
+          ASTNode::NidanaNode { target, arogya_body, dosha_body, .. } => {
+              f(target);
+              arogya_body.iter().for_each(|n| f(n));
+              dosha_body.iter().for_each(|n| f(n));
+          }
+          ASTNode::SamprapatiNode { expr, .. } => f(expr),
+          _ => {}
     }
 }
 
@@ -353,6 +392,8 @@ pub struct TypeChecker {
     pub env: TypeEnv,
     pub errors: Vec<TypeCheckError>,
     pub current_lakara: Option<Lakara>,
+    pub current_return_type: Option<DevvaniType>,
+    pub nidana_context: Option<(DevvaniType, DevvaniType)>,
 }
 
 impl TypeChecker {
@@ -361,6 +402,8 @@ impl TypeChecker {
             env: TypeEnv::new("global"),
             errors: Vec::new(),
             current_lakara: None,
+            current_return_type: None,
+            nidana_context: None,
         }
     }
 
@@ -561,6 +604,7 @@ impl TypeChecker {
                 name,
                 params,
                 body,
+                return_type,
                 lakara,
                 ..
             } => {
@@ -569,6 +613,13 @@ impl TypeChecker {
 
                 let old_lakara = self.current_lakara.clone();
                 self.current_lakara = Some(typesystem_lakara.clone());
+
+                let old_return_type = self.current_return_type.clone();
+                if let Some(rt) = return_type {
+                    self.current_return_type = Some(self.check(rt));
+                } else {
+                    self.current_return_type = None;
+                }
 
                 let scope = lakara_to_scope(&typesystem_lakara);
                 let symbol = Symbol::new(
@@ -596,6 +647,7 @@ impl TypeChecker {
 
                 self.env = old_env;
                 self.current_lakara = old_lakara;
+                self.current_return_type = old_return_type;
 
                 if !has_reachable_base_case(body) && body.iter().any(contains_avartana) {
                     self.errors.push(TypeCheckError::AnavasthaDosha {
@@ -921,6 +973,144 @@ impl TypeChecker {
                 DevvaniType::Avali(Box::new(first_type))
             }
 
+            ASTNode::PhalamType { success_type, error_type, .. } => {
+                let success = resolve_type_name(&self.env, success_type)
+                    .unwrap_or_else(|| DevvaniType::Subject(success_type.clone()));
+                let error = resolve_type_name(&self.env, error_type)
+                    .unwrap_or_else(|| DevvaniType::Subject(error_type.clone()));
+                DevvaniType::Phalam(Box::new(success), Box::new(error))
+            }
+
+            ASTNode::ArogyaNode { value, .. } => {
+                let value_type = self.check(value);
+                let phalam_context = self.nidana_context.clone().or_else(|| {
+                    match &self.current_return_type {
+                        Some(DevvaniType::Phalam(success, error)) => {
+                            Some(((**success).clone(), (**error).clone()))
+                        }
+                        _ => None,
+                    }
+                });
+
+                if let Some((expected_success, _)) = phalam_context {
+                    if !matches!(value_type, DevvaniType::Unknown) && value_type != expected_success {
+                        self.errors.push(TypeCheckError::PhalaVisamgati {
+                            expected: expected_success,
+                            found: value_type.clone(),
+                        });
+                    }
+                    value_type
+                } else {
+                    self.errors.push(TypeCheckError::PhalaSandarbhaAbhava);
+                    DevvaniType::Unknown
+                }
+            }
+
+            ASTNode::DoshaNode { value, .. } => {
+                let value_type = self.check(value);
+                let phalam_context = self.nidana_context.clone().or_else(|| {
+                    match &self.current_return_type {
+                        Some(DevvaniType::Phalam(success, error)) => {
+                            Some(((**success).clone(), (**error).clone()))
+                        }
+                        _ => None,
+                    }
+                });
+
+                if let Some((_, expected_error)) = phalam_context {
+                    if !matches!(value_type, DevvaniType::Unknown) && value_type != expected_error {
+                        self.errors.push(TypeCheckError::PhalaVisamgati {
+                            expected: expected_error,
+                            found: value_type.clone(),
+                        });
+                    }
+                    value_type
+                } else {
+                    self.errors.push(TypeCheckError::PhalaSandarbhaAbhava);
+                    DevvaniType::Unknown
+                }
+            }
+
+            ASTNode::NidanaNode { target, arogya_bind, arogya_body, dosha_bind, dosha_body, .. } => {
+                let target_type = self.check(target);
+                let (success_ty, error_ty) = match target_type {
+                    DevvaniType::Phalam(success, error) => (success, error),
+                    _ => {
+                        self.errors.push(TypeCheckError::NidanaAparichaya);
+                        return DevvaniType::Unknown;
+                    }
+                };
+
+                if arogya_body.is_empty() || dosha_body.is_empty() {
+                    self.errors.push(TypeCheckError::PancakaAvishishtata);
+                    return DevvaniType::Unknown;
+                }
+
+                let old_nidana = self.nidana_context.clone();
+                self.nidana_context = Some((*success_ty.clone(), *error_ty.clone()));
+
+                let old_env = self.env.clone();
+                self.env = self.env.enter_scope("nidana_arogya");
+                let arogya_symbol = Symbol::new(
+                    arogya_bind,
+                    *success_ty.clone(),
+                    &Vacana::Eka,
+                    &Linga::Pullinga,
+                    "var",
+                );
+                self.env.define_symbol(arogya_bind, arogya_symbol);
+                for stmt in arogya_body {
+                    self.check(stmt);
+                }
+                self.env = old_env;
+
+                let old_env = self.env.clone();
+                self.env = self.env.enter_scope("nidana_dosha");
+                let dosha_symbol = Symbol::new(
+                    dosha_bind,
+                    *error_ty.clone(),
+                    &Vacana::Eka,
+                    &Linga::Pullinga,
+                    "var",
+                );
+                self.env.define_symbol(dosha_bind, dosha_symbol);
+                for stmt in dosha_body {
+                    self.check(stmt);
+                }
+                self.env = old_env;
+
+                self.nidana_context = old_nidana;
+
+                DevvaniType::Unknown
+            }
+
+            ASTNode::SamprapatiNode { expr, .. } => {
+                let expr_type = self.check(expr);
+                match expr_type {
+                    DevvaniType::Phalam(success_ty, error_ty) => {
+                        match &self.current_return_type {
+                            Some(DevvaniType::Phalam(_cur_success, cur_error)) => {
+                                let compatible = *error_ty == **cur_error
+                                    || matches!(*error_ty, DevvaniType::Unknown)
+                                    || matches!(**cur_error, DevvaniType::Unknown);
+                                if !compatible {
+                                    self.errors.push(TypeCheckError::DoshaAsangati {
+                                        expected: (**cur_error).clone(),
+                                        found: (*error_ty).clone(),
+                                    });
+                                }
+                                (*success_ty).clone()
+                            }
+                            _ => {
+                                self.errors.push(TypeCheckError::SamprāptiAyogyatā);
+                                DevvaniType::Unknown
+                            }
+                        }
+                    }
+                    _ => DevvaniType::Unknown,
+                }
+            }
+
             _ => DevvaniType::Unknown,
         }
     }
@@ -970,6 +1160,7 @@ mod tests {
             params: vec![],
             upasargas: vec![],
             return_karaka: None,
+            return_type: None,
             body,
             span: span(),
         }
@@ -2112,6 +2303,308 @@ mod tests {
                 .iter()
                 .any(|e| matches!(e, TypeCheckError::NirmanaAsangati { .. })),
             "expected no NirmanaAsangati error for undefined dravya, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // Phalam (ErrorHandling) type system tests
+
+    fn dhatu_def_with_return(
+        name: &str,
+        body: Vec<ASTNode>,
+        return_type: Option<ASTNode>,
+    ) -> ASTNode {
+        ASTNode::DhatuDef {
+            name: name.to_string(),
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: return_type.map(Box::new),
+            body,
+            span: span(),
+        }
+    }
+
+    #[test]
+    fn test_phalam_type_resolution_basic() {
+        let mut checker = TypeChecker::new();
+        let phalam = ASTNode::PhalamType {
+            success_type: "sankhya".to_string(),
+            error_type: "vaak".to_string(),
+            span: span(),
+        };
+        let ty = checker.check(&phalam);
+        assert_eq!(
+            ty,
+            DevvaniType::Phalam(
+                Box::new(DevvaniType::Subject("Purnaank".to_string())),
+                Box::new(DevvaniType::Vaak)
+            )
+        );
+    }
+
+    #[test]
+    fn test_phalam_type_resolution_nested() {
+        let mut checker = TypeChecker::new();
+        let inner = ASTNode::PhalamType {
+            success_type: "sankhya".to_string(),
+            error_type: "dashaamsha".to_string(),
+            span: span(),
+        };
+        let outer = ASTNode::PhalamType {
+            success_type: "custom".to_string(),
+            error_type: "phalam_error".to_string(),
+            span: span(),
+        };
+        let _ = checker.check(&inner);
+        checker.check(&outer);
+    }
+
+    #[test]
+    fn test_arogya_valid_inside_nidana() {
+        let mut checker = TypeChecker::new();
+        let target = ASTNode::PhalamType {
+            success_type: "sankhya".to_string(),
+            error_type: "Vaak".to_string(),
+            span: span(),
+        };
+        let arogya = ASTNode::ArogyaNode {
+            value: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            span: span(),
+        };
+        let dosha = ASTNode::DoshaNode {
+            value: Box::new(ASTNode::VaakLiteral {
+                value: "error".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let nidana = ASTNode::NidanaNode {
+            target: Box::new(target),
+            arogya_bind: "sukha".to_string(),
+            arogya_body: vec![arogya],
+            dosha_bind: "duhkha".to_string(),
+            dosha_body: vec![dosha],
+            span: span(),
+        };
+        checker.check(&nidana);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    #[test]
+    fn test_arogya_mismatch_triggers_d061() {
+        let mut checker = TypeChecker::new();
+        let target = ASTNode::PhalamType {
+            success_type: "sankhya".to_string(),
+            error_type: "vaak".to_string(),
+            span: span(),
+        };
+        let arogya = ASTNode::ArogyaNode {
+            value: Box::new(ASTNode::VaakLiteral {
+                value: "bad".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let nidana = ASTNode::NidanaNode {
+            target: Box::new(target),
+            arogya_bind: "sukha".to_string(),
+            arogya_body: vec![arogya],
+            dosha_bind: "duhkha".to_string(),
+            dosha_body: vec![ASTNode::VaakLiteral {
+                value: "error".to_string(),
+                span: span(),
+            }],
+            span: span(),
+        };
+        checker.check(&nidana);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PhalaVisamgati { .. })),
+            "expected PhalaVisamgati error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_arogya_no_enclosing_phalam_triggers_d066() {
+        let mut checker = TypeChecker::new();
+        let arogya = ASTNode::ArogyaNode {
+            value: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            span: span(),
+        };
+        checker.check(&arogya);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PhalaSandarbhaAbhava)),
+            "expected PhalaSandarbhaAbhava error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_dosha_no_enclosing_phalam_triggers_d066() {
+        let mut checker = TypeChecker::new();
+        let dosha = ASTNode::DoshaNode {
+            value: Box::new(ASTNode::VaakLiteral {
+                value: "err".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        checker.check(&dosha);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PhalaSandarbhaAbhava)),
+            "expected PhalaSandarbhaAbhava error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_nidana_empty_arm_triggers_d063() {
+        let mut checker = TypeChecker::new();
+        let target = ASTNode::PhalamType {
+            success_type: "sankhya".to_string(),
+            error_type: "vaak".to_string(),
+            span: span(),
+        };
+        let nidana = ASTNode::NidanaNode {
+            target: Box::new(target),
+            arogya_bind: "sukha".to_string(),
+            arogya_body: vec![],
+            dosha_bind: "duhkha".to_string(),
+            dosha_body: vec![ASTNode::VaakLiteral {
+                value: "err".to_string(),
+                span: span(),
+            }],
+            span: span(),
+        };
+        checker.check(&nidana);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PancakaAvishishtata)),
+            "expected PancakaAvishishtata error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_nidana_target_not_phalam_triggers_d062() {
+        let mut checker = TypeChecker::new();
+        let target = ASTNode::PurnaankLiteral { value: 5, span: span() };
+        let nidana = ASTNode::NidanaNode {
+            target: Box::new(target),
+            arogya_bind: "sukha".to_string(),
+            arogya_body: vec![ASTNode::VaakLiteral {
+                value: "ok".to_string(),
+                span: span(),
+            }],
+            dosha_bind: "duhkha".to_string(),
+            dosha_body: vec![ASTNode::VaakLiteral {
+                value: "err".to_string(),
+                span: span(),
+            }],
+            span: span(),
+        };
+        checker.check(&nidana);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::NidanaAparichaya)),
+            "expected NidanaAparichaya error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_samprapti_inside_phalam_function_valid() {
+        let mut checker = TypeChecker::new();
+        let phalam = ASTNode::PhalamType {
+            success_type: "sankhya".to_string(),
+            error_type: "vaak".to_string(),
+            span: span(),
+        };
+        checker.current_return_type = Some(checker.check(&phalam));
+        let samprapti = ASTNode::SamprapatiNode {
+            expr: Box::new(phalam),
+            span: span(),
+        };
+        let ty = checker.check(&samprapti);
+        assert_eq!(ty, DevvaniType::Subject("Purnaank".to_string()));
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    #[test]
+    fn test_samprapti_inside_non_phalam_function_triggers_d064() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::SamprapatiNode {
+            expr: Box::new(ASTNode::PhalamType {
+                success_type: "sankhya".to_string(),
+                error_type: "vaak".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        }];
+        let dhatu = dhatu_def_with_return(
+            "bhojan",
+            body,
+            Some(ASTNode::VaakLiteral {
+                value: "unknown".to_string(),
+                span: span(),
+            }),
+        );
+        let _ty = checker.check(&dhatu);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SamprāptiAyogyatā)),
+            "expected SamprāptiAyogyatā error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_samprapti_incompatible_error_type_triggers_d065() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::SamprapatiNode {
+            expr: Box::new(ASTNode::PhalamType {
+                success_type: "sankhya".to_string(),
+                error_type: "vaak".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        }];
+        let dhatu = dhatu_def_with_return(
+            "bhojan",
+            body,
+            Some(ASTNode::PhalamType {
+                success_type: "sankhya".to_string(),
+                error_type: "dashaamsha".to_string(),
+                span: span(),
+            }),
+        );
+        let _ty = checker.check(&dhatu);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::DoshaAsangati { .. })),
+            "expected DoshaAsangati error, got: {:?}",
             checker.errors
         );
     }

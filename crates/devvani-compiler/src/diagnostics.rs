@@ -254,7 +254,7 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 ),
                 hint: None,
             },
-            TypeCheckError::NirmanaAsangati { dravya_name, expected_count, found_count, anga_name, position, expected_type, found_type } => {
+             TypeCheckError::NirmanaAsangati { dravya_name, expected_count, found_count, anga_name, position, expected_type, found_type } => {
                 let message = if expected_count != found_count {
                     format!(
                         "Nirmāṇa (struct instantiation) mein values ki sankhya match nahi \
@@ -278,6 +278,100 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                     hint: None,
                 }
             }
+            TypeCheckError::PhalaVisamgati { expected, found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D061".to_string(),
+                sanskrit_title: "फलविसंगति".to_string(),
+                roman_title: "Phala Visamgati".to_string(),
+                message: format!(
+                    "Arogya/Dosha mein praapt prakaar anukool nahi hai. \
+                     Phalam success/error type se match nahi karta: \
+                     expected {:?}, found {:?}.",
+                    expected, found
+                ),
+                sutra_ref: Some(
+                    "Charaka Samhita, Nidana Pancaka (five-fold examination)".to_string()
+                ),
+                hint: Some(
+                    "Nidana ke phalam prakaar se arogya/dosha ki prakara saman rakho.".to_string()
+                ),
+            },
+            TypeCheckError::NidanaAparichaya => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D062".to_string(),
+                sanskrit_title: "निदानअपरिचय".to_string(),
+                roman_title: "Nidana Aparichaya".to_string(),
+                message: "Nidana ka lakshya Phalam type nahi hai. Nidana ko Phalam par aropit karna chahiye.".to_string(),
+                sutra_ref: Some(
+                    "Charaka Samhita, Nidana Pancaka (Nidana as knowing the disease)".to_string()
+                ),
+                hint: Some(
+                    "Nidana ke samne Phalam type ka expression rakho.".to_string()
+                ),
+            },
+            TypeCheckError::PancakaAvishishtata => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D063".to_string(),
+                sanskrit_title: "पञ्चकअविशिष्टता".to_string(),
+                roman_title: "Pancaka Avishishtata".to_string(),
+                message: "Nidana ke donon bhujae (arogya aur dosha) upasthit honi chahiye. \
+                          Abhi ek ya donon missing hain.".to_string(),
+                sutra_ref: Some(
+                    "Charaka Samhita, Nidana Pancaka (five-fold examination completeness)".to_string()
+                ),
+                hint: Some(
+                    "Nidana mein arogya-bind aur dosha-bind donon provide karo.".to_string()
+                ),
+            },
+            TypeCheckError::SamprāptiAyogyatā => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D064".to_string(),
+                sanskrit_title: "सम्प्राप्तिअयोग्यता".to_string(),
+                roman_title: "Samprāpti Ayogyatā".to_string(),
+                message: "Samprapti (?) operation sirf Phalam type return karne wale \
+                          Dhātu ke andar hi prayukt hota hai.".to_string(),
+                sutra_ref: Some(
+                    "Charaka Samhita, Nidana Pancaka (Samprapti as path of disease)".to_string()
+                ),
+                hint: Some(
+                    "Is Dhātu ka return_type Phalam banāo ya Samprapti hatao.".to_string()
+                ),
+            },
+            TypeCheckError::DoshaAsangati { expected, found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D065".to_string(),
+                sanskrit_title: "दोषअसङ्गति".to_string(),
+                roman_title: "Dosha Asangati".to_string(),
+                message: format!(
+                    "Samprapti propagate kar raha hai error type {:?}, \
+                     par enclosing Dhātu mein {:?} apekshit hai. \
+                     Error types asangat hain.",
+                    found, expected
+                ),
+                sutra_ref: Some(
+                    "Charaka Samhita, Nidana Pancaka (Dosha incompatibility)".to_string()
+                ),
+                hint: Some(
+                    "Samprapti ke target Phalam ka error type enclosing Dhātu ke \
+                     return error type se mel khawe.".to_string()
+                ),
+            },
+            TypeCheckError::PhalaSandarbhaAbhava => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D066".to_string(),
+                sanskrit_title: "फलसन्दर्भअभाव".to_string(),
+                roman_title: "Phala Sandarbha Abhava".to_string(),
+                message: "Arogya ya Dosha upyog karte samay Phalam ka sandarbh \
+                          nahi mila. Yeh Nidana ke andar ya Phalam-returning \
+                          Dhātu ke shesh mein hi upyukt hai.".to_string(),
+                sutra_ref: Some(
+                    "Charaka Samhita, Nidana Pancaka (absence of diagnostic context)".to_string()
+                ),
+                hint: Some(
+                    "Arogya/Dosha ko Nidana ke andar ya Phalam return karne wale \
+                     Dhātu ke ant mein use karo.".to_string()
+                ),
+            },
         }
     }
 
@@ -603,5 +697,71 @@ mod tests {
         assert!(diag.message.contains("sthaan 1"));
         assert!(diag.message.contains("sankhya"));
         assert!(diag.message.contains("manushya"));
+    }
+
+    #[test]
+    fn test_from_type_error_phala_visamgati() {
+        let err = TypeCheckError::PhalaVisamgati {
+            expected: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D061");
+        assert!(diag.display().contains("Phala Visamgati"));
+        assert!(diag.sanskrit_title.contains("फलविसंगति"));
+        assert!(diag.sutra_ref.unwrap().contains("Charaka Samhita"));
+    }
+
+    #[test]
+    fn test_from_type_error_nidana_aparichaya() {
+        let err = TypeCheckError::NidanaAparichaya;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D062");
+        assert!(diag.display().contains("Nidana Aparichaya"));
+        assert!(diag.sanskrit_title.contains("निदानअपरिचय"));
+        assert!(diag.sutra_ref.unwrap().contains("Charaka Samhita"));
+    }
+
+    #[test]
+    fn test_from_type_error_pancaka_avishishtata() {
+        let err = TypeCheckError::PancakaAvishishtata;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D063");
+        assert!(diag.display().contains("Pancaka Avishishtata"));
+        assert!(diag.sanskrit_title.contains("पञ्चकअविशिष्टता"));
+        assert!(diag.sutra_ref.unwrap().contains("Charaka Samhita"));
+    }
+
+    #[test]
+    fn test_from_type_error_samprāpti_ayogyatā() {
+        let err = TypeCheckError::SamprāptiAyogyatā;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D064");
+        assert!(diag.display().contains("Samprāpti Ayogyatā"));
+        assert!(diag.sanskrit_title.contains("सम्प्राप्तिअयोग्यता"));
+        assert!(diag.sutra_ref.unwrap().contains("Charaka Samhita"));
+    }
+
+    #[test]
+    fn test_from_type_error_dosha_asangati() {
+        let err = TypeCheckError::DoshaAsangati {
+            expected: devvani_typesystem::DevvaniType::Subject("Dashaamsha".to_string()),
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D065");
+        assert!(diag.display().contains("Dosha Asangati"));
+        assert!(diag.sanskrit_title.contains("दोषअसङ्गति"));
+        assert!(diag.sutra_ref.unwrap().contains("Charaka Samhita"));
+    }
+
+    #[test]
+    fn test_from_type_error_phala_sandarbha_abhava() {
+        let err = TypeCheckError::PhalaSandarbhaAbhava;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D066");
+        assert!(diag.display().contains("Phala Sandarbha Abhava"));
+        assert!(diag.sanskrit_title.contains("फलसन्दर्भअभाव"));
+        assert!(diag.sutra_ref.unwrap().contains("Charaka Samhita"));
     }
 }

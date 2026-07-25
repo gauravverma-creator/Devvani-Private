@@ -39,11 +39,14 @@ impl Parser {
 
         let tok = self.peek().clone();
         match tok.kind {
-TokenKind::Arambhah => self.parse_karyakram(),
-             TokenKind::Yadi => self.parse_yadi(),
-             TokenKind::Yavat => self.parse_yavat(),
-             TokenKind::Kramasah => self.parse_kramasah(),
-             TokenKind::Naama(ref name) => {
+            TokenKind::Arambhah => self.parse_karyakram(),
+            TokenKind::Yadi => self.parse_yadi(),
+            TokenKind::Yavat => self.parse_yavat(),
+            TokenKind::Kramasah => self.parse_kramasah(),
+            TokenKind::Arogya => self.parse_arogya(),
+            TokenKind::Dosha => self.parse_dosha(),
+            TokenKind::Nidana => self.parse_nidana(),
+            TokenKind::Naama(ref name) => {
                  if name.ends_with("-dhatu") {
                      let lookup = self.symbols.lookup(name);
                      if !matches!(lookup.map(|s| &s.kind), Some(SymbolKind::Dhatu { .. })) {
@@ -142,7 +145,7 @@ TokenKind::Arambhah => self.parse_karyakram(),
         );
 
         let mut params = Vec::new();
-        while !self.is_karoti() && !self.check(&TokenKind::Danda) && !self.is_at_end() {
+        while !self.is_karoti() && !self.check(&TokenKind::Danda) && !self.check(&TokenKind::Phalam) && !self.is_at_end() {
             let p_tok = self.expect_identifier()?;
             let p_name = if let TokenKind::Naama(n) = p_tok.kind {
                 n
@@ -157,6 +160,12 @@ TokenKind::Arambhah => self.parse_karyakram(),
                 span: p_tok.span,
             });
         }
+
+        let return_type = if self.check(&TokenKind::Phalam) {
+            Some(Box::new(self.parse_phalam_type()?))
+        } else {
+            None
+        };
 
         if self.is_karoti() {
             self.advance();
@@ -200,10 +209,32 @@ TokenKind::Arambhah => self.parse_karyakram(),
             linga: Linga::Pullinga,
             vacana: Vacana::Eka,
             params,
-            return_karaka: None,
-            body,
             upasargas: vec![],
+            return_karaka: None,
+            return_type,
+            body,
             span: name_tok.span,
+        })
+    }
+
+    fn parse_phalam_type(&mut self) -> Result<ASTNode, ParseError> {
+        self.expect(TokenKind::Phalam)?;
+        let success_tok = self.expect_identifier()?;
+        let success_type = if let TokenKind::Naama(n) = success_tok.kind {
+            n
+        } else {
+            unreachable!()
+        };
+        let error_tok = self.expect_identifier()?;
+        let error_type = if let TokenKind::Naama(n) = error_tok.kind {
+            n
+        } else {
+            unreachable!()
+        };
+        Ok(ASTNode::PhalamType {
+            success_type,
+            error_type,
+            span: success_tok.span,
         })
     }
 
@@ -289,6 +320,71 @@ TokenKind::Arambhah => self.parse_karyakram(),
             dravya_name,
             values,
             span: name_tok.span,
+        })
+    }
+
+    fn parse_arogya(&mut self) -> Result<ASTNode, ParseError> {
+        let arogya_tok = self.expect(TokenKind::Arogya)?;
+        let value = self.parse_arithmetic()?;
+        self.expect(TokenKind::Danda)?;
+        Ok(ASTNode::ArogyaNode {
+            value: Box::new(value),
+            span: arogya_tok.span,
+        })
+    }
+
+    fn parse_dosha(&mut self) -> Result<ASTNode, ParseError> {
+        let dosha_tok = self.expect(TokenKind::Dosha)?;
+        let value = self.parse_arithmetic()?;
+        self.expect(TokenKind::Danda)?;
+        Ok(ASTNode::DoshaNode {
+            value: Box::new(value),
+            span: dosha_tok.span,
+        })
+    }
+
+    fn parse_nidana(&mut self) -> Result<ASTNode, ParseError> {
+        let start_span = self.peek().span;
+        self.advance(); // consume Nidana
+        let target = self.parse_arithmetic()?;
+
+        self.expect(TokenKind::Arogya)?;
+        let arogya_bind_tok = self.expect_identifier()?;
+        let arogya_bind = if let TokenKind::Naama(n) = arogya_bind_tok.kind {
+            n
+        } else {
+            unreachable!()
+        };
+
+        let mut arogya_body = Vec::new();
+        while !self.check(&TokenKind::Dosha) && !self.check(&TokenKind::Iti) && !self.is_at_end() {
+            arogya_body.push(self.parse_vakya()?);
+        }
+
+        self.expect(TokenKind::Dosha)?;
+        let dosha_bind_tok = self.expect_identifier()?;
+        let dosha_bind = if let TokenKind::Naama(n) = dosha_bind_tok.kind {
+            n
+        } else {
+            unreachable!()
+        };
+
+        let mut dosha_body = Vec::new();
+        while !self.check(&TokenKind::Iti) && !self.is_at_end() {
+            dosha_body.push(self.parse_vakya()?);
+        }
+        self.expect(TokenKind::Iti)?;
+        if self.check(&TokenKind::Danda) {
+            self.advance();
+        }
+
+        Ok(ASTNode::NidanaNode {
+            target: Box::new(target),
+            arogya_bind,
+            arogya_body,
+            dosha_bind,
+            dosha_body,
+            span: start_span,
         })
     }
 
@@ -481,6 +577,15 @@ TokenKind::Arambhah => self.parse_karyakram(),
             };
         }
 
+        if self.check(&TokenKind::Samprapti) {
+            let current = self.peek().clone();
+            self.advance();
+            left = ASTNode::SamprapatiNode {
+                expr: Box::new(left),
+                span: current.span,
+            };
+        }
+
         Ok(left)
     }
 
@@ -644,6 +749,7 @@ fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
             TokenKind::Tarhi,
             TokenKind::Anyatha,
             TokenKind::Samaapti,
+            TokenKind::Samprapti,
         ];
 
         let mut karma = Vec::new();
@@ -753,6 +859,7 @@ fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
             ASTNode::PanktiNode { span, .. } => *span,
             ASTNode::DravyaDef { span, .. } => *span,
             ASTNode::SamavayaNode { span, .. } => *span,
+            ASTNode::SamprapatiNode { span, .. } => *span,
             _ => Span {
                 line: 1,
                 col: 1,
@@ -1545,6 +1652,179 @@ other => panic!("expected KaryakramNode, got {:?}", other),
                         assert!(values.is_empty());
                     }
                     other => panic!("expected NirmanaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Dhatu with phalam return type parses correctly
+    #[test]
+    fn test_parse_dhatu_with_phalam_return_type() {
+        let tokens = vec![
+            nm("bhojan-dhatu"),
+            nm("param1"),
+            kw(TokenKind::Phalam),
+            nm("sankhya"),
+            nm("vaak"),
+            nm("karoti"),
+            kw(TokenKind::Danda),
+            nm("param1"),
+            kw(TokenKind::Vadati),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Iti),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DhatuDef { return_type, name, params, body, .. } => {
+                        assert_eq!(name, "bhojan-dhatu");
+                        assert_eq!(params.len(), 1);
+                        assert!(return_type.is_some());
+                        match return_type.as_ref().unwrap().as_ref() {
+                            ASTNode::PhalamType { success_type, error_type, .. } => {
+                                assert_eq!(success_type, "sankhya");
+                                assert_eq!(error_type, "vaak");
+                            }
+                            other => panic!("expected PhalamType, got {:?}", other),
+                        }
+                        assert_eq!(body.len(), 1);
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Arogya expression parses correctly
+    #[test]
+    fn test_parse_arogya_expression() {
+        let tokens = vec![
+            kw(TokenKind::Arogya),
+            kw(TokenKind::PurnaankLiteral(42)),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::ArogyaNode { value, .. } => {
+                        assert!(
+                            matches!(value.as_ref(), ASTNode::PurnaankLiteral { value, .. } if *value == 42)
+                        );
+                    }
+                    other => panic!("expected ArogyaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Dosha expression parses correctly
+    #[test]
+    fn test_parse_dosha_expression() {
+        let tokens = vec![
+            kw(TokenKind::Dosha),
+            Token {
+                kind: TokenKind::VaakLiteral("kuch galat hua".to_string()),
+                span: span(),
+            },
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DoshaNode { value, .. } => {
+                        assert!(
+                            matches!(value.as_ref(), ASTNode::VaakLiteral { value, .. } if value == "kuch galat hua")
+                        );
+                    }
+                    other => panic!("expected DoshaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Full Nidana block parses correctly with both arms
+    #[test]
+    fn test_parse_nidana_block() {
+        let tokens = vec![
+            kw(TokenKind::Nidana),
+            nm("result"),
+            kw(TokenKind::Arogya),
+            nm("val"),
+            nm("val"),
+            kw(TokenKind::Vadati),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Dosha),
+            nm("err"),
+            nm("err"),
+            kw(TokenKind::Vadati),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Iti),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::NidanaNode { target, arogya_bind, arogya_body, dosha_bind, dosha_body, .. } => {
+                        assert!(
+                            matches!(target.as_ref(), ASTNode::Nama { base, .. } if base == "result")
+                        );
+                        assert_eq!(arogya_bind, "val");
+                        assert_eq!(dosha_bind, "err");
+                        assert_eq!(arogya_body.len(), 1);
+                        assert_eq!(dosha_body.len(), 1);
+                    }
+                    other => panic!("expected NidanaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Postfix samprapti wraps call expression correctly
+    #[test]
+    fn test_parse_samprapti_postfix() {
+        let tokens = vec![
+            nm("always-dhatu"),
+            nm("x"),
+            nm("karoti"),
+            kw(TokenKind::Danda),
+            nm("x"),
+            kw(TokenKind::Iti),
+            kw(TokenKind::Danda),
+            nm("always-dhatu"),
+            nm("targa"),
+            kw(TokenKind::Samprapti),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 2);
+                match &shareera[1] {
+                    ASTNode::SamprapatiNode { expr, .. } => {
+                        assert!(
+                            matches!(expr.as_ref(), ASTNode::KriyaCall { kriya, karma, .. } if kriya == "always-dhatu" && karma.len() == 1)
+                        );
+                    }
+                    other => panic!("expected SamprapatiNode, got {:?}", other),
                 }
             }
             other => panic!("expected KaryakramNode, got {:?}", other),

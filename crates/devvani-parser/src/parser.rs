@@ -46,6 +46,7 @@ impl Parser {
             TokenKind::Arogya => self.parse_arogya(),
             TokenKind::Dosha => self.parse_dosha(),
             TokenKind::Nidana => self.parse_nidana(),
+             TokenKind::Sandarbha => self.parse_sandarbha(),
             TokenKind::Naama(ref name) => {
                  if name.ends_with("-dhatu") {
                      let lookup = self.symbols.lookup(name);
@@ -144,22 +145,49 @@ impl Parser {
             },
         );
 
-        let mut params = Vec::new();
-        while !self.is_karoti() && !self.check(&TokenKind::Danda) && !self.check(&TokenKind::Phalam) && !self.is_at_end() {
-            let p_tok = self.expect_identifier()?;
-            let p_name = if let TokenKind::Naama(n) = p_tok.kind {
-                n
-            } else {
-                unreachable!()
-            };
-            let vibhakti = self.match_vibhakti().unwrap_or(Vibhakti::Prathama);
-            params.push(KarakaParam {
-                name: p_name,
-                role: vibhakti_to_karaka(&vibhakti),
-                vibhakti,
-                span: p_tok.span,
-            });
-        }
+let mut params = Vec::new();
+         while !self.is_karoti() && !self.check(&TokenKind::Danda) && !self.check(&TokenKind::Phalam) && !self.is_at_end() {
+             let p_tok = self.expect_identifier()?;
+             let p_name = if let TokenKind::Naama(n) = p_tok.kind {
+                 n
+             } else {
+                 unreachable!()
+             };
+             let vibhakti = self.match_vibhakti().unwrap_or(Vibhakti::Prathama);
+
+let mut is_borrowed = false;
+              let mut is_mutable_borrow = false;
+              let mut param_type_name = String::new();
+
+              if self.check(&TokenKind::Adhikara) {
+                  self.advance();
+                  is_borrowed = true;
+              } else if self.check(&TokenKind::Vikara) {
+                  self.advance();
+                  self.expect(TokenKind::Adhikara)?;
+                  is_borrowed = true;
+                  is_mutable_borrow = true;
+              }
+
+              if is_borrowed {
+                  let type_tok = self.expect_identifier()?;
+                  param_type_name = if let TokenKind::Naama(n) = type_tok.kind {
+                      n
+                  } else {
+                      "unknown".to_string()
+                  };
+              }
+
+params.push(KarakaParam {
+                  name: p_name,
+                  role: vibhakti_to_karaka(&vibhakti),
+                  vibhakti,
+                  is_borrowed,
+                  is_mutable_borrow,
+                  type_name: param_type_name.clone(),
+                  span: p_tok.span,
+              });
+         }
 
         let return_type = if self.check(&TokenKind::Phalam) {
             Some(Box::new(self.parse_phalam_type()?))
@@ -384,11 +412,41 @@ impl Parser {
             arogya_body,
             dosha_bind,
             dosha_body,
-            span: start_span,
-        })
-    }
+span: start_span,
+         })
+     }
 
-    fn is_karoti(&self) -> bool {
+     fn parse_sandarbha(&mut self) -> Result<ASTNode, ParseError> {
+         let start_span = self.peek().span;
+         self.advance(); // consume Sandarbha
+
+let is_mutable;
+        if self.check(&TokenKind::Vikara) {
+            self.advance();
+            self.expect(TokenKind::Adhikara)?;
+            is_mutable = true;
+        } else if self.check(&TokenKind::Adhikara) {
+            self.advance();
+            is_mutable = false;
+        } else {
+            return Err(ParseError::UnexpectedToken {
+                expected: "adhikara or vikara adhikara after sandarbha".to_string(),
+                found: self.peek().kind.clone(),
+                span: self.peek().span,
+            });
+        }
+
+         let target = Box::new(self.parse_arithmetic()?);
+         self.expect(TokenKind::Danda)?;
+
+         Ok(ASTNode::SandarbhaNode {
+             target,
+             is_mutable,
+             span: start_span,
+         })
+     }
+
+     fn is_karoti(&self) -> bool {
         if let TokenKind::Naama(n) = &self.peek().kind {
             n == "karoti"
         } else {
@@ -859,8 +917,9 @@ fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
             ASTNode::PanktiNode { span, .. } => *span,
             ASTNode::DravyaDef { span, .. } => *span,
             ASTNode::SamavayaNode { span, .. } => *span,
-            ASTNode::SamprapatiNode { span, .. } => *span,
-            _ => Span {
+ASTNode::SamprapatiNode { span, .. } => *span,
+             ASTNode::SandarbhaNode { span, .. } => *span,
+             _ => Span {
                 line: 1,
                 col: 1,
                 len: 1,

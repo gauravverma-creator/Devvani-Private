@@ -122,6 +122,9 @@ pub struct KarakaParam {
     pub name: String,
     pub role: KarakaRole,
     pub vibhakti: Vibhakti,
+    pub is_borrowed: bool,
+    pub is_mutable_borrow: bool,
+    pub type_name: String,
     pub span: Span,
 }
 
@@ -173,15 +176,22 @@ pub enum ASTNode {
          value: Box<ASTNode>,
          span: Span,
      },
-     NidanaNode {
-         target: Box<ASTNode>,
-         arogya_bind: String,
-         arogya_body: Vec<ASTNode>,
-         dosha_bind: String,
-         dosha_body: Vec<ASTNode>,
-         span: Span,
-     },
-     SamprapatiNode {
+NidanaNode {
+          target: Box<ASTNode>,
+          arogya_bind: String,
+          arogya_body: Vec<ASTNode>,
+          dosha_bind: String,
+          dosha_body: Vec<ASTNode>,
+          span: Span,
+      },
+      /// SandarbhaNode — a borrow/reference expression.
+      /// `sandarbha adhikara x` (immutable) or `sandarbha vikara adhikara x` (mutable).
+      SandarbhaNode {
+          target: Box<ASTNode>,
+          is_mutable: bool,
+          span: Span,
+      },
+      SamprapatiNode {
          expr: Box<ASTNode>,
          span: Span,
      },

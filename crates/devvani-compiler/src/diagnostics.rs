@@ -372,6 +372,90 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                      Dhātu ke ant mein use karo.".to_string()
                 ),
             },
+            TypeCheckError::SvatvaBhanga { name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D067".to_string(),
+                sanskrit_title: "स्वत्वभङ्ग".to_string(),
+                roman_title: "Svatva Bhanga".to_string(),
+                message: format!(
+                    "'{}' ka Svatva (ownership) already move ho chuka hai — \
+                     ise dobara upyog nahi kiya ja sakta. Mimāṃsā vyākhyāna: \
+                     Svatva Dharmasāstra ke anusaar ek varth vartamāna ek hi \
+                     śāstā ke adhikār mein hota hai.",
+                    name
+                ),
+                sutra_ref: Some(
+                    "Mīmāṃsā Sūtra 2.1.14 (Svatva — ownership jurisprudence)".to_string()
+                ),
+                hint: Some(format!(
+                    "'{}' ko pehle define karo ya uska sandarbha (borrow) \
+                     istemal karo.",
+                    name
+                )),
+            },
+            TypeCheckError::AdhikaraDvandva { name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D068".to_string(),
+                sanskrit_title: "अधिकारद्वन्द्व".to_string(),
+                roman_title: "Adhikara Dvandva".to_string(),
+                message: format!(
+                    "'{}' par ek active borrow ke saath ek aur borrow\n        \
+                     laga sakte ho nahi — ya toh do bojhik borrows\n        \
+                     (do immutable) hain toh ek hi hona chahiye, ya ek\n        \
+                     mutable borrow aktiv hai toh koi aur borrow nahi\n        \
+                     ho sakta. Pāṇinian vyākhyāna: Adhikār eligibility\n        \
+                     hai aur do adhikār ek saath clash karte hain.",
+                    name
+                ),
+                sutra_ref: Some(
+                    "Ashtadhyayi 2.1.1 (Adhikara — eligibility-rule term)".to_string()
+                ),
+                hint: Some(format!(
+                    "'{}' ka pehla borrow close karke dobara try karo.",
+                    name
+                )),
+            },
+            TypeCheckError::KshayaAnantaraUpayoga { name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D069".to_string(),
+                sanskrit_title: "क्षयानन्तरउपयोग".to_string(),
+                roman_title: "Kshaya Anantara Upayoga".to_string(),
+                message: format!(
+                    "'{}' ko use kiya ja raha hai jab takki iska Kshaya\n        \
+                     (scope exit) ho chuka hai. Pāṇinian vyākhyāna: \n        \
+                     Kshaya = scope exit, upayoga = use — scope ke bahar\n        \
+                     jo naam available nahi hai uska upyog doosara dosh hai.",
+                    name
+                ),
+                sutra_ref: Some(
+                    "Mīmāṃsā + Pāṇini (Kshaya scope-rule term)".to_string()
+                ),
+                hint: Some(format!(
+                    "'{}' ko is scope ke andar hi use karo ya scope ke\n        \
+                     bahar pehle declare karo.",
+                    name
+                )),
+            },
+            TypeCheckError::VikaraAdhikaraDvaya { name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D070".to_string(),
+                sanskrit_title: "विकारअधिकारद्वय".to_string(),
+                roman_title: "Vikara Adhikara Dvaya".to_string(),
+                message: format!(
+                    "'{}' par do simultaneous mutable borrows (vikara adhikara\n        \
+                     dvaya) exist kar rahe hain. Mimāṃsā vyākhyāna: एकस्य \n        \
+                     स्वत्वम् (ekasya svaratvam) — ek varth ki svatva ek baar hi \n        \
+                     upyog hogi, do mutable borrows karo ki nahi.",
+                    name
+                ),
+                sutra_ref: Some(
+                    "Mīmāṃsā Sūtra + Ashtadhyayi (single mutable borrow rule)".to_string()
+                ),
+                hint: Some(format!(
+                    "'{}' ka pehla mutable borrow close karke dobara try karo.",
+                    name
+                )),
+            },
         }
     }
 
@@ -763,5 +847,53 @@ mod tests {
         assert!(diag.display().contains("Phala Sandarbha Abhava"));
         assert!(diag.sanskrit_title.contains("फलसन्दर्भअभाव"));
         assert!(diag.sutra_ref.unwrap().contains("Charaka Samhita"));
+    }
+
+    #[test]
+    fn test_from_type_error_svatva_bhanga_d067() {
+        let err = TypeCheckError::SvatvaBhanga {
+            name: "ramah".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D067");
+        assert!(diag.display().contains("Svatva Bhanga"));
+        assert!(diag.sanskrit_title.contains("स्वत्वभङ्ग"));
+        assert!(diag.message.contains("ramah"));
+    }
+
+    #[test]
+    fn test_from_type_error_adhikara_dvandva_d068() {
+        let err = TypeCheckError::AdhikaraDvandva {
+            name: "ramah".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D068");
+        assert!(diag.display().contains("Adhikara Dvandva"));
+        assert!(diag.sanskrit_title.contains("अधिकारद्वन्द्व"));
+        assert!(diag.message.contains("ramah"));
+    }
+
+    #[test]
+    fn test_from_type_error_kshaya_anantara_upayoga_d069() {
+        let err = TypeCheckError::KshayaAnantaraUpayoga {
+            name: "ramah".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D069");
+        assert!(diag.display().contains("Kshaya Anantara Upayoga"));
+        assert!(diag.sanskrit_title.contains("क्षयानन्तरउपयोग"));
+        assert!(diag.message.contains("ramah"));
+    }
+
+    #[test]
+    fn test_from_type_error_vikara_adhikara_dvaya_d070() {
+        let err = TypeCheckError::VikaraAdhikaraDvaya {
+            name: "ramah".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D070");
+        assert!(diag.display().contains("Vikara Adhikara Dvaya"));
+        assert!(diag.sanskrit_title.contains("विकारअधिकारद्वय"));
+        assert!(diag.message.contains("ramah"));
     }
 }

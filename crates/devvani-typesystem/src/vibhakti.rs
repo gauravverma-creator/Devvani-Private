@@ -34,6 +34,9 @@ pub enum DevvaniType {
     Dravya(String, Vec<(String, DevvaniType)>),
     /// Phalam — result type (success type, error type)
     Phalam(Box<DevvaniType>, Box<DevvaniType>),
+    /// Sandarbha — borrow/reference expression wrapping the borrowed type;
+    /// bool = true if mutable borrow, false if immutable.
+    Sandarbha(Box<DevvaniType>, bool),
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -105,7 +108,9 @@ DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
              DevvaniType::Pankti(elem_ty, len) => write!(f, "Pankti({}, {})", elem_ty, len),
              DevvaniType::Avali(elem_ty) => write!(f, "Avali({})", elem_ty),
              DevvaniType::Dravya(name, _angas) => write!(f, "Dravya({})", name),
-             DevvaniType::Phalam(success, error) => write!(f, "Phalam({}, {})", success, error),
-         }
+DevvaniType::Phalam(success, error) => write!(f, "Phalam({}, {})", success, error),
+            DevvaniType::Sandarbha(inner, true) => write!(f, "vikara adhikara<{}>", inner),
+            DevvaniType::Sandarbha(inner, false) => write!(f, "adhikara<{}>", inner),
+        }
     }
 }

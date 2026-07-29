@@ -131,10 +131,15 @@ pub enum TokenKind {
      Phalam,   // function return type keyword (Phalam-Samprapti pattern)
      Arogya,   // error-handling success constructor
      Dosha,    // error-handling failure constructor
-     Nidana,   // error-handling match/inspection keyword
-     Samprapti, // error-propagation postfix (? operator)
+Nidana,   // error-handling match/inspection keyword
+      Samprapti, // error-propagation postfix (? operator)
 
-     // --- SANDHI SPECIAL TOKENS ---
+      // --- OWNERSHIP (borrow/reference) ---
+      Sandarbha, // reference declaration keyword
+      Adhikara,  // immutable borrow marker
+      Vikara,    // mutable borrow marker
+
+      // --- SANDHI SPECIAL TOKENS ---
      Visarga,  // ḥ character standalone
      Anusvara, // ṃ character standalone
 

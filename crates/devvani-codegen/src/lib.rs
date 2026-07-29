@@ -396,11 +396,26 @@ impl Codegen {
                     self.rust_output.push_str(&self.indent_str());
                     self.rust_output.push_str(kriya);
                     self.rust_output.push_str("(");
-                    for (i, arg) in karma.iter().enumerate() {
+                     for (i, arg) in karma.iter().enumerate() {
                         if i > 0 {
                             self.rust_output.push_str(", ");
                         }
-                        self.emit(arg)?;
+                        if let ASTNode::SandarbhaNode { .. } = arg {
+                            self.emit(arg)?;
+                        } else if let Some(params) = self.type_checker.function_params().get(kriya) {
+                            if let Some(param) = params.get(i) {
+                                if param.is_borrowed {
+                                    if param.is_mutable_borrow {
+                                        self.rust_output.push_str("&mut ");
+                                    } else {
+                                        self.rust_output.push_str("&");
+                                    }
+                                }
+                            }
+                            self.emit(arg)?;
+                        } else {
+                            self.emit(arg)?;
+                        }
                     }
                     self.rust_output.push_str(");\n");
                 }
@@ -466,11 +481,20 @@ impl Codegen {
 
                 let mut rust_params = Vec::new();
                 for param in params {
-                    rust_params.push(format!("{}: i64", param.name));
+                    let type_str = if param.is_borrowed {
+                        if param.is_mutable_borrow {
+                            "&mut i64".to_string()
+                        } else {
+                            "&i64".to_string()
+                        }
+                    } else {
+                        "i64".to_string()
+                    };
+                    rust_params.push(format!("{}: {}", param.name, type_str));
                     self.instructions.push(Instruction::Bind {
                         name: param.name.clone(),
-                        rust_type: "i64".to_string(),
-                        mutable: false,
+                        rust_type: type_str.clone(),
+                        mutable: param.is_mutable_borrow,
                     });
                 }
 
@@ -668,6 +692,18 @@ impl Codegen {
                 self.emit(expr)?;
                 self.rust_output.push_str("?");
             }
+            ASTNode::SandarbhaNode {
+                target,
+                is_mutable,
+                ..
+            } => {
+                if *is_mutable {
+                    self.rust_output.push_str("&mut ");
+                } else {
+                    self.rust_output.push_str("&");
+                }
+                self.emit(target)?;
+            }
             _ => {
                 let msg = format!("Unhandled node: {:?}", node);
                 self.instructions.push(Instruction::Comment(msg.clone()));
@@ -765,8 +801,8 @@ impl Codegen {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use devvani_ast::{ASTNode, AngaField, Linga as AstLinga, Span, Vacana as AstVacana, Vibhakti};
+use super::*;
+use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Lakara as AstLakara, Span, Vacana as AstVacana, Vibhakti};
 
     fn dummy_span() -> Span {
         Span {
@@ -1709,5 +1745,251 @@ mod tests {
         assert!(output.contains("Ok(p) => {"));
         assert!(output.contains("Err(q) => {"));
         assert!(output.contains("5?"));
+    }
+
+
+    #[test]
+    fn test_sandarbha_immutable_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let target = ASTNode::PurnaankLiteral {
+            value: 42,
+            span: dummy_span(),
+        };
+        let node = ASTNode::SandarbhaNode {
+            target: Box::new(target),
+            is_mutable: false,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert!(codegen.rust_source().contains("&42"));
+        assert!(!codegen.rust_source().contains("&&"));
+    }
+
+    #[test]
+    fn test_sandarbha_mutable_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let target = ASTNode::PurnaankLiteral {
+            value: 42,
+            span: dummy_span(),
+        };
+        let node = ASTNode::SandarbhaNode {
+            target: Box::new(target),
+            is_mutable: true,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert!(codegen.rust_source().contains("&mut 42"));
+    }
+
+    #[test]
+    fn test_borrowed_immutable_param_signature() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let params = vec![KarakaParam {
+            name: "var".to_string(),
+            role: KarakaRole::Karma,
+            vibhakti: Vibhakti::Dvitiya,
+            is_borrowed: true,
+            is_mutable_borrow: false,
+            span: dummy_span(),
+            type_name: "sankhya".to_string(),
+        }];
+        let dhatu = ASTNode::DhatuDef {
+            name: "my_func".to_string(),
+            params,
+            body: vec![],
+            lakara: AstLakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: AstLinga::Pullinga,
+            vacana: AstVacana::Eka,
+            return_karaka: None,
+            return_type: None,
+            upasargas: vec![],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&dhatu).is_ok());
+        assert!(codegen.rust_source().contains("var: &i64"));
+    }
+
+    #[test]
+    fn test_borrowed_mutable_param_signature() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let params = vec![KarakaParam {
+            name: "var".to_string(),
+            role: KarakaRole::Karma,
+            vibhakti: Vibhakti::Dvitiya,
+            is_borrowed: true,
+            is_mutable_borrow: true,
+            span: dummy_span(),
+            type_name: "sankhya".to_string(),
+        }];
+        let dhatu = ASTNode::DhatuDef {
+            name: "my_func".to_string(),
+            params,
+            body: vec![],
+            lakara: AstLakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: AstLinga::Pullinga,
+            vacana: AstVacana::Eka,
+            return_karaka: None,
+            return_type: None,
+            upasargas: vec![],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&dhatu).is_ok());
+        assert!(codegen.rust_source().contains("var: &mut i64"));
+    }
+
+    #[test]
+    fn test_call_site_auto_wrap_immutable() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.type_checker.function_params_mut().insert(
+            "test_func".to_string(),
+            vec![KarakaParam {
+                name: "param".to_string(),
+                role: KarakaRole::Karma,
+                vibhakti: Vibhakti::Prathama,
+                is_borrowed: true,
+                is_mutable_borrow: false,
+                span: dummy_span(),
+                type_name: "sankhya".to_string(),
+            }],
+        );
+        let args = vec![ASTNode::PurnaankLiteral {
+            value: 10,
+            span: dummy_span(),
+        }];
+        let node = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "test_func".to_string(),
+            karma: args,
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("test_func"));
+        assert!(output.contains("&10"));
+        assert!(!output.contains("&&"));
+    }
+
+    #[test]
+    fn test_call_site_auto_wrap_mutable() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.type_checker.function_params_mut().insert(
+            "test_func_mut".to_string(),
+            vec![KarakaParam {
+                name: "param".to_string(),
+                role: KarakaRole::Karma,
+                vibhakti: Vibhakti::Prathama,
+                is_borrowed: true,
+                is_mutable_borrow: true,
+                span: dummy_span(),
+                type_name: "sankhya".to_string(),
+            }],
+        );
+        let args = vec![ASTNode::PurnaankLiteral {
+            value: 10,
+            span: dummy_span(),
+        }];
+        let node = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "test_func_mut".to_string(),
+            karma: args,
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("test_func_mut"));
+        assert!(output.contains("&mut 10"));
+    }
+
+    #[test]
+    fn test_no_double_wrap_on_sandarbha_arg() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.type_checker.function_params_mut().insert(
+            "borrowed_func".to_string(),
+            vec![KarakaParam {
+                name: "param".to_string(),
+                role: KarakaRole::Karma,
+                vibhakti: Vibhakti::Dvitiya,
+                is_borrowed: true,
+                is_mutable_borrow: false,
+                span: dummy_span(),
+                type_name: "sankhya".to_string(),
+            }],
+        );
+        let inner = ASTNode::PurnaankLiteral {
+            value: 42,
+            span: dummy_span(),
+        };
+        let sandarbha = ASTNode::SandarbhaNode {
+            target: Box::new(inner),
+            is_mutable: false,
+            span: dummy_span(),
+        };
+        let args = vec![sandarbha];
+        let node = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "borrowed_func".to_string(),
+            karma: args,
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("borrowed_func"));
+        assert!(output.contains("&42"));
+        assert!(!output.contains("&&"));
+    }
+
+    #[test]
+    fn test_full_sandarbha_signature_roundtrip() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        codegen.type_checker.function_params_mut().insert(
+            "entry".to_string(),
+            vec![KarakaParam {
+                name: "arg".to_string(),
+                role: KarakaRole::Karma,
+                vibhakti: Vibhakti::Dvitiya,
+                is_borrowed: true,
+                is_mutable_borrow: false,
+                span: dummy_span(),
+                type_name: "sankhya".to_string(),
+            }],
+        );
+        let inner = ASTNode::PurnaankLiteral {
+            value: 100,
+            span: dummy_span(),
+        };
+        let borrowed_arg = ASTNode::SandarbhaNode {
+            target: Box::new(inner),
+            is_mutable: false,
+            span: dummy_span(),
+        };
+        let node = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "entry".to_string(),
+            karma: vec![borrowed_arg],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("entry"));
+        assert!(output.contains("&100"));
+        assert!(!output.contains("&&"));
     }
 }

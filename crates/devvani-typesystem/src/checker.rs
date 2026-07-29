@@ -1,5 +1,7 @@
 use crate::{lakara::*, linga::*, symbol::*, type_env::TypeEnv, vacana::*, vibhakti::*};
+use devvani_ast::node::KarakaParam;
 use devvani_ast::ASTNode;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 #[derive(Debug, Clone)]
@@ -69,6 +71,14 @@ pub enum TypeCheckError {
         found: DevvaniType,
     },
     PhalaSandarbhaAbhava,
+    /// D067 — श्वत्वभङ्ग (SvatvaBhanga): use after ownership transfer
+    SvatvaBhanga { name: String },
+    /// D068 — अधिकारद्वन्द्व (AdhikaraDvandva): conflicting simultaneous borrows
+    AdhikaraDvandva { name: String },
+    /// D069 — क्षयानन्तरउपयोग (KshayaAnantaraUpayoga): use after scope exit
+    KshayaAnantaraUpayoga { name: String },
+    /// D070 — विकारअधिकारद्वय (VikaraAdhikaraDvaya): two simultaneous mutable borrows
+    VikaraAdhikaraDvaya { name: String },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -196,6 +206,18 @@ impl fmt::Display for TypeCheckError {
             TypeCheckError::PhalaSandarbhaAbhava => {
                 write!(f, "Phala-sandarbha-abhava: Arogya/Dosha without Phalam context")
             }
+            TypeCheckError::SvatvaBhanga { name } => {
+                write!(f, "Svatva-bhanga: ownership (Svatva) of '{}' has been moved away", name)
+            }
+            TypeCheckError::AdhikaraDvandva { name } => {
+                write!(f, "Adhikara-dvandva: conflicting simultaneous borrows of '{}'", name)
+            }
+            TypeCheckError::KshayaAnantaraUpayoga { name } => {
+                write!(f, "Kshaya-anantara-upayoga: use of '{}' after it went out of scope (Kshaya)", name)
+            }
+            TypeCheckError::VikaraAdhikaraDvaya { name } => {
+                write!(f, "Vikara-adhikara-dvaya: two simultaneous mutable borrows of '{}'", name)
+            }
         }
     }
 }
@@ -295,12 +317,13 @@ ASTNode::VinyasaNode { target, index, .. } => {
           ASTNode::PhalamType { .. } => {}
           ASTNode::ArogyaNode { value, .. } => f(value),
           ASTNode::DoshaNode { value, .. } => f(value),
-          ASTNode::NidanaNode { target, arogya_body, dosha_body, .. } => {
-              f(target);
-              arogya_body.iter().for_each(|n| f(n));
-              dosha_body.iter().for_each(|n| f(n));
-          }
-          ASTNode::SamprapatiNode { expr, .. } => f(expr),
+ASTNode::NidanaNode { target, arogya_body, dosha_body, .. } => {
+               f(target);
+               arogya_body.iter().for_each(|n| f(n));
+               dosha_body.iter().for_each(|n| f(n));
+           }
+           ASTNode::SandarbhaNode { target, .. } => f(target),
+           ASTNode::SamprapatiNode { expr, .. } => f(expr),
           _ => {}
     }
 }
@@ -394,6 +417,21 @@ pub struct TypeChecker {
     pub current_lakara: Option<Lakara>,
     pub current_return_type: Option<DevvaniType>,
     pub nidana_context: Option<(DevvaniType, DevvaniType)>,
+    /// Variables whose ownership has been moved
+    moved_vars: HashSet<String>,
+    /// Active borrows: variable name -> list of (is_mutable) flags
+    active_borrows: HashMap<String, Vec<bool>>,
+    /// Saved ownership state for scope nesting (DhatuDef, Kramashah, Nidana)
+    moved_vars_stack: Vec<HashSet<String>>,
+    active_borrows_stack: Vec<HashMap<String, Vec<bool>>>,
+    /// Registry of DhatuDef parameter metadata keyed by function name
+    function_params: HashMap<String, Vec<KarakaParam>>,
+    /// Variables declared in scopes that have closed (accumulated across all scope pops)
+    closed_scope_vars: HashSet<String>,
+    /// Variables declared in the current scope (tracked per-scope via stack)
+    current_scope_vars: HashSet<String>,
+    /// Stack for saving current_scope_vars across nested scopes
+    current_scope_vars_stack: Vec<HashSet<String>>,
 }
 
 impl TypeChecker {
@@ -404,25 +442,98 @@ impl TypeChecker {
             current_lakara: None,
             current_return_type: None,
             nidana_context: None,
+            moved_vars: HashSet::new(),
+            active_borrows: HashMap::new(),
+            moved_vars_stack: Vec::new(),
+            active_borrows_stack: Vec::new(),
+            function_params: HashMap::new(),
+            closed_scope_vars: HashSet::new(),
+            current_scope_vars: HashSet::new(),
+            current_scope_vars_stack: Vec::new(),
         }
+    }
+
+    /// Public accessor for the function parameters registry
+    pub fn function_params(&self) -> &HashMap<String, Vec<KarakaParam>> {
+        &self.function_params
+    }
+
+    /// Public mutable accessor for the function parameters registry
+    pub fn function_params_mut(&mut self) -> &mut HashMap<String, Vec<KarakaParam>> {
+        &mut self.function_params
+    }
+
+    /// Returns true if a type is non-Copy (requires move semantics).
+    /// Primitive numeric and boolean types are Copy; all others are not.
+    fn is_non_copy_type(ty: &DevvaniType) -> bool {
+        !matches!(
+            ty,
+            DevvaniType::Subject(s) if s == "Purnaank" || s == "Dashaamsha" || s == "Bool"
+        )
+    }
+
+    /// Check an identifier (by name) for use-after-move. Returns the type
+    /// if valid, or Unknown if the variable has been moved.
+    fn check_identifier_use(&mut self, name: &str) -> DevvaniType {
+        if self.moved_vars.contains(name) {
+            self.errors.push(TypeCheckError::SvatvaBhanga {
+                name: name.to_string(),
+            });
+            return DevvaniType::Unknown;
+        }
+        // Check closed_scope_vars BEFORE env.lookup to enforce block-level scoping
+        // and emit D069 for variables that were declared in closed scopes
+        if self.closed_scope_vars.contains(name) {
+            self.errors.push(TypeCheckError::KshayaAnantaraUpayoga {
+                name: name.to_string(),
+            });
+            return DevvaniType::Unknown;
+        }
+        if let Some(sym) = self.env.lookup(name) {
+            sym.devvani_type.clone()
+        } else {
+            let role = infer_type_from_suffix(name);
+            vibhakti_to_type(&role, name)
+        }
+    }
+
+    /// Push ownership state onto the stack before entering a scope.
+    fn push_ownership_state(&mut self) {
+        self.moved_vars_stack.push(std::mem::take(&mut self.moved_vars));
+        self.active_borrows_stack.push(std::mem::take(&mut self.active_borrows));
+        self.current_scope_vars_stack.push(std::mem::take(&mut self.current_scope_vars));
+    }
+
+    /// Pop ownership state from the stack when exiting a scope.
+    fn pop_ownership_state(&mut self) {
+        self.moved_vars = self.moved_vars_stack.pop().unwrap_or_default();
+        self.active_borrows = self.active_borrows_stack.pop().unwrap_or_default();
+        // Add all variables declared in this scope to closed_scope_vars
+        self.closed_scope_vars.extend(std::mem::take(&mut self.current_scope_vars));
+        self.current_scope_vars = self.current_scope_vars_stack.pop().unwrap_or_default();
+    }
+
+    /// Reset ownership state for a fresh function body (DhatuDef).
+    fn reset_ownership_state(&mut self) {
+        self.moved_vars.clear();
+        self.active_borrows.clear();
+        self.closed_scope_vars.clear();
+        self.current_scope_vars.clear();
     }
 
     pub fn check(&mut self, node: &ASTNode) -> DevvaniType {
         match node {
             ASTNode::KaryakramNode { shareera, .. } => {
+                self.push_ownership_state();
                 let mut last_type = DevvaniType::Unknown;
                 for stmt in shareera {
                     last_type = self.check(stmt);
                 }
+                self.pop_ownership_state();
                 last_type
             }
             ASTNode::Nama { base, .. } => {
-                if let Some(sym) = self.env.lookup(base) {
-                    sym.devvani_type.clone()
-                } else {
-                    let role = infer_type_from_suffix(base);
-                    vibhakti_to_type(&role, base)
-                }
+                self.check_identifier_use(base)
             }
             ASTNode::PurnaankLiteral { .. } => DevvaniType::Subject("Purnaank".to_string()),
             ASTNode::DashaamshaLiteral { .. } => DevvaniType::Subject("Dashaamsha".to_string()),
@@ -430,8 +541,14 @@ impl TypeChecker {
 
             ASTNode::AstiNode { naama, mulya } | ASTNode::BhavatiNode { naama, mulya } => {
                 let ty = self.check(mulya);
+                if let ASTNode::Nama { base, .. } = mulya.as_ref() {
+                    if Self::is_non_copy_type(&ty) {
+                        self.moved_vars.insert(base.clone());
+                    }
+                }
                 let symbol = Symbol::new(naama, ty.clone(), &Vacana::Eka, &Linga::Pullinga, "var");
                 self.env.define_symbol(naama, symbol);
+                self.current_scope_vars.insert(naama.clone());
                 ty
             }
 
@@ -548,6 +665,7 @@ impl TypeChecker {
                 let ty = DevvaniType::Subject("Vaak".to_string());
                 let symbol = Symbol::new(naama, ty.clone(), &Vacana::Eka, &Linga::Pullinga, "var");
                 self.env.define_symbol(naama, symbol);
+                self.current_scope_vars.insert(naama.clone());
                 ty
             }
 
@@ -621,6 +739,9 @@ impl TypeChecker {
                     self.current_return_type = None;
                 }
 
+                self.reset_ownership_state();
+                self.push_ownership_state();
+
                 let scope = lakara_to_scope(&typesystem_lakara);
                 let symbol = Symbol::new(
                     name,
@@ -639,13 +760,16 @@ impl TypeChecker {
                     let param_symbol =
                         Symbol::new(&param.name, ty, &Vacana::Eka, &Linga::Pullinga, "i64");
                     self.env.define_symbol(&param.name, param_symbol);
+                    self.current_scope_vars.insert(param.name.clone());
                 }
+                self.function_params.insert(name.clone(), params.clone());
 
                 for stmt in body {
                     self.check(stmt);
                 }
 
                 self.env = old_env;
+                self.pop_ownership_state();
                 self.current_lakara = old_lakara;
                 self.current_return_type = old_return_type;
 
@@ -735,6 +859,10 @@ impl TypeChecker {
                 karta,
                 kriya,
                 karma,
+                karana,
+                sampradana,
+                apadan,
+                adhikarana,
                 ..
             } => {
                 if let Some(subject_node) = karta {
@@ -758,6 +886,43 @@ impl TypeChecker {
                                 expected: "Parameter/Subject".to_string(),
                                 found: format!("{:?}", arg_type),
                             });
+                        }
+                    }
+                }
+
+                let mut all_args: Vec<&ASTNode> = Vec::new();
+                if let Some(k) = karta.as_ref() {
+                    all_args.push(k);
+                }
+                for a in karma.iter() {
+                    all_args.push(a);
+                }
+                if let Some(k) = karana.as_ref() {
+                    all_args.push(k);
+                }
+                if let Some(s) = sampradana.as_ref() {
+                    all_args.push(s);
+                }
+                if let Some(a) = apadan.as_ref() {
+                    all_args.push(a);
+                }
+                if let Some(a) = adhikarana.as_ref() {
+                    all_args.push(a);
+                }
+                let arg_types: Vec<DevvaniType> = all_args.iter().map(|a| self.check(a)).collect();
+
+                if let Some(params) = self.function_params.get(kriya) {
+                    for (i, param) in params.iter().enumerate() {
+                        if i >= arg_types.len() {
+                            break;
+                        }
+                        if param.is_borrowed {
+                            continue;
+                        }
+                        if Self::is_non_copy_type(&arg_types[i]) {
+                            if let ASTNode::Nama { base, .. } = all_args[i] {
+                                self.moved_vars.insert(base.clone());
+                            }
                         }
                     }
                 }
@@ -907,6 +1072,7 @@ impl TypeChecker {
                     }
                 };
                 let old_env = self.env.clone();
+                self.push_ownership_state();
                 self.env = self.env.enter_scope(item_name);
                 let item_symbol = Symbol::new(
                     item_name,
@@ -916,10 +1082,12 @@ impl TypeChecker {
                     "i64",
                 );
                 self.env.define_symbol(item_name, item_symbol);
+                self.current_scope_vars.insert(item_name.clone());
                 for stmt in body {
                     self.check(stmt);
                 }
                 self.env = old_env;
+                self.pop_ownership_state();
                 DevvaniType::Unknown
             }
 
@@ -1050,6 +1218,7 @@ impl TypeChecker {
                 self.nidana_context = Some((*success_ty.clone(), *error_ty.clone()));
 
                 let old_env = self.env.clone();
+                self.push_ownership_state();
                 self.env = self.env.enter_scope("nidana_arogya");
                 let arogya_symbol = Symbol::new(
                     arogya_bind,
@@ -1059,12 +1228,15 @@ impl TypeChecker {
                     "var",
                 );
                 self.env.define_symbol(arogya_bind, arogya_symbol);
+                self.current_scope_vars.insert(arogya_bind.clone());
                 for stmt in arogya_body {
                     self.check(stmt);
                 }
                 self.env = old_env;
+                self.pop_ownership_state();
 
                 let old_env = self.env.clone();
+                self.push_ownership_state();
                 self.env = self.env.enter_scope("nidana_dosha");
                 let dosha_symbol = Symbol::new(
                     dosha_bind,
@@ -1074,44 +1246,84 @@ impl TypeChecker {
                     "var",
                 );
                 self.env.define_symbol(dosha_bind, dosha_symbol);
+                self.current_scope_vars.insert(dosha_bind.clone());
                 for stmt in dosha_body {
                     self.check(stmt);
                 }
                 self.env = old_env;
+                self.pop_ownership_state();
 
                 self.nidana_context = old_nidana;
 
                 DevvaniType::Unknown
             }
 
-            ASTNode::SamprapatiNode { expr, .. } => {
-                let expr_type = self.check(expr);
-                match expr_type {
-                    DevvaniType::Phalam(success_ty, error_ty) => {
-                        match &self.current_return_type {
-                            Some(DevvaniType::Phalam(_cur_success, cur_error)) => {
-                                let compatible = *error_ty == **cur_error
-                                    || matches!(*error_ty, DevvaniType::Unknown)
-                                    || matches!(**cur_error, DevvaniType::Unknown);
-                                if !compatible {
-                                    self.errors.push(TypeCheckError::DoshaAsangati {
-                                        expected: (**cur_error).clone(),
-                                        found: (*error_ty).clone(),
-                                    });
-                                }
-                                (*success_ty).clone()
-                            }
-                            _ => {
-                                self.errors.push(TypeCheckError::SamprāptiAyogyatā);
-                                DevvaniType::Unknown
-                            }
-                        }
-                    }
-                    _ => DevvaniType::Unknown,
-                }
-            }
+ASTNode::SamprapatiNode { expr, .. } => {
+                 let expr_type = self.check(expr);
+                 match expr_type {
+                     DevvaniType::Phalam(success_ty, error_ty) => {
+                         match &self.current_return_type {
+                             Some(DevvaniType::Phalam(_cur_success, cur_error)) => {
+                                 let compatible = *error_ty == **cur_error
+                                     || matches!(*error_ty, DevvaniType::Unknown)
+                                     || matches!(**cur_error, DevvaniType::Unknown);
+                                 if !compatible {
+                                     self.errors.push(TypeCheckError::DoshaAsangati {
+                                         expected: (**cur_error).clone(),
+                                         found: (*error_ty).clone(),
+                                     });
+                                 }
+                                 (*success_ty).clone()
+                             }
+                             _ => {
+                                 self.errors.push(TypeCheckError::SamprāptiAyogyatā);
+                                 DevvaniType::Unknown
+                             }
+                         }
+                     }
+                     _ => DevvaniType::Unknown,
+                 }
+             }
 
-            _ => DevvaniType::Unknown,
+             ASTNode::SandarbhaNode { target, is_mutable, .. } => {
+                 let target_type = self.check(target);
+                 let borrow_is_mutable = *is_mutable;
+                 let target_name = if let ASTNode::Nama { base, .. } = target.as_ref() {
+                     Some(base.clone())
+                 } else {
+                     None
+                 };
+                 if let Some(ref name) = target_name {
+                     if let Some(borrows) = self.active_borrows.get(name) {
+                         let has_mutable = borrows.iter().any(|&b| b);
+                         let has_immutable = borrows.iter().any(|&b| !b);
+                         if borrow_is_mutable {
+                             if has_mutable {
+                                 self.errors.push(TypeCheckError::VikaraAdhikaraDvaya {
+                                     name: name.clone(),
+                                 });
+                             } else if has_immutable {
+                                 self.errors.push(TypeCheckError::AdhikaraDvandva {
+                                     name: name.clone(),
+                                 });
+                             }
+                         } else {
+                             if has_mutable {
+                                 self.errors.push(TypeCheckError::AdhikaraDvandva {
+                                     name: name.clone(),
+                                 });
+                             }
+                         }
+                     }
+                     self.active_borrows
+                         .entry(name.clone())
+                         .or_default()
+                         .push(borrow_is_mutable);
+                 }
+                 DevvaniType::Sandarbha(Box::new(target_type), borrow_is_mutable)
+             }
+
+             _ => DevvaniType::Unknown,
         }
     }
 
@@ -2606,6 +2818,359 @@ mod tests {
                 .any(|e| matches!(e, TypeCheckError::DoshaAsangati { .. })),
             "expected DoshaAsangati error, got: {:?}",
             checker.errors
+        );
+    }
+
+    // ===== Ownership (Svatva/Adhikara/Kshaya) Tests =====
+
+    #[test]
+    fn test_move_use_after_move_d067() {
+        // Declare src with Vaak type, then move it to dst, then use src again
+        let body = vec![
+            ASTNode::AstiNode {
+                naama: "src".to_string(),
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "hello".to_string(),
+                    span: span(),
+                }),
+            },
+            ASTNode::AstiNode {
+                naama: "dst".to_string(),
+                mulya: Box::new(ASTNode::Nama {
+                    base: "src".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+            },
+            ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::Nama {
+                    base: "src".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+            },
+        ];
+        let errors = check_dhatu(body);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SvatvaBhanga { .. })),
+            "expected SvatvaBhanga D067 after moving 'src', got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_borrow_of_moved_var_d067() {
+        // Declare src with Vaak type, move it to dst, then borrow src again
+        let body = vec![
+            ASTNode::AstiNode {
+                naama: "src".to_string(),
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "hello".to_string(),
+                    span: span(),
+                }),
+            },
+            ASTNode::AstiNode {
+                naama: "dst".to_string(),
+                mulya: Box::new(ASTNode::Nama {
+                    base: "src".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+            },
+            ASTNode::SandarbhaNode {
+                target: Box::new(ASTNode::Nama {
+                    base: "src".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: false,
+                span: span(),
+            },
+        ];
+        let errors = check_dhatu(body);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SvatvaBhanga { .. })),
+            "expected SvatvaBhanga D067 when borrowing moved var 'src', got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_two_immutable_borrows_ok() {
+        let body = vec![
+            ASTNode::SandarbhaNode {
+                target: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: false,
+                span: span(),
+            },
+            ASTNode::SandarbhaNode {
+                target: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: false,
+                span: span(),
+            },
+        ];
+        let errors = check_dhatu(body);
+        let ownership_errors: Vec<_> = errors
+            .iter()
+            .filter(|e| matches!(e, TypeCheckError::AdhikaraDvandva { .. } | TypeCheckError::VikaraAdhikaraDvaya { .. } | TypeCheckError::SvatvaBhanga { .. }))
+            .collect();
+        assert!(
+            ownership_errors.is_empty(),
+            "expected no ownership errors for two immutable borrows, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_two_mutable_borrows_d070() {
+        let body = vec![
+            ASTNode::SandarbhaNode {
+                target: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: true,
+                span: span(),
+            },
+            ASTNode::SandarbhaNode {
+                target: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: true,
+                span: span(),
+            },
+        ];
+        let errors = check_dhatu(body);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::VikaraAdhikaraDvaya { .. })),
+            "expected VikaraAdhikaraDvaya D070 for two mutable borrows of 'x', got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_mutable_borrow_then_immutable_d068() {
+        let body = vec![
+            ASTNode::SandarbhaNode {
+                target: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: true,
+                span: span(),
+            },
+            ASTNode::SandarbhaNode {
+                target: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: false,
+                span: span(),
+            },
+        ];
+        let errors = check_dhatu(body);
+        assert!(
+            errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AdhikaraDvandva { .. })),
+            "expected AdhikaraDvandva D068 for mutable+immutable borrow conflict, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_borrowed_param_not_moved() {
+        // Function with borrowed param 'x', called with 'src'. After call, src should not be moved.
+        let params = vec![KarakaParam {
+            name: "x".to_string(),
+            role: devvani_ast::KarakaRole::Karma,
+            vibhakti: devvani_ast::Vibhakti::Dvitiya,
+            is_borrowed: true,
+            is_mutable_borrow: false,
+            span: span(),
+            type_name: "sankhya".to_string(),
+        }];
+        let use_x = ASTNode::DhatuDef {
+            name: "use_x".to_string(),
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params,
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: None,
+            body: vec![],
+            span: span(),
+        };
+        let mut checker = TypeChecker::new();
+        // Check the function definition first (registers params)
+        let _ = checker.check(&use_x);
+        // Now call use_x(src)
+        let call = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "use_x".to_string(),
+            karma: vec![ASTNode::Nama {
+                base: "src".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Dvitiya,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let _ty = checker.check(&call);
+        let ownership_errors: Vec<_> = checker
+            .errors
+            .iter()
+            .filter(|e| matches!(e, TypeCheckError::SvatvaBhanga { .. }))
+            .collect();
+        assert!(
+            ownership_errors.is_empty(),
+            "expected no SvatvaBhanga for borrowed param 'src', got: {:?}",
+            checker.errors
+        );
+        assert!(
+            !checker.moved_vars.contains("src"),
+            "'src' should not be moved when passed to borrowed param"
+        );
+    }
+
+    #[test]
+    fn test_non_borrowed_param_moves_caller_var() {
+        // Function with non-borrowed param 'x', called with 'src'. After call, src should be moved.
+        let params = vec![KarakaParam {
+            name: "x".to_string(),
+            role: devvani_ast::KarakaRole::Karma,
+            vibhakti: devvani_ast::Vibhakti::Dvitiya,
+            is_borrowed: false,
+            is_mutable_borrow: false,
+            span: span(),
+            type_name: "sankhya".to_string(),
+        }];
+        let use_x = ASTNode::DhatuDef {
+            name: "use_x".to_string(),
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params,
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: None,
+            body: vec![],
+            span: span(),
+        };
+        let mut checker = TypeChecker::new();
+        // Check the function definition first (registers params)
+        let _ = checker.check(&use_x);
+        // Declare src with non-Copy type (Vaak)
+        checker.check(&ASTNode::AstiNode {
+            naama: "src".to_string(),
+            mulya: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }),
+        });
+        // Now call use_x(src) — src should be moved into the function
+        let call = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "use_x".to_string(),
+            karma: vec![ASTNode::Nama {
+                base: "src".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Dvitiya,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let _ty = checker.check(&call);
+        assert!(
+            checker.moved_vars.contains("src"),
+            "'src' should be in moved_vars after being passed to non-borrowed param, got moved_vars: {:?}",
+            checker.moved_vars
+        );
+    }
+
+    // ===== D069 KshayaAnantaraUpayoga Tests =====
+
+    #[test]
+    fn test_use_after_scope_exit_d069() {
+        // Declare a variable inside a KaryakramNode (block), then use it after the block ends
+        // This should emit D069 KshayaAnantaraUpayoga
+        let body = vec![
+            ASTNode::KaryakramNode {
+                shareera: vec![
+                    ASTNode::AstiNode {
+                        naama: "inner_var".to_string(),
+                        mulya: Box::new(ASTNode::PurnaankLiteral {
+                            value: 42,
+                            span: span(),
+                        }),
+                    },
+                ],
+            },
+            ASTNode::Nama {
+                base: "inner_var".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            },
+        ];
+        let errors = check_dhatu(body);
+        assert!(
+            errors.iter().any(|e| matches!(e, TypeCheckError::KshayaAnantaraUpayoga { .. })),
+            "expected KshayaAnantaraUpayoga D069 for use of 'inner_var' after scope exit, got: {:?}",
+            errors
         );
     }
 }

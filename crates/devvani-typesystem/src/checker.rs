@@ -79,6 +79,18 @@ pub enum TypeCheckError {
     KshayaAnantaraUpayoga { name: String },
     /// D070 — विकारअधिकारद्वय (VikaraAdhikaraDvaya): two simultaneous mutable borrows
     VikaraAdhikaraDvaya { name: String },
+    /// D071 — सामान्यअनिश्चितद्वन्द्व (SamanyaAnishchitaDvandva): conflicting generic-type inference
+    SamanyaAnishchitaDvandva {
+        name: String,
+        param_name: String,
+        found_type: DevvaniType,
+        previous_type: DevvaniType,
+    },
+    /// D072 — सामान्यअनियता (SamanyaAniyata): uninferable generic parameter
+    SamanyaAniyata {
+        name: String,
+        param_name: String,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -217,6 +229,20 @@ impl fmt::Display for TypeCheckError {
             }
             TypeCheckError::VikaraAdhikaraDvaya { name } => {
                 write!(f, "Vikara-adhikara-dvaya: two simultaneous mutable borrows of '{}'", name)
+            }
+            TypeCheckError::SamanyaAnishchitaDvandva { name, param_name, found_type, previous_type } => {
+                write!(
+                    f,
+                    "Samanya-anishchita-dvandva: conflicting inference for generic param '{}' on '{}': found {:?}, but previously inferred {:?}",
+                    param_name, name, found_type, previous_type
+                )
+            }
+            TypeCheckError::SamanyaAniyata { name, param_name } => {
+                write!(
+                    f,
+                    "Samanya-aniyata: generic param '{}' on '{}' cannot be inferred from call-site arguments",
+                    param_name, name
+                )
             }
         }
     }
@@ -399,23 +425,12 @@ fn has_reachable_base_case(body: &[ASTNode]) -> bool {
     true
 }
 
-fn resolve_type_name(env: &TypeEnv, type_name: &str) -> Option<DevvaniType> {
-    if let Some(sym) = env.lookup(type_name) {
-        return Some(sym.devvani_type.clone());
-    }
-    match type_name {
-        "sankhya" | "purnaank" => Some(DevvaniType::Subject("Purnaank".to_string())),
-        "dashaamsha" => Some(DevvaniType::Subject("Dashaamsha".to_string())),
-        "vaak" => Some(DevvaniType::Vaak),
-        _ => None,
-    }
-}
-
 pub struct TypeChecker {
     pub env: TypeEnv,
     pub errors: Vec<TypeCheckError>,
     pub current_lakara: Option<Lakara>,
     pub current_return_type: Option<DevvaniType>,
+    pub current_generic_params: Vec<String>,
     pub nidana_context: Option<(DevvaniType, DevvaniType)>,
     /// Variables whose ownership has been moved
     moved_vars: HashSet<String>,
@@ -426,6 +441,10 @@ pub struct TypeChecker {
     active_borrows_stack: Vec<HashMap<String, Vec<bool>>>,
     /// Registry of DhatuDef parameter metadata keyed by function name
     function_params: HashMap<String, Vec<KarakaParam>>,
+    /// Registry of DhatuDef return types keyed by function name
+    function_return_types: HashMap<String, DevvaniType>,
+    /// Registry of DhatuDef generic params keyed by function name
+    function_generic_params: HashMap<String, Vec<String>>,
     /// Variables declared in scopes that have closed (accumulated across all scope pops)
     closed_scope_vars: HashSet<String>,
     /// Variables declared in the current scope (tracked per-scope via stack)
@@ -434,19 +453,22 @@ pub struct TypeChecker {
     current_scope_vars_stack: Vec<HashSet<String>>,
 }
 
-impl TypeChecker {
+    impl TypeChecker {
     pub fn new() -> Self {
         Self {
             env: TypeEnv::new("global"),
             errors: Vec::new(),
             current_lakara: None,
             current_return_type: None,
+            current_generic_params: Vec::new(),
             nidana_context: None,
             moved_vars: HashSet::new(),
             active_borrows: HashMap::new(),
             moved_vars_stack: Vec::new(),
             active_borrows_stack: Vec::new(),
             function_params: HashMap::new(),
+            function_return_types: HashMap::new(),
+            function_generic_params: HashMap::new(),
             closed_scope_vars: HashSet::new(),
             current_scope_vars: HashSet::new(),
             current_scope_vars_stack: Vec::new(),
@@ -463,6 +485,33 @@ impl TypeChecker {
         &mut self.function_params
     }
 
+    /// Public accessor for the function return types registry
+    pub fn function_return_types(&self) -> &HashMap<String, DevvaniType> {
+        &self.function_return_types
+    }
+
+    /// Public accessor for the function generic params registry
+    pub fn function_generic_params(&self) -> &HashMap<String, Vec<String>> {
+        &self.function_generic_params
+    }
+
+    /// Resolve a Devvani type name to its DevvaniType representation.
+    /// Checks generic params first, then environment, then built-in primitives.
+    fn resolve_type_name(&self, type_name: &str) -> Option<DevvaniType> {
+        if self.current_generic_params.contains(&type_name.to_string()) {
+            return Some(DevvaniType::Samanya(type_name.to_string()));
+        }
+        if let Some(sym) = self.env.lookup(type_name) {
+            return Some(sym.devvani_type.clone());
+        }
+        match type_name {
+            "sankhya" | "purnaank" => Some(DevvaniType::Subject("Purnaank".to_string())),
+            "dashaamsha" => Some(DevvaniType::Subject("Dashaamsha".to_string())),
+            "vaak" => Some(DevvaniType::Vaak),
+            _ => None,
+        }
+    }
+
     /// Returns true if a type is non-Copy (requires move semantics).
     /// Primitive numeric and boolean types are Copy; all others are not.
     fn is_non_copy_type(ty: &DevvaniType) -> bool {
@@ -470,6 +519,61 @@ impl TypeChecker {
             ty,
             DevvaniType::Subject(s) if s == "Purnaank" || s == "Dashaamsha" || s == "Bool"
         )
+    }
+
+    /// Recursively collect all generic param names (Samanya) from a DevvaniType.
+    fn collect_samanya_from_type(ty: &DevvaniType) -> Vec<String> {
+        match ty {
+            DevvaniType::Samanya(name) => vec![name.clone()],
+            DevvaniType::Dravya(_, angas) => angas
+                .iter()
+                .flat_map(|(_, t)| Self::collect_samanya_from_type(t))
+                .collect(),
+            DevvaniType::Phalam(success, error) => Self::collect_samanya_from_type(success)
+                .into_iter()
+                .chain(Self::collect_samanya_from_type(error))
+                .collect(),
+            DevvaniType::Pankti(elem, _) => Self::collect_samanya_from_type(elem),
+            DevvaniType::Avali(elem) => Self::collect_samanya_from_type(elem),
+            DevvaniType::Sandarbha(inner, _) => Self::collect_samanya_from_type(inner),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Substitute generic Samanya params in a DevvaniType using the inference map.
+    fn substitute_samanya_in_type(
+        ty: DevvaniType,
+        inference: &HashMap<String, DevvaniType>,
+    ) -> DevvaniType {
+        match ty {
+            DevvaniType::Samanya(name) => inference
+                .get(&name)
+                .cloned()
+                .unwrap_or(DevvaniType::Samanya(name)),
+            DevvaniType::Dravya(name, angas) => DevvaniType::Dravya(
+                name,
+                angas
+                    .into_iter()
+                    .map(|(n, t)| (n, Self::substitute_samanya_in_type(t, inference)))
+                    .collect(),
+            ),
+            DevvaniType::Phalam(success, error) => DevvaniType::Phalam(
+                Box::new(Self::substitute_samanya_in_type(*success, inference)),
+                Box::new(Self::substitute_samanya_in_type(*error, inference)),
+            ),
+            DevvaniType::Pankti(elem, len) => DevvaniType::Pankti(
+                Box::new(Self::substitute_samanya_in_type(*elem, inference)),
+                len,
+            ),
+            DevvaniType::Avali(elem) => DevvaniType::Avali(Box::new(Self::substitute_samanya_in_type(
+                *elem, inference,
+            ))),
+            DevvaniType::Sandarbha(inner, mut_) => DevvaniType::Sandarbha(
+                Box::new(Self::substitute_samanya_in_type(*inner, inference)),
+                mut_,
+            ),
+            other => other,
+        }
     }
 
     /// Check an identifier (by name) for use-after-move. Returns the type
@@ -720,6 +824,7 @@ impl TypeChecker {
 
             ASTNode::DhatuDef {
                 name,
+                generic_params,
                 params,
                 body,
                 return_type,
@@ -733,6 +838,8 @@ impl TypeChecker {
                 self.current_lakara = Some(typesystem_lakara.clone());
 
                 let old_return_type = self.current_return_type.clone();
+                let old_generic_params = self.current_generic_params.clone();
+                self.current_generic_params = generic_params.clone();
                 if let Some(rt) = return_type {
                     self.current_return_type = Some(self.check(rt));
                 } else {
@@ -756,7 +863,11 @@ impl TypeChecker {
                 self.env = self.env.enter_scope(name);
 
                 for param in params {
-                    let ty = DevvaniType::Parameter(param.name.clone());
+                    let ty = if self.current_generic_params.contains(&param.type_name) {
+                        DevvaniType::Samanya(param.type_name.clone())
+                    } else {
+                        DevvaniType::Parameter(param.name.clone())
+                    };
                     let param_symbol =
                         Symbol::new(&param.name, ty, &Vacana::Eka, &Linga::Pullinga, "i64");
                     self.env.define_symbol(&param.name, param_symbol);
@@ -768,10 +879,17 @@ impl TypeChecker {
                     self.check(stmt);
                 }
 
+                if let Some(rt) = &self.current_return_type {
+                    self.function_return_types.insert(name.clone(), rt.clone());
+                }
+                self.function_generic_params
+                    .insert(name.clone(), generic_params.clone());
+
                 self.env = old_env;
                 self.pop_ownership_state();
                 self.current_lakara = old_lakara;
                 self.current_return_type = old_return_type;
+                self.current_generic_params = old_generic_params;
 
                 if !has_reachable_base_case(body) && body.iter().any(contains_avartana) {
                     self.errors.push(TypeCheckError::AnavasthaDosha {
@@ -786,19 +904,25 @@ impl TypeChecker {
                 }
             }
 
-            ASTNode::DravyaDef { name, angas, .. } => {
+            ASTNode::DravyaDef { name, generic_params, angas, .. } => {
+                let old_generic_params = self.current_generic_params.clone();
+                self.current_generic_params = generic_params.clone();
+
                 let mut resolved_angas: Vec<(String, DevvaniType)> = Vec::new();
                 for anga in angas {
-                    match resolve_type_name(&self.env, &anga.type_name) {
+                    match self.resolve_type_name(&anga.type_name) {
                         Some(ty) => resolved_angas.push((anga.name.clone(), ty)),
                         None => {
                             self.errors.push(TypeCheckError::DravyaApariyata {
                                 name: anga.type_name.clone(),
                             });
+                            self.current_generic_params = old_generic_params;
                             return DevvaniType::Unknown;
                         }
                     }
                 }
+
+                self.current_generic_params = old_generic_params;
                 let dravya_ty = DevvaniType::Dravya(name.clone(), resolved_angas);
                 self.env.define(name, dravya_ty.clone());
                 dravya_ty
@@ -837,22 +961,66 @@ impl TypeChecker {
                     });
                     return DevvaniType::Unknown;
                 }
-                for (i, (anga_name, expected_ty)) in angas.iter().enumerate() {
-                    let found_ty = self.check(&values[i]);
-                    if found_ty != *expected_ty {
-                        self.errors.push(TypeCheckError::NirmanaAsangati {
-                            dravya_name: dravya_name.clone(),
-                            expected_count,
-                            found_count,
-                            anga_name: anga_name.clone(),
-                            position: i,
-                            expected_type: expected_ty.clone(),
-                            found_type: found_ty.clone(),
-                        });
-                        return DevvaniType::Unknown;
+
+                let has_samanya = angas.iter().any(|(_, ty)| matches!(ty, DevvaniType::Samanya(_)));
+                if has_samanya {
+                    let mut inference: HashMap<String, DevvaniType> = HashMap::new();
+                    let mut resolved_angas: Vec<(String, DevvaniType)> = Vec::new();
+
+                    for (i, (anga_name, expected_ty)) in angas.iter().enumerate() {
+                        let found_ty = self.check(&values[i]);
+
+                        if let DevvaniType::Samanya(param_name) = expected_ty {
+                            if let Some(previous_ty) = inference.get(param_name) {
+                                if *previous_ty != found_ty {
+                                    self.errors.push(TypeCheckError::SamanyaAnishchitaDvandva {
+                                        name: dravya_name.clone(),
+                                        param_name: param_name.clone(),
+                                        found_type: found_ty,
+                                        previous_type: previous_ty.clone(),
+                                    });
+                                    return DevvaniType::Unknown;
+                                }
+                            } else {
+                                inference.insert(param_name.clone(), found_ty.clone());
+                            }
+                            resolved_angas.push((anga_name.clone(), found_ty.clone()));
+                        } else {
+                            if found_ty != *expected_ty {
+                                self.errors.push(TypeCheckError::NirmanaAsangati {
+                                    dravya_name: dravya_name.clone(),
+                                    expected_count,
+                                    found_count,
+                                    anga_name: anga_name.clone(),
+                                    position: i,
+                                    expected_type: expected_ty.clone(),
+                                    found_type: found_ty.clone(),
+                                });
+                                return DevvaniType::Unknown;
+                            }
+                            resolved_angas.push((anga_name.clone(), expected_ty.clone()));
+                        }
                     }
+
+                    DevvaniType::Dravya(dravya_name.clone(), resolved_angas)
+                } else {
+                    for (i, (anga_name, expected_ty)) in angas.iter().enumerate() {
+                        let found_ty = self.check(&values[i]);
+                        if found_ty != *expected_ty {
+                            self.errors.push(TypeCheckError::NirmanaAsangati {
+                                dravya_name: dravya_name.clone(),
+                                expected_count,
+                                found_count,
+                                anga_name: anga_name.clone(),
+                                position: i,
+                                expected_type: expected_ty.clone(),
+                                found_type: found_ty.clone(),
+                            });
+                            return DevvaniType::Unknown;
+                        }
+                    }
+                    DevvaniType::Dravya(dravya_name.clone(), angas)
                 }
-                DevvaniType::Dravya(dravya_name.clone(), angas)
             }
 
             ASTNode::KriyaCall {
@@ -966,14 +1134,12 @@ impl TypeChecker {
                     let t_karta = self.check(karta.as_ref().unwrap());
                     match &t_karta {
                         DevvaniType::Avali(inner_ty) => {
-                            // Validate karma is empty
                             if !karma.is_empty() {
                                 self.errors.push(TypeCheckError::ApakarshanaAprayukta {
                                     found: t_karta.clone(),
                                 });
                                 return DevvaniType::Unknown;
                             }
-                            // Return type is inner element type
                             return inner_ty.as_ref().clone();
                         }
                         _ => {
@@ -985,7 +1151,71 @@ impl TypeChecker {
                     }
                 }
 
-                DevvaniType::Subject(kriya.clone())
+                let is_generic = self
+                    .function_generic_params
+                    .get(kriya)
+                    .map(|p| !p.is_empty())
+                    .unwrap_or(false);
+
+                if is_generic {
+                    let generic_params_set: HashSet<String> = self
+                        .function_generic_params
+                        .get(kriya)
+                        .map(|p| p.iter().cloned().collect())
+                        .unwrap_or_default();
+                    let mut inference: HashMap<String, DevvaniType> = HashMap::new();
+
+                    if let Some(params) = self.function_params.get(kriya) {
+                        for (i, param) in params.iter().enumerate() {
+                            if i >= arg_types.len() {
+                                break;
+                            }
+                            if param.is_borrowed {
+                                continue;
+                            }
+                            let param_type_name = &param.type_name;
+                            if generic_params_set.contains(param_type_name.as_str()) {
+                                if let Some(previous_ty) = inference.get(param_type_name) {
+                                    if *previous_ty != arg_types[i] {
+                                        self.errors.push(TypeCheckError::SamanyaAnishchitaDvandva {
+                                            name: kriya.clone(),
+                                            param_name: param_type_name.clone(),
+                                            found_type: arg_types[i].clone(),
+                                            previous_type: previous_ty.clone(),
+                                        });
+                                        return DevvaniType::Unknown;
+                                    }
+                                } else {
+                                    inference.insert(param_type_name.clone(), arg_types[i].clone());
+                                }
+                            }
+                        }
+                    }
+
+                    if let Some(declared_return) = self.function_return_types.get(kriya) {
+                        let needed_generic = Self::collect_samanya_from_type(declared_return);
+                        let needed_set: HashSet<String> = needed_generic.iter().cloned().collect();
+                        let inference_keys: HashSet<String> = inference.keys().cloned().collect();
+                        let not_found: Vec<String> = needed_set
+                            .difference(&inference_keys)
+                            .cloned()
+                            .collect();
+                        if !not_found.is_empty() {
+                            for missing in &not_found {
+                                self.errors.push(TypeCheckError::SamanyaAniyata {
+                                    name: kriya.clone(),
+                                    param_name: missing.clone(),
+                                });
+                            }
+                            return DevvaniType::Unknown;
+                        }
+                        return Self::substitute_samanya_in_type(declared_return.clone(), &inference);
+                    }
+
+                    DevvaniType::Subject(kriya.clone())
+                } else {
+                    DevvaniType::Subject(kriya.clone())
+                }
             }
 
             ASTNode::AvartanaNode { call, .. } => self.check(call),
@@ -1142,9 +1372,9 @@ impl TypeChecker {
             }
 
             ASTNode::PhalamType { success_type, error_type, .. } => {
-                let success = resolve_type_name(&self.env, success_type)
+                let success = self.resolve_type_name(success_type)
                     .unwrap_or_else(|| DevvaniType::Subject(success_type.clone()));
-                let error = resolve_type_name(&self.env, error_type)
+                let error = self.resolve_type_name(error_type)
                     .unwrap_or_else(|| DevvaniType::Subject(error_type.clone()));
                 DevvaniType::Phalam(Box::new(success), Box::new(error))
             }
@@ -1362,21 +1592,22 @@ mod tests {
         }
     }
 
-    fn dhatu_def(name: &str, body: Vec<ASTNode>) -> ASTNode {
-        ASTNode::DhatuDef {
-            name: name.to_string(),
-            lakara: Lakara::Lat,
-            gana: Gana::Bhvadi,
-            linga: Linga::Pullinga,
-            vacana: Vacana::Eka,
-            params: vec![],
-            upasargas: vec![],
-            return_karaka: None,
-            return_type: None,
-            body,
-            span: span(),
-        }
-    }
+fn dhatu_def(name: &str, body: Vec<ASTNode>) -> ASTNode {
+         ASTNode::DhatuDef {
+             name: name.to_string(),
+             generic_params: vec![],
+             lakara: Lakara::Lat,
+             gana: Gana::Bhvadi,
+             linga: Linga::Pullinga,
+             vacana: Vacana::Eka,
+             params: vec![],
+             upasargas: vec![],
+             return_karaka: None,
+             return_type: None,
+             body,
+             span: span(),
+         }
+     }
 
     fn yadi(tarhi: Vec<ASTNode>, anyatha: Option<Vec<ASTNode>>) -> ASTNode {
         ASTNode::YadiNode {
@@ -2177,13 +2408,14 @@ mod tests {
         );
     }
 
-    fn dravya_def(name: &str, angas: Vec<AngaField>) -> ASTNode {
-        ASTNode::DravyaDef {
-            name: name.to_string(),
-            angas,
-            span: span(),
-        }
-    }
+fn dravya_def(name: &str, angas: Vec<AngaField>) -> ASTNode {
+         ASTNode::DravyaDef {
+             name: name.to_string(),
+             generic_params: vec![],
+             angas,
+             span: span(),
+         }
+     }
 
     fn anga_field(name: &str, type_name: &str) -> AngaField {
         AngaField {
@@ -2526,20 +2758,21 @@ mod tests {
         body: Vec<ASTNode>,
         return_type: Option<ASTNode>,
     ) -> ASTNode {
-        ASTNode::DhatuDef {
-            name: name.to_string(),
-            lakara: Lakara::Lat,
-            gana: Gana::Bhvadi,
-            linga: Linga::Pullinga,
-            vacana: Vacana::Eka,
-            params: vec![],
-            upasargas: vec![],
-            return_karaka: None,
-            return_type: return_type.map(Box::new),
-            body,
-            span: span(),
-        }
-    }
+ASTNode::DhatuDef {
+             name: name.to_string(),
+             generic_params: vec![],
+             lakara: Lakara::Lat,
+             gana: Gana::Bhvadi,
+             linga: Linga::Pullinga,
+             vacana: Vacana::Eka,
+             params: vec![],
+             upasargas: vec![],
+             return_karaka: None,
+             return_type: return_type.map(Box::new),
+             body,
+             span: span(),
+         }
+     }
 
     #[test]
     fn test_phalam_type_resolution_basic() {
@@ -3031,6 +3264,7 @@ mod tests {
         }];
         let use_x = ASTNode::DhatuDef {
             name: "use_x".to_string(),
+            generic_params: vec![],
             lakara: Lakara::Lat,
             gana: Gana::Bhvadi,
             linga: Linga::Pullinga,
@@ -3089,25 +3323,26 @@ mod tests {
             is_borrowed: false,
             is_mutable_borrow: false,
             span: span(),
-            type_name: "sankhya".to_string(),
-        }];
-        let use_x = ASTNode::DhatuDef {
-            name: "use_x".to_string(),
-            lakara: Lakara::Lat,
-            gana: Gana::Bhvadi,
-            linga: Linga::Pullinga,
-            vacana: Vacana::Eka,
-            params,
-            upasargas: vec![],
-            return_karaka: None,
-            return_type: None,
-            body: vec![],
-            span: span(),
-        };
-        let mut checker = TypeChecker::new();
-        // Check the function definition first (registers params)
-        let _ = checker.check(&use_x);
-        // Declare src with non-Copy type (Vaak)
+type_name: "sankhya".to_string(),
+         }];
+         let use_x = ASTNode::DhatuDef {
+             name: "use_x".to_string(),
+             generic_params: vec![],
+             lakara: Lakara::Lat,
+             gana: Gana::Bhvadi,
+             linga: Linga::Pullinga,
+             vacana: Vacana::Eka,
+             params,
+             upasargas: vec![],
+             return_karaka: None,
+             return_type: None,
+             body: vec![],
+             span: span(),
+         };
+         let mut checker = TypeChecker::new();
+         // Check the function definition first (registers params)
+         let _ = checker.check(&use_x);
+         // Declare src with non-Copy type (Vaak)
         checker.check(&ASTNode::AstiNode {
             naama: "src".to_string(),
             mulya: Box::new(ASTNode::VaakLiteral {
@@ -3173,4 +3408,470 @@ mod tests {
             errors
         );
     }
+
+    // ===== Sāmānya (Generic) Part 2A Tests =====
+
+    fn generic_dravya_def(name: &str, generic_params: Vec<&str>, angas: Vec<AngaField>) -> ASTNode {
+        ASTNode::DravyaDef {
+            name: name.to_string(),
+            generic_params: generic_params.into_iter().map(|s| s.to_string()).collect(),
+            angas,
+            span: span(),
+        }
+    }
+
+    fn generic_dhatu_def(
+        name: &str,
+        generic_params: Vec<&str>,
+        params: Vec<KarakaParam>,
+        return_type: Option<ASTNode>,
+        body: Vec<ASTNode>,
+    ) -> ASTNode {
+        ASTNode::DhatuDef {
+            name: name.to_string(),
+            generic_params: generic_params.into_iter().map(|s| s.to_string()).collect(),
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params,
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: return_type.map(Box::new),
+            body,
+            span: span(),
+        }
+    }
+
+    // (a) Generic Dravya with single param T
+
+    #[test]
+    fn test_generic_dravya_single_param_resolves_to_samanya() {
+        let mut checker = TypeChecker::new();
+        let def = generic_dravya_def(
+            "Peti",
+            vec!["T"],
+            vec![anga_field("mulya", "T")],
+        );
+        let ty = checker.check(&def);
+        assert!(matches!(ty, DevvaniType::Dravya(_, _)));
+        if let DevvaniType::Dravya(name, angas) = &ty {
+            assert_eq!(name, "Peti");
+            assert_eq!(angas.len(), 1);
+            assert_eq!(angas[0], ("mulya".to_string(), DevvaniType::Samanya("T".to_string())));
+        }
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    // (b) Generic Dravya with two params T and U
+
+    #[test]
+    fn test_generic_dravya_two_params_resolve_correctly() {
+        let mut checker = TypeChecker::new();
+        let def = generic_dravya_def(
+            "Joduha",
+            vec!["T", "U"],
+            vec![anga_field("pahila", "T"), anga_field("dusara", "U")],
+        );
+        let ty = checker.check(&def);
+        assert!(matches!(ty, DevvaniType::Dravya(_, _)));
+        if let DevvaniType::Dravya(name, angas) = &ty {
+            assert_eq!(name, "Joduha");
+            assert_eq!(angas.len(), 2);
+            assert_eq!(angas[0], ("pahila".to_string(), DevvaniType::Samanya("T".to_string())));
+            assert_eq!(angas[1], ("dusara".to_string(), DevvaniType::Samanya("U".to_string())));
+        }
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    // (c) Generic Dhātu with param T and return type T
+
+    #[test]
+    fn test_generic_dhatu_param_and_return_resolve_to_samanya() {
+        let mut checker = TypeChecker::new();
+        let params = vec![KarakaParam {
+            name: "x".to_string(),
+            role: devvani_ast::KarakaRole::Karma,
+            vibhakti: devvani_ast::Vibhakti::Dvitiya,
+            is_borrowed: false,
+            is_mutable_borrow: false,
+            type_name: "T".to_string(),
+            span: span(),
+        }];
+        let dhatu = generic_dhatu_def(
+            "pratirupa",
+            vec!["T"],
+            params,
+            Some(ASTNode::PhalamType {
+                success_type: "T".to_string(),
+                error_type: "Vaak".to_string(),
+                span: span(),
+            }),
+            vec![],
+        );
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    // (d) Arithmetic on Samanya-typed param produces PrakaaraAsangata
+
+    #[test]
+    fn test_generic_dhatu_yoga_on_samanya_param_produces_asangata() {
+        let mut checker = TypeChecker::new();
+        let params = vec![KarakaParam {
+            name: "x".to_string(),
+            role: devvani_ast::KarakaRole::Karma,
+            vibhakti: devvani_ast::Vibhakti::Dvitiya,
+            is_borrowed: false,
+            is_mutable_borrow: false,
+            type_name: "T".to_string(),
+            span: span(),
+        }];
+        let body = vec![ASTNode::YogaNode {
+            vama: Box::new(ASTNode::Nama {
+                base: "x".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            dakshina: Box::new(ASTNode::Nama {
+                base: "y".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+        }];
+        let dhatu = generic_dhatu_def(
+            "samkala",
+            vec!["T"],
+            params,
+            None,
+            body,
+        );
+        let _ty = checker.check(&dhatu);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::PrakaaraAsangata(_))),
+            "expected PrakaaraAsangata error for Yoga on Samanya param, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // (e) Returning Samanya-typed param with matching Samanya return type
+
+    #[test]
+    fn test_generic_dhatu_return_samanya_param_is_valid() {
+        let mut checker = TypeChecker::new();
+        let params = vec![KarakaParam {
+            name: "x".to_string(),
+            role: devvani_ast::KarakaRole::Karma,
+            vibhakti: devvani_ast::Vibhakti::Dvitiya,
+            is_borrowed: false,
+            is_mutable_borrow: false,
+            type_name: "T".to_string(),
+            span: span(),
+        }];
+        let body = vec![ASTNode::SamprapatiNode {
+            expr: Box::new(ASTNode::Nama {
+                base: "x".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            span: span(),
+        }];
+        let dhatu = generic_dhatu_def(
+            "id",
+            vec!["T"],
+            params,
+            Some(ASTNode::PhalamType {
+                success_type: "T".to_string(),
+                error_type: "Vaak".to_string(),
+                span: span(),
+            }),
+            body,
+        );
+        let _ty = checker.check(&dhatu);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::SamprāptiAyogyatā)),
+            "expected no return-type error, got: {:?}",
+            checker.errors
+        );
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    // (f) DevvaniType equality / compatibility for Samanya
+
+    #[test]
+    fn test_samanya_equality_same_name_is_compatible() {
+        assert_eq!(DevvaniType::Samanya("T".to_string()), DevvaniType::Samanya("T".to_string()));
+    }
+
+    #[test]
+    fn test_samanya_equality_different_name_is_not_compatible() {
+        assert_ne!(DevvaniType::Samanya("T".to_string()), DevvaniType::Samanya("U".to_string()));
+    }
+
+    #[test]
+    fn test_samanya_equality_with_concrete_type_is_not_compatible() {
+        assert_ne!(DevvaniType::Samanya("T".to_string()), DevvaniType::Vaak);
+        assert_ne!(DevvaniType::Samanya("T".to_string()), DevvaniType::Subject("Purnaank".to_string()));
+    }
+
+    // ===== Sāmānya (Generic) Part 2B — Type Inference Tests =====
+
+    // (a) Generic Dravya Nirmāṇa — single generic param, single aṅga, concrete Vaak value provided
+    #[test]
+    fn test_generic_nirmana_single_param_infers_concrete_type() {
+        let mut checker = TypeChecker::new();
+        let def = generic_dravya_def(
+            "Peti",
+            vec!["T"],
+            vec![anga_field("mulya", "T")],
+        );
+        let _ty = checker.check(&def);
+        assert!(checker.errors.is_empty(), "definition should have no errors");
+
+        let nirmana = ASTNode::NirmanaNode {
+            dravya_name: "Peti".to_string(),
+            values: vec![ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }],
+            span: span(),
+        };
+        let result_ty = checker.check(&nirmana);
+        assert!(
+            checker.errors.is_empty(),
+            "nirmana should infer T=Vaak, got: {:?}",
+            checker.errors
+        );
+        match result_ty {
+            DevvaniType::Dravya(name, angas) => {
+                assert_eq!(name, "Peti");
+                assert_eq!(angas.len(), 1);
+                assert_eq!(angas[0], ("mulya".to_string(), DevvaniType::Subject("Vaak".to_string())));
+            }
+            _ => panic!("expected Dravya type, got {:?}", result_ty),
+        }
+    }
+
+    // (b) Generic Dravya Nirmāṇa — same param T used at two aṅga positions, both Vaak → succeeds
+    #[test]
+    fn test_generic_nirmana_same_param_two_positions_matching_types_succeeds() {
+        let mut checker = TypeChecker::new();
+        let def = generic_dravya_def(
+            "Yugala",
+            vec!["T"],
+            vec![anga_field("pahila", "T"), anga_field("dusara", "T")],
+        );
+        let _ty = checker.check(&def);
+        assert!(checker.errors.is_empty());
+
+        let nirmana = ASTNode::NirmanaNode {
+            dravya_name: "Yugala".to_string(),
+            values: vec![
+                ASTNode::VaakLiteral {
+                    value: "a".to_string(),
+                    span: span(),
+                },
+                ASTNode::VaakLiteral {
+                    value: "b".to_string(),
+                    span: span(),
+                },
+            ],
+            span: span(),
+        };
+        let result_ty = checker.check(&nirmana);
+        assert!(
+            checker.errors.is_empty(),
+            "expected no inference errors, got: {:?}",
+            checker.errors
+        );
+        match result_ty {
+            DevvaniType::Dravya(name, angas) => {
+                assert_eq!(name, "Yugala");
+                assert_eq!(angas.len(), 2);
+                assert_eq!(angas[0].1, DevvaniType::Subject("Vaak".to_string()));
+                assert_eq!(angas[1].1, DevvaniType::Subject("Vaak".to_string()));
+            }
+            _ => panic!("expected Dravya type, got {:?}", result_ty),
+        }
+    }
+
+    // (c) Generic Dravya Nirmāṇa — same param T at two positions with DIFFERENT values → D071
+    #[test]
+    fn test_generic_nirmana_same_param_two_positions_conflicting_types_produces_d071() {
+        let mut checker = TypeChecker::new();
+        let def = generic_dravya_def(
+            "Yugala",
+            vec!["T"],
+            vec![anga_field("pahila", "T"), anga_field("dusara", "T")],
+        );
+        let _ty = checker.check(&def);
+        assert!(checker.errors.is_empty());
+
+        let nirmana = ASTNode::NirmanaNode {
+            dravya_name: "Yugala".to_string(),
+            values: vec![
+                ASTNode::VaakLiteral {
+                    value: "a".to_string(),
+                    span: span(),
+                },
+                ASTNode::PurnaankLiteral {
+                    value: 42,
+                    span: span(),
+                },
+            ],
+            span: span(),
+        };
+        let result_ty = checker.check(&nirmana);
+        assert!(matches!(result_ty, DevvaniType::Unknown));
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::SamanyaAnishchitaDvandva { .. })),
+            "expected SamanyaAnishchitaDvandva (D071), got: {:?}",
+            checker.errors
+        );
+    }
+
+    // (d) Generic Dhātu call — param T, return T, called with Vaak argument → result Vaak
+    #[test]
+    fn test_generic_dhatu_call_infers_return_type() {
+        let mut checker = TypeChecker::new();
+        let params = vec![KarakaParam {
+            name: "x".to_string(),
+            role: devvani_ast::KarakaRole::Karma,
+            vibhakti: devvani_ast::Vibhakti::Dvitiya,
+            is_borrowed: false,
+            is_mutable_borrow: false,
+            type_name: "T".to_string(),
+            span: span(),
+        }];
+        let dhatu = generic_dhatu_def(
+            "pratirupa",
+            vec!["T"],
+            params,
+            Some(ASTNode::PhalamType {
+                success_type: "T".to_string(),
+                error_type: "Vaak".to_string(),
+                span: span(),
+            }),
+            vec![],
+        );
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty());
+
+        let kriya_call = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "pratirupa".to_string(),
+            karma: vec![ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let result_ty = checker.check(&kriya_call);
+        assert!(
+            checker.errors.is_empty(),
+            "expected no errors, got: {:?}",
+            checker.errors
+        );
+        assert_eq!(
+            result_ty,
+            DevvaniType::Phalam(
+                Box::new(DevvaniType::Subject("Vaak".to_string())),
+                Box::new(DevvaniType::Subject("Vaak".to_string()))
+            )
+        );
+    }
+
+    // (e) Generic Dhātu call — D072: return type is Samanya("T") but no param uses T
+    #[test]
+    fn test_generic_dhatu_call_uninferable_return_type_produces_d072() {
+        let mut checker = TypeChecker::new();
+        // param "x" typed as concrete "vaak", not generic "T"
+        let params = vec![KarakaParam {
+            name: "x".to_string(),
+            role: devvani_ast::KarakaRole::Karma,
+            vibhakti: devvani_ast::Vibhakti::Dvitiya,
+            is_borrowed: false,
+            is_mutable_borrow: false,
+            type_name: "vaak".to_string(),
+            span: span(),
+        }];
+        let dhatu = generic_dhatu_def(
+            "avaghataka",
+            vec!["T"],
+            params,
+            Some(ASTNode::PhalamType {
+                success_type: "T".to_string(),
+                error_type: "Vaak".to_string(),
+                span: span(),
+            }),
+            vec![],
+        );
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty());
+
+        let kriya_call = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "avaghataka".to_string(),
+            karma: vec![ASTNode::VaakLiteral {
+                value: "x".to_string(),
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let result_ty = checker.check(&kriya_call);
+        assert!(matches!(result_ty, DevvaniType::Unknown));
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::SamanyaAniyata { .. })),
+            "expected SamanyaAniyata (D072), got: {:?}",
+            checker.errors
+        );
+    }
+
+    // (f) Regression: non-generic Nirmāṇa and Dhātu calls unchanged
+
+    #[test]
+    fn test_non_generic_dravya_unchanged() {
+        let mut checker = TypeChecker::new();
+        let def = dravya_def(
+            "manushya",
+            vec![anga_field("naama", "vaak"), anga_field("sankhya", "sankhya")],
+        );
+        let ty = checker.check(&def);
+        assert_eq!(ty, DevvaniType::Dravya(
+            "manushya".to_string(),
+            vec![
+                ("naama".to_string(), DevvaniType::Vaak),
+                ("sankhya".to_string(), DevvaniType::Subject("Purnaank".to_string())),
+            ]
+        ));
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    #[test]
+    fn test_non_generic_dhatu_unchanged() {
+        let mut checker = TypeChecker::new();
+        let dhatu = dhatu_def("fetch", vec![ASTNode::VadatiNode {
+            mulya: Box::new(ASTNode::VaakLiteral {
+                value: "data".to_string(),
+                span: span(),
+            }),
+        }]);
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
 }
+

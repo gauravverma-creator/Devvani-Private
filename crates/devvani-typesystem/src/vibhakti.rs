@@ -37,6 +37,8 @@ pub enum DevvaniType {
     /// Sandarbha — borrow/reference expression wrapping the borrowed type;
     /// bool = true if mutable borrow, false if immutable.
     Sandarbha(Box<DevvaniType>, bool),
+    /// Samanya — generic type parameter (unresolved universal)
+    Samanya(String),
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -111,6 +113,7 @@ DevvaniType::VaakBorrow => write!(f, "VaakBorrow"),
 DevvaniType::Phalam(success, error) => write!(f, "Phalam({}, {})", success, error),
             DevvaniType::Sandarbha(inner, true) => write!(f, "vikara adhikara<{}>", inner),
             DevvaniType::Sandarbha(inner, false) => write!(f, "adhikara<{}>", inner),
+            DevvaniType::Samanya(s) => write!(f, "Samanya({})", s),
         }
     }
 }

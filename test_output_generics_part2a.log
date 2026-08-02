@@ -1,0 +1,590 @@
+   Compiling devvani-llvm v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-llvm)
+   Compiling devvani-compiler v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-compiler)
+   Compiling devvani-stdlib v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-stdlib)
+   Compiling devvani-codegen v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-codegen)
+   Compiling devvani-typesystem v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-typesystem)
+warning: function `test_Kramasah_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:559:8
+    |
+559 |     fn test_Kramasah_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `test_kramasah_keyword`
+    |
+    = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: function `test_Phalam_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:594:8
+    |
+594 |     fn test_Phalam_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `test_phalam_keyword`
+
+warning: function `test_Arogya_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:608:8
+    |
+608 |     fn test_Arogya_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `test_arogya_keyword`
+
+warning: function `test_Dosha_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:622:8
+    |
+622 |     fn test_Dosha_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `test_dosha_keyword`
+
+warning: function `test_Nidana_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:636:8
+    |
+636 |     fn test_Nidana_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `test_nidana_keyword`
+
+warning: function `test_Samprapti_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:650:8
+    |
+650 |     fn test_Samprapti_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `test_samprapti_keyword`
+
+warning: function `test_Sandarbha_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:664:8
+    |
+664 |     fn test_Sandarbha_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `test_sandarbha_keyword`
+
+warning: function `test_Adhikara_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:678:8
+    |
+678 |     fn test_Adhikara_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `test_adhikara_keyword`
+
+warning: function `test_Vikara_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:692:8
+    |
+692 |     fn test_Vikara_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `test_vikara_keyword`
+
+warning: function `test_Sāmānya_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:706:8
+    |
+706 |     fn test_Sāmānya_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case (notice the capitalization): `test_sāmānya_keyword`
+
+warning: function `test_Dhātu_keyword` should have a snake case name
+   --> crates/devvani-lexer/src/lexer.rs:720:8
+    |
+720 |     fn test_Dhātu_keyword() {
+    |        ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `test_dhātu_keyword`
+
+warning: `devvani-lexer` (lib test) generated 11 warnings
+   Compiling devvani-cli v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-cli)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 48.71s
+     Running unittests src/lib.rs (target/debug/deps/devvani_ast-53ea04d626300fff)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/devvani_cli-50589392962f8b29)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_codegen-98e7a1420b99f0b5)
+
+running 42 tests
+test tests::test_avali_nested_codegen ... ok
+test tests::test_borrowed_immutable_param_signature ... ok
+test tests::test_apakarshana_codegen ... ok
+test tests::test_call_site_auto_wrap_immutable ... ok
+test tests::test_borrowed_mutable_param_signature ... ok
+test tests::test_avali_literal_codegen ... ok
+test tests::test_avali_literal_empty_codegen ... ok
+test tests::test_call_site_auto_wrap_mutable ... ok
+test tests::test_dosha_node_codegen ... ok
+test tests::test_dhatu_def_phalam_wrapping_dravya_success_type ... ok
+test tests::test_dhatu_def_with_phalam_return_type_codegen ... ok
+test tests::test_arogya_node_codegen ... ok
+test tests::test_dravya_def_codegen ... ok
+test tests::test_dravya_with_dravya_typed_field_codegen ... ok
+test tests::test_empty_pankti_codegen ... ok
+test tests::test_dravya_def_empty_fields_codegen ... ok
+test tests::test_empty_program ... ok
+test tests::test_full_sandarbha_signature_roundtrip ... ok
+test tests::test_kramashah_empty_body_codegen ... ok
+test tests::test_kramashah_over_pankti_literal_codegen ... ok
+test tests::test_kramashah_basic_codegen ... ok
+test tests::test_nama_node ... ok
+test tests::test_nested_pankti_codegen ... ok
+test tests::test_nidana_nested_codegen ... ok
+test tests::test_nirmana_unknown_dravya_codegen ... ok
+test tests::test_nirmana_field_ordering ... ok
+test tests::test_nirmana_empty_dravya_codegen ... ok
+test tests::test_nidana_node_codegen ... ok
+test tests::test_no_double_wrap_on_sandarbha_arg ... ok
+test tests::test_nirmana_codegen ... ok
+test tests::test_pankti_literal_codegen ... ok
+test tests::test_pankti_of_kriya_call_results_codegen ... ok
+test tests::test_prakshepa_codegen ... ok
+test tests::test_samavaya_codegen ... ok
+test tests::test_sandarbha_immutable_codegen ... ok
+test tests::test_samprapati_on_kriya_call_codegen ... ok
+test tests::test_vinyasa_with_expression_index_codegen ... ok
+test tests::test_round_trip_phalam_arogya_dosha_samprapti ... ok
+test tests::test_sandarbha_mutable_codegen ... ok
+test tests::test_samprapati_node_codegen ... ok
+test tests::test_vinyasa_codegen ... ok
+test tests::test_samavaya_chained_codegen ... ok
+
+test result: ok. 42 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_compiler-1976f3ab4e13a39a)
+
+running 31 tests
+test diagnostics::tests::test_from_compiler_error_parse ... ok
+test diagnostics::tests::test_from_type_error_adhikara_dvandva_d068 ... ok
+test diagnostics::tests::test_from_type_error_anavastha_dosha ... ok
+test diagnostics::tests::test_from_type_error_kshaya_anantara_upayoga_d069 ... ok
+test diagnostics::tests::test_from_type_error_apakarshana_aprayukta ... ok
+test diagnostics::tests::test_from_type_error_avali_asangata ... ok
+test diagnostics::tests::test_from_type_error_kramasah_aprayukta ... ok
+test diagnostics::tests::test_from_type_error_dosha_asangati ... ok
+test diagnostics::tests::test_from_type_error_anga_apraapya ... ok
+test diagnostics::tests::test_from_type_error_dravya_apariyata ... ok
+test diagnostics::tests::test_from_type_error_kramasah_diagnostics_d053 ... ok
+test diagnostics::tests::test_from_type_error_nidana_aparichaya ... ok
+test diagnostics::tests::test_from_type_error_naama_apraapta ... ok
+test diagnostics::tests::test_from_type_error_nirmana_asangati_count ... ok
+test diagnostics::tests::test_from_type_error_pancaka_avishishtata ... ok
+test diagnostics::tests::test_from_type_error_pankti_asangata ... ok
+test diagnostics::tests::test_from_type_error_phala_sandarbha_abhava ... ok
+test diagnostics::tests::test_from_type_error_phala_visamgati ... ok
+test diagnostics::tests::test_from_type_error_prakshepa_aprayukta ... ok
+test diagnostics::tests::test_from_type_error_nirmana_asangati_type ... ok
+test diagnostics::tests::test_from_type_error_samprāpti_ayogyatā ... ok
+test diagnostics::tests::test_from_type_error_samavaya_aprayukta ... ok
+test diagnostics::tests::test_from_type_error_svatva_bhanga_d067 ... ok
+test diagnostics::tests::test_from_type_error_vikara_adhikara_dvaya_d070 ... ok
+test diagnostics::tests::test_from_type_error_vinyasa_sima_langhana ... ok
+test diagnostics::tests::test_report_empty ... ok
+test diagnostics::tests::test_from_type_error_vinyasa_aprayukta ... ok
+test diagnostics::tests::test_report_with_diagnostics ... ok
+test tests::test_compile_nonexistent_file ... ok
+test tests::test_compile_hello ... ok
+test tests::test_compile_ganana ... ok
+
+test result: ok. 31 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/integration_test.rs (target/debug/deps/integration_test-bf7e24d2d55a3349)
+
+running 15 tests
+test test_diagnostics_clean_report ... ok
+test test_krit_tavya_obligation ... ok
+test test_krit_kta_past_passive ... ok
+test test_krit_tum_infinitive ... ok
+test test_taddhita_iya_relational ... ok
+test test_taddhita_tama_superlative ... ok
+test test_taddhita_tva_abstract_noun ... ok
+test test_vibhakti_dvitiya_parameter_type ... ok
+test test_upasarga_export_private_conflict ... ok
+test test_nirmana_codegen_pipeline ... ok
+test test_rust_output_not_empty ... ok
+test test_pipeline_hello ... ok
+test test_recursive_dhatu_codegen ... ok
+test test_nonrecursive_dhatu_call_codegen ... ok
+test test_pipeline_samasa ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_lexer-979a486647992cb5)
+
+running 37 tests
+test lexer::tests::test_Dhātu_keyword ... ok
+test lexer::tests::test_Arogya_keyword ... ok
+test lexer::tests::test_Kramasah_keyword ... ok
+test lexer::tests::test_Dosha_keyword ... ok
+test lexer::tests::test_Nidana_keyword ... ok
+test lexer::tests::test_Phalam_keyword ... ok
+test lexer::tests::test_Adhikara_keyword ... ok
+test lexer::tests::test_Samprapti_keyword ... ok
+test lexer::tests::test_Sandarbha_keyword ... ok
+test lexer::tests::test_Sāmānya_keyword ... ok
+test lexer::tests::test_Vikara_keyword ... ok
+test lexer::tests::test_adhikara_keyword ... ok
+test lexer::tests::test_arogya_keyword ... ok
+test lexer::tests::test_avali_array_literal ... ok
+test lexer::tests::test_avali_keyword ... ok
+test lexer::tests::test_basic_identifiers ... ok
+test lexer::tests::test_brackets_in_array_literal ... ok
+test lexer::tests::test_dosha_keyword ... ok
+test lexer::tests::test_dhātu_keyword ... ok
+test lexer::tests::test_hyphenated_identifier ... ok
+test lexer::tests::test_keywords ... ok
+test lexer::tests::test_kramasah_keyword ... ok
+test lexer::tests::test_hyphenated_identifier_multiple_hyphens ... ok
+test lexer::tests::test_lbracket_rbracket_tokens ... ok
+test lexer::tests::test_new_sanskrit_keywords ... ok
+test lexer::tests::test_nidana_keyword ... ok
+test lexer::tests::test_numbers ... ok
+test lexer::tests::test_phalam_keyword ... ok
+test lexer::tests::test_plain_identifier_regression ... ok
+test lexer::tests::test_sāmānya_keyword ... ok
+test lexer::tests::test_samprapti_keyword ... ok
+test lexer::tests::test_sandarbha_keyword ... ok
+test lexer::tests::test_standalone_hyphen_not_swallowed ... ok
+test lexer::tests::test_strings ... ok
+test lexer::tests::test_sāmānya_dhātu_sequence ... ok
+test lexer::tests::test_sāmānya_dravya_sequence ... ok
+test lexer::tests::test_vikara_keyword ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_llvm-fdbbec3cb987704f)
+
+running 2 tests
+test tests::test_vibhakti_type_mapping ... ok
+test tests::test_codegen_init ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/pipeline_test.rs (target/debug/deps/pipeline_test-8ca6cc2f1a7dd4bb)
+
+running 2 tests
+test test_pipeline_simple_function ... ok
+test test_pipeline_with_variables ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_module-e364962a5338d399)
+
+running 16 tests
+test manifest::tests::test_registry_url ... ok
+test loader::tests::test_load_community_missing_returns_error ... ok
+test pipeline::tests::test_pipeline_resolve_unknown_returns_error ... ok
+test pipeline::tests::test_pipeline_process_official_manifest ... ok
+test loader::tests::test_cache_path_structure ... ok
+test resolver::tests::test_circular_dependency_detection ... ok
+test resolver::tests::test_register_and_resolve_module ... ok
+test resolver::tests::test_resolve_unknown_module_returns_error ... ok
+test visibility::tests::test_default_visibility_is_private ... ok
+test visibility::tests::test_private_only_accessible_from_own_module ... ok
+test visibility::tests::test_public_accessible_from_any_module ... ok
+test pipeline::tests::test_pipeline_detects_circular_dependency ... ok
+test manifest::tests::test_dependencies_parsed ... ok
+test manifest::tests::test_official_without_signature ... ok
+test manifest::tests::test_parse_community_manifest ... ok
+test manifest::tests::test_parse_official_manifest ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_number-22c7f38882d5231a)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_parser-8677167cab8a6123)
+
+running 36 tests
+test parser::tests::test_avali_literal_empty ... ok
+test parser::tests::test_avali_literal_basic ... ok
+test parser::tests::test_avali_nested ... ok
+test parser::tests::test_call_to_other_dhatu_is_kriya_call ... ok
+test parser::tests::test_empty_array_literal ... ok
+test parser::tests::test_dravya_registered_in_symbol_table ... ok
+test parser::tests::test_array_literal_with_three_elements ... ok
+test parser::tests::test_indexing_with_expression ... ok
+test parser::tests::test_kramasah_basic_parse ... ok
+test parser::tests::test_kramasah_over_named_pankti ... ok
+test parser::tests::test_nested_array_literal ... ok
+test parser::tests::test_parse_arogya_expression ... ok
+test parser::tests::test_parse_chained_samavaya_access ... ok
+test parser::tests::test_parse_dhatu_with_phalam_return_type ... ok
+test parser::tests::test_parse_dosha_expression ... ok
+test parser::tests::test_parse_dravya_odd_field_count_errors ... ok
+test parser::tests::test_parse_empty_dravya_def ... ok
+test parser::tests::test_parse_generic_dhatu_one_param ... ok
+test parser::tests::test_kramasah_empty_body ... ok
+test parser::tests::test_parse_generic_dravya_two_params ... ok
+test parser::tests::test_parse_nirmana_missing_danda ... ok
+test parser::tests::test_parse_nirmana_with_values ... ok
+test parser::tests::test_kramasah_nested_body_statements ... ok
+test parser::tests::test_parse_generic_dravya_one_param ... ok
+test parser::tests::test_parse_nirmana_zero_values ... ok
+test parser::tests::test_parse_nidana_block ... ok
+test parser::tests::test_parse_non_generic_dhatu_regression ... ok
+test parser::tests::test_parse_non_generic_dravya_regression ... ok
+test parser::tests::test_parse_samavaya_access ... ok
+test parser::tests::test_parse_simple_dravya_def ... ok
+test parser::tests::test_parse_sāmānya_not_followed_by_dravya_or_dhatu ... ok
+test parser::tests::test_self_recursive_dhatu_is_avatarana ... ok
+test parser::tests::test_simple_dhatu_regression ... ok
+test parser::tests::test_parse_samprapti_postfix ... ok
+test parser::tests::test_simple_indexing ... ok
+test parser::tests::test_unregistered_name_is_nama ... ok
+
+test result: ok. 36 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_reversible-2880fd6180ca81d7)
+
+running 52 tests
+test tests::test_dvr_format::test_invalid_magic_returns_error ... ok
+test tests::test_dvr_format::test_write_read_roundtrip_empty ... ok
+test tests::test_ancilla::test_mark_consumed ... ok
+test tests::test_ancilla::test_double_consume_returns_error ... ok
+test tests::test_ancilla::test_store_and_retrieve ... ok
+test tests::test_ancilla::test_purge_respects_dependency ... ok
+test tests::test_ancilla::test_active_count ... ok
+test tests::test_ancilla::test_purge_consumed_no_dependents ... ok
+test tests::test_dvr_format::test_write_read_roundtrip_single ... ok
+test tests::test_dvr_format::test_write_read_roundtrip_multiple ... ok
+test tests::test_lakara_reversible::test_anapravartya_lot_is_not_reversible ... ok
+test tests::test_lakara_reversible::test_diagnostic_codes ... ok
+test tests::test_lakara_reversible::test_pratyavartya_lan_with_op_id ... ok
+test tests::test_lakara_reversible::test_pratyavartya_lit_is_reversible ... ok
+test tests::test_lakara_reversible::test_sanskrit_names_non_empty ... ok
+test tests::test_operation_log::test_append_and_forward_chain ... ok
+test tests::test_operation_log::test_get_op_by_id ... ok
+test tests::test_operation_log::test_side_effect_recording ... ok
+test tests::test_operation_log::test_uncompute_chain_is_reverse ... ok
+test tests::test_operation_log::test_uncompute_result_recording ... ok
+test tests::test_ram_buffer::test_record_multiple_ops_sequential_ids ... ok
+test tests::test_ram_buffer::test_record_single_op ... ok
+test tests::test_ram_buffer::test_stats_after_operations ... ok
+test tests::test_ram_buffer::test_uncompute_already_consumed ... ok
+test tests::test_ram_buffer::test_uncompute_success ... ok
+test tests::test_ram_buffer::test_window_purge_triggers_on_full ... ok
+test tests::test_engine::test_engine_side_effect_recording ... ok
+test tests::test_engine::test_engine_flush ... ok
+test tests::test_engine::test_engine_record_and_uncompute ... ok
+test tests::test_sutra::test_empty_batch_selects_urdhva ... ok
+test tests::test_sutra::test_high_dependency_selects_nikhilam ... ok
+test tests::test_sutra::test_inverse_chain_selects_paravartya ... ok
+test tests::test_sutra::test_low_dependency_selects_urdhva ... ok
+test tests::test_sutra::test_partition_respects_reduction_fraction ... ok
+test tests::test_sutra::test_repeated_pattern_selects_anurupyena ... ok
+test tests::test_engine::test_engine_record_single ... ok
+test tests::test_ssd_tier::test_ssd_tier_fetch_after_flush ... ok
+test tests::test_vedic_batch::test_batch_triggers_at_threshold ... ok
+test tests::test_ssd_tier::test_ssd_tier_accept_and_flush ... ok
+test tests::test_engine::test_engine_uncompute_all ... ok
+test tests::test_window::test_invalid_config_purge_fraction ... ok
+test tests::test_window::test_invalid_config_zero_max_ops ... ok
+test tests::test_window::test_window_purge_count ... ok
+test tests::test_window::test_window_push_no_purge ... ok
+test tests::test_window::test_window_triggers_purge_at_capacity ... ok
+test tests::test_ssd_tier::test_ssd_tier_fetch_nonexistent ... ok
+test tests::test_engine::test_engine_stats ... ok
+test tests::test_vedic_batch::test_flush_batch_processes_partial ... ok
+test tests::test_vedic_batch::test_history_reduction_achieved ... ok
+test tests::test_ssd_tier::test_ssd_tier_manual_flush ... ok
+test tests::test_vedic_batch::test_record_ops_below_batch_threshold ... ok
+test tests::test_vedic_batch::test_cumulative_reduction_tracked ... ok
+
+test result: ok. 52 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_stdlib-fb3323c9df9e4bb1)
+
+running 20 tests
+test string::tests::test_parimana_ascii ... ok
+test string::tests::test_parimana_empty ... ok
+test string::tests::test_khanda_oob ... ok
+test string::tests::test_yoga_basic ... ok
+test string::tests::test_yoga_empty ... ok
+test string::tests::test_khanda_basic ... ok
+test tests::test_janayati_type ... ok
+test tests::test_anukramati_slice ... ok
+test tests::test_dvibhajati_bin ... ok
+test tests::test_parinameti_int_conversion ... ok
+test tests::test_asti_isinstance ... ok
+test tests::test_ganavati_len ... ok
+test tests::test_kramate_range ... ok
+test tests::test_prelude_init ... ok
+test tests::test_sarvayati_all ... ok
+test tests::test_registry_has_70_dhatus ... ok
+test tests::test_tulayati_abs ... ok
+test tests::test_samyojayati_join ... ok
+test tests::test_yojayati_sum ... ok
+test tests::test_vibhajati_split ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running unittests src/lib.rs (target/debug/deps/devvani_typesystem-c5ed42a5cc607b70)
+
+running 111 tests
+test checker::tests::mixed_type_pankti_produces_pankti_asangata ... ok
+test checker::tests::homogeneous_numeric_pankti_type_checks ... ok
+test checker::tests::empty_pankti_type_checks_to_unknown ... ok
+test checker::tests::nested_pankti_type_checks_correctly ... ok
+test checker::tests::test_apakarshana_valid ... ok
+test checker::tests::recursive_yadi_both_branhes_recurse_is_conservative ... ok
+test checker::tests::recursive_with_base_case_yields_no_anavastha ... ok
+test checker::tests::test_apakarshana_on_non_avali_error ... ok
+test checker::tests::recursive_no_yadi_yields_anavastha ... ok
+test checker::tests::test_arogya_mismatch_triggers_d061 ... ok
+test checker::tests::statically_out_of_bounds_index_produces_sima_langhana ... ok
+test checker::tests::non_recursive_yields_no_anavastha ... ok
+test checker::tests::test_arogya_valid_inside_nidana ... ok
+test checker::tests::test_avali_literal_empty_type ... ok
+test checker::tests::test_avali_literal_heterogeneous_error ... ok
+test checker::tests::test_borrow_of_moved_var_d067 ... ok
+test checker::tests::test_dosha_no_enclosing_phalam_triggers_d066 ... ok
+test checker::tests::test_dravya_def_unknown_field_type ... ok
+test checker::tests::test_dravya_def_valid_fields ... ok
+test checker::tests::test_generic_dhatu_param_and_return_resolve_to_samanya ... ok
+test checker::tests::test_arogya_no_enclosing_phalam_triggers_d066 ... ok
+test checker::tests::test_generic_dhatu_return_samanya_param_is_valid ... ok
+test checker::tests::test_avali_literal_homogeneous_type ... ok
+test checker::tests::test_dravya_def_empty_fields ... ok
+test checker::tests::test_generic_dravya_single_param_resolves_to_samanya ... ok
+test checker::tests::test_generic_dhatu_yoga_on_samanya_param_produces_asangata ... ok
+test checker::tests::test_borrowed_param_not_moved ... ok
+test checker::tests::test_generic_dravya_two_params_resolve_correctly ... ok
+test checker::tests::test_kramasah_empty_pankti ... ok
+test checker::tests::test_kramasah_item_type_matches_element ... ok
+test checker::tests::test_kramasah_diagnostics_d053 ... ok
+test checker::tests::test_kramasah_scope_isolated ... ok
+test checker::tests::test_move_use_after_move_d067 ... ok
+test checker::tests::test_kramasah_over_non_pankti_errors ... ok
+test checker::tests::test_nidana_empty_arm_triggers_d063 ... ok
+test checker::tests::test_mutable_borrow_then_immutable_d068 ... ok
+test checker::tests::test_nidana_target_not_phalam_triggers_d062 ... ok
+test checker::tests::test_kramasah_over_pankti_ok ... ok
+test checker::tests::test_nirmana_value_count_mismatch ... ok
+test checker::tests::test_nirmana_valid_instantiation ... ok
+test checker::tests::test_nirmana_type_mismatch_at_position ... ok
+test checker::tests::test_non_borrowed_param_moves_caller_var ... ok
+test checker::tests::test_nirmana_undefined_dravya_name ... ok
+test checker::tests::test_non_generic_dhatu_unchanged ... ok
+test checker::tests::test_phalam_type_resolution_basic ... ok
+test checker::tests::test_phalam_type_resolution_nested ... ok
+test checker::tests::test_prakshepa_on_non_avali_error ... ok
+test checker::tests::test_prakshepa_valid ... ok
+test checker::tests::test_non_generic_dravya_unchanged ... ok
+test checker::tests::test_samanya_equality_same_name_is_compatible ... ok
+test checker::tests::test_samanya_equality_different_name_is_not_compatible ... ok
+test checker::tests::test_samanya_equality_with_concrete_type_is_not_compatible ... ok
+test checker::tests::test_samavaya_on_non_dravya ... ok
+test checker::tests::test_samavaya_chained_access ... ok
+test checker::tests::test_samavaya_unknown_field ... ok
+test checker::tests::test_samavaya_valid_access ... ok
+test checker::tests::test_samprapti_incompatible_error_type_triggers_d065 ... ok
+test checker::tests::test_samprapti_inside_non_phalam_function_triggers_d064 ... ok
+test checker::tests::test_samprapti_inside_phalam_function_valid ... ok
+test checker::tests::test_two_immutable_borrows_ok ... ok
+test checker::tests::test_two_mutable_borrows_d070 ... ok
+test checker::tests::test_use_after_scope_exit_d069 ... ok
+test checker::tests::valid_vinyasa_index_resolves_to_element_type ... ok
+test checker::tests::variable_index_does_not_error ... ok
+test checker::tests::vinyasa_non_pankti_produces_aprayukta ... ok
+test krit::tests::test_krit_from_suffix_kta ... ok
+test krit::tests::test_krit_from_suffix_tavya ... ok
+test krit::tests::test_krit_from_suffix_tum ... ok
+test krit::tests::test_krit_to_derived_infinitive ... ok
+test krit::tests::test_krit_to_derived_obligation ... ok
+test lakara::tests::test_async_lrt ... ok
+test lakara::tests::test_lakara_from_str ... ok
+test lakara::tests::test_pure_lit ... ok
+test lakara::tests::test_round_trip_and_all_lakaras ... ok
+test lakara::tests::test_vidhilin_result ... ok
+test linga::tests::test_linga_from_str ... ok
+test linga::tests::test_linga_to_mutability_napumsaka ... ok
+test linga::tests::test_linga_to_mutability_stri ... ok
+test samasa::tests::test_resolve_avyayibhava ... ok
+test linga::tests::test_linga_to_rust_keyword_pullinga ... ok
+test samasa::tests::test_resolve_bahuvrihi ... ok
+test samasa::tests::test_resolve_tatpurusha ... ok
+test samasa::tests::test_resolve_karmadharaya ... ok
+test taddhita::tests::test_taddhita_derived_abstract_noun ... ok
+test symbol::tests::test_symbol_eka_pullinga ... ok
+test taddhita::tests::test_taddhita_derived_possessive ... ok
+test taddhita::tests::test_taddhita_derived_superlative ... ok
+test taddhita::tests::test_taddhita_from_suffix_iya ... ok
+test taddhita::tests::test_taddhita_from_suffix_tara ... ok
+test taddhita::tests::test_taddhita_from_suffix_tva ... ok
+test samasa::tests::test_resolve_dvandva ... ok
+test vaak::tests::test_cannot_move_borrow ... ok
+test upasarga::tests::test_valid_single_upasarga_on_dhatu ... ok
+test samasa::tests::test_samasa_from_str ... ok
+test upasarga::tests::test_invalid_pra_ni_conflict ... ok
+test vaak::tests::test_double_move_fails ... ok
+test vaak::tests::test_immutable_karta_cannot_write ... ok
+test symbol::tests::test_symbol_bahu_strilinga ... ok
+test vaak::tests::test_karana_type ... ok
+test upasarga::tests::test_valid_multi_upasarga_pra_su ... ok
+test vaak::tests::test_karta_register ... ok
+test vaak::tests::test_move_invalidates_original ... ok
+test vaak::tests::test_karana_no_move ... ok
+test upasarga::tests::test_invalid_su_vi_conflict ... ok
+test vaak::tests::test_karana_cannot_write ... ok
+test vaak::tests::test_move_transfers ... ok
+test vaak::tests::test_karta_creation ... ok
+test vaak::tests::test_use_after_move_error ... ok
+test vacana::tests::test_vacana_from_str ... ok
+test vacana::tests::test_vacana_to_rust_type_dvi ... ok
+test vacana::tests::test_vacana_to_rust_type_bahu ... ok
+
+test result: ok. 111 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+   Doc-tests devvani_ast
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_codegen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_compiler
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_lexer
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_module
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_number
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_parser
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_reversible
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_stdlib
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests devvani_typesystem
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

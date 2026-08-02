@@ -16,22 +16,23 @@ fn test_pipeline_simple_function() {
     let mut emitter = IrEmitter::new(&context, "test_pipeline");
 
     let ast = ASTNode::KaryakramNode {
-        shareera: vec![ASTNode::DhatuDef {
-            name: "test_pipeline".to_string(),
-            lakara: Lakara::Lat,
-            gana: Gana::Bhvadi,
-            linga: Linga::Pullinga,
-            vacana: Vacana::Eka,
-            params: vec![],
-            upasargas: vec![],
-            return_karaka: None,
-            return_type: None,
-            body: vec![ASTNode::PurnaankLiteral {
-                value: 0,
-                span: dummy_span(),
-            }],
-            span: dummy_span(),
-        }],
+shareera: vec![ASTNode::DhatuDef {
+             name: "test_pipeline".to_string(),
+             generic_params: vec![],
+             lakara: Lakara::Lat,
+             gana: Gana::Bhvadi,
+             linga: Linga::Pullinga,
+             vacana: Vacana::Eka,
+             params: vec![],
+             upasargas: vec![],
+             return_karaka: None,
+             return_type: None,
+             body: vec![ASTNode::PurnaankLiteral {
+                 value: 0,
+                 span: dummy_span(),
+             }],
+             span: dummy_span(),
+         }],
     };
 
     let ir = emitter.emit_ir(&ast).unwrap();
@@ -45,23 +46,24 @@ fn test_pipeline_with_variables() {
     let mut emitter = IrEmitter::new(&context, "test_vars");
 
     let ast = ASTNode::KaryakramNode {
-        shareera: vec![ASTNode::DhatuDef {
-            name: "test_vars".to_string(),
-            lakara: Lakara::Lat,
-            gana: Gana::Bhvadi,
-            linga: Linga::Pullinga,
-            vacana: Vacana::Eka,
-            params: vec![],
-            upasargas: vec![],
-            return_karaka: None,
-            return_type: None,
-            body: vec![
-                ASTNode::AstiNode {
-                    naama: "x".to_string(),
-                    mulya: Box::new(ASTNode::PurnaankLiteral {
-                        value: 42,
-                        span: dummy_span(),
-                    }),
+shareera: vec![ASTNode::DhatuDef {
+             name: "test_vars".to_string(),
+             generic_params: vec![],
+             lakara: Lakara::Lat,
+             gana: Gana::Bhvadi,
+             linga: Linga::Pullinga,
+             vacana: Vacana::Eka,
+             params: vec![],
+             upasargas: vec![],
+             return_karaka: None,
+             return_type: None,
+             body: vec![
+                 ASTNode::AstiNode {
+                     naama: "x".to_string(),
+                     mulya: Box::new(ASTNode::PurnaankLiteral {
+                         value: 42,
+                         span: dummy_span(),
+                     }),
                 },
                 ASTNode::VadatiNode {
                     mulya: Box::new(ASTNode::Nama {

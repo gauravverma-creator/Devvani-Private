@@ -125,19 +125,23 @@ pub enum TokenKind {
      NyuunaH,  // न्यूनः — less than
      AdhikaH,  // अधिकः — greater than
      Avali,    // growable array literal keyword
-     Dravya,   // struct definition keyword
-     Anga,     // struct field keyword
-     Nirmana,  // struct instantiation keyword
-     Phalam,   // function return type keyword (Phalam-Samprapti pattern)
-     Arogya,   // error-handling success constructor
-     Dosha,    // error-handling failure constructor
-Nidana,   // error-handling match/inspection keyword
-      Samprapti, // error-propagation postfix (? operator)
+      Dravya,   // struct definition keyword
+      Anga,     // struct field keyword
+      Nirmana,  // struct instantiation keyword
+      Phalam,   // function return type keyword (Phalam-Samprapti pattern)
+      Arogya,   // error-handling success constructor
+      Dosha,    // error-handling failure constructor
+ Nidana,   // error-handling match/inspection keyword
+       Samprapti, // error-propagation postfix (? operator)
 
-      // --- OWNERSHIP (borrow/reference) ---
-      Sandarbha, // reference declaration keyword
-      Adhikara,  // immutable borrow marker
-      Vikara,    // mutable borrow marker
+       // --- OWNERSHIP (borrow/reference) ---
+       Sandarbha, // reference declaration keyword
+       Adhikara,  // immutable borrow marker
+       Vikara,    // mutable borrow marker
+
+       // --- GENERICS ---
+       Sāmānya, // generic type parameter declaration keyword (सामान्य)
+       Dhātu,   // function declaration keyword (धातु)
 
       // --- SANDHI SPECIAL TOKENS ---
      Visarga,  // ḥ character standalone

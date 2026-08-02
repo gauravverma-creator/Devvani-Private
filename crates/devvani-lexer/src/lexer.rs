@@ -257,10 +257,14 @@ impl<'a> Lexer<'a> {
              "nidana" | "Nidana" => TokenKind::Nidana,
 "samprapti" | "Samprapti" => TokenKind::Samprapti,
 
-              // Ownership keywords
-              "sandarbha" | "Sandarbha" => TokenKind::Sandarbha,
-              "adhikara" | "Adhikara" => TokenKind::Adhikara,
-              "vikara" | "Vikara" => TokenKind::Vikara,
+"dhātu" | "Dhātu" => TokenKind::Dhātu,
+
+               // Ownership keywords
+               "sandarbha" | "Sandarbha" => TokenKind::Sandarbha,
+               "adhikara" | "Adhikara" => TokenKind::Adhikara,
+               "vikara" | "Vikara" => TokenKind::Vikara,
+
+               "sāmānya" | "Sāmānya" => TokenKind::Sāmānya,
 
                _ => TokenKind::Naama(id),
         };
@@ -692,12 +696,51 @@ mod tests {
     }
 
     #[test]
-    fn test_sandarbha_adhikara_sequence() {
-        let mut lexer = Lexer::new("sandarbha adhikara x ।");
+    fn test_sāmānya_keyword() {
+        let mut lexer = Lexer::new("sāmānya");
         let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Sandarbha);
-        assert_eq!(tokens[1].kind, TokenKind::Adhikara);
-        assert!(matches!(&tokens[2].kind, TokenKind::Naama(s) if s == "x"));
-        assert_eq!(tokens[3].kind, TokenKind::Danda);
+        assert_eq!(tokens[0].kind, TokenKind::Sāmānya);
+    }
+
+    #[test]
+    fn test_Sāmānya_keyword() {
+        let mut lexer = Lexer::new("Sāmānya");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Sāmānya);
+    }
+
+    #[test]
+    fn test_dhātu_keyword() {
+        let mut lexer = Lexer::new("dhātu");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Dhātu);
+    }
+
+    #[test]
+    fn test_Dhātu_keyword() {
+        let mut lexer = Lexer::new("Dhātu");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Dhātu);
+    }
+
+    #[test]
+    fn test_sāmānya_dravya_sequence() {
+        let mut lexer = Lexer::new("sāmānya T dravya Peti",
+        );
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Sāmānya);
+        assert_eq!(tokens[1].kind, TokenKind::Naama("T".to_string()));
+        assert_eq!(tokens[2].kind, TokenKind::Dravya);
+        assert_eq!(tokens[3].kind, TokenKind::Naama("Peti".to_string()));
+    }
+
+    #[test]
+    fn test_sāmānya_dhātu_sequence() {
+        let mut lexer = Lexer::new("sāmānya T dhātu pratirūpa");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Sāmānya);
+        assert_eq!(tokens[1].kind, TokenKind::Naama("T".to_string()));
+        assert_eq!(tokens[2].kind, TokenKind::Dhātu);
+        assert_eq!(tokens[3].kind, TokenKind::Naama("pratirūpa".to_string()));
     }
 }

@@ -142,6 +142,7 @@ pub enum ASTNode {
     },
     DhatuDef {
         name: String,
+        generic_params: Vec<String>,
         lakara: Lakara,
         gana: Gana,
         linga: Linga,
@@ -155,6 +156,7 @@ pub enum ASTNode {
     },
     DravyaDef {
         name: String,
+        generic_params: Vec<String>,
         angas: Vec<AngaField>,
         span: Span,
     },

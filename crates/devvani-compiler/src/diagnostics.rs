@@ -436,7 +436,7 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                     name
                 )),
             },
-            TypeCheckError::VikaraAdhikaraDvaya { name } => Diagnostic {
+             TypeCheckError::VikaraAdhikaraDvaya { name } => Diagnostic {
                 severity: Severity::Dosha,
                 code: "D070".to_string(),
                 sanskrit_title: "विकारअधिकारद्वय".to_string(),
@@ -455,6 +455,40 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                     "'{}' ka pehla mutable borrow close karke dobara try karo.",
                     name
                 )),
+            },
+            TypeCheckError::SamanyaAnishchitaDvandva { name, param_name, found_type, previous_type } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D071".to_string(),
+                sanskrit_title: "सामान्यअनिश्चितद्वन्द्व".to_string(),
+                roman_title: "Samanya Anishchita Dvandva".to_string(),
+                message: format!(
+                    "sāmānya param '{}' par '{}' mein conflicting inference ho rahi hai: \
+                     ek jagah {:?} aur doosri jagah {:?} mil rahe hain. \
+                     Vaiśeṣika vyākhyāna: sāmānya (generic) ki ek vishista pratirupa \
+                     ek hi ho sakta hai.",
+                    param_name, name, found_type, previous_type
+                ),
+                sutra_ref: Some(
+                    "Vaiśeṣika Sūtra (sāmānya-viśeṣa type-resolution)".to_string()
+                ),
+                hint: None,
+            },
+            TypeCheckError::SamanyaAniyata { name, param_name } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D072".to_string(),
+                sanskrit_title: "सामान्यअनियता".to_string(),
+                roman_title: "Samanya Aniyata".to_string(),
+                message: format!(
+                    "sāmānya param '{}' '{}' ke phalam-type mein upyog kiya ja raha hai, \
+                     lekin usse call ke argument se anumey nahi kiya ja sakta. \
+                     Vaiśeṣika vyākhyāna: sāmānya ka visheṣa (call arguments) se \
+                     niścaya (niscaya) avasyaka hai.",
+                    param_name, name
+                ),
+                sutra_ref: Some(
+                    "Vaiśeṣika Sūtra (inferability-at-call-site doctrine)".to_string()
+                ),
+                hint: None,
             },
         }
     }
@@ -895,5 +929,37 @@ mod tests {
         assert!(diag.display().contains("Vikara Adhikara Dvaya"));
         assert!(diag.sanskrit_title.contains("विकारअधिकारद्वय"));
         assert!(diag.message.contains("ramah"));
+    }
+
+    #[test]
+    fn test_from_type_error_samanya_anishchita_dvandva_d071() {
+        let err = TypeCheckError::SamanyaAnishchitaDvandva {
+            name: "Yugala".to_string(),
+            param_name: "T".to_string(),
+            found_type: devvani_typesystem::DevvaniType::Vaak,
+            previous_type: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D071");
+        assert!(diag.display().contains("Samanya Anishchita Dvandva"));
+        assert!(diag.sanskrit_title.contains("सामान्यअनिश्चितद्वन्द्व"));
+        assert!(diag.message.contains("Yugala"));
+        assert!(diag.message.contains("T"));
+        assert!(diag.sutra_ref.unwrap().contains("Vaiśeṣika"));
+    }
+
+    #[test]
+    fn test_from_type_error_samanya_aniyata_d072() {
+        let err = TypeCheckError::SamanyaAniyata {
+            name: "avaghataka".to_string(),
+            param_name: "T".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D072");
+        assert!(diag.display().contains("Samanya Aniyata"));
+        assert!(diag.sanskrit_title.contains("सामान्यअनियता"));
+        assert!(diag.message.contains("avaghataka"));
+        assert!(diag.message.contains("T"));
+        assert!(diag.sutra_ref.unwrap().contains("Vaiśeṣika"));
     }
 }

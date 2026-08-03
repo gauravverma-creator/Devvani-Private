@@ -139,13 +139,17 @@ pub enum TokenKind {
        Adhikara,  // immutable borrow marker
        Vikara,    // mutable borrow marker
 
-       // --- GENERICS ---
-       Sāmānya, // generic type parameter declaration keyword (सामान्य)
-       Dhātu,   // function declaration keyword (धातु)
+        // --- GENERICS ---
+        Sāmānya, // generic type parameter declaration keyword (सामान्य)
+        Dhātu,   // function declaration keyword (धातु)
 
-      // --- SANDHI SPECIAL TOKENS ---
-     Visarga,  // ḥ character standalone
-     Anusvara, // ṃ character standalone
+        // --- VARIABLE DECLARATION (Anumana / Type Inference) ---
+        Dharā,   // धरा — variable declaration keyword (typed or inferred)
+        Equals,  // = — assignment operator
+
+       // --- SANDHI SPECIAL TOKENS ---
+      Visarga,  // ḥ character standalone
+      Anusvara, // ṃ character standalone
 
      // --- META ---
      NavaPankti, // Newline

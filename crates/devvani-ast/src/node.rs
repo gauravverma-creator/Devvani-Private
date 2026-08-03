@@ -289,6 +289,15 @@ NidanaNode {
         value: String,
         span: Span,
     },
+    /// DhāraNode — typed or inferred variable declaration using the dhara keyword.
+    /// Syntax: dhara <name> [<type>] = <expr> ।
+    DharaNode {
+        naama: String,
+        type_name: Option<String>,
+        mulya: Box<ASTNode>,
+        is_mutable: bool,
+        span: Span,
+    },
     /// VaakNode — owned string variable declaration with Kāraka ownership role.
     /// Kartā = owner, Karaṇa = immutable borrow, Apādāna = move.
     VaakNode {

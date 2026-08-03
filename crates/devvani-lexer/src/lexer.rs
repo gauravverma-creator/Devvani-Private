@@ -134,11 +134,15 @@ impl<'a> Lexer<'a> {
                   self.advance();
                   TokenKind::Dot
               }
+              '=' => {
+                  self.advance();
+                  TokenKind::Equals
+              }
              _ => {
                  self.advance();
                  TokenKind::Unknown(c)
              }
-        };
+         };
 
         Ok(Some(Token {
             kind,
@@ -264,10 +268,12 @@ impl<'a> Lexer<'a> {
                "adhikara" | "Adhikara" => TokenKind::Adhikara,
                "vikara" | "Vikara" => TokenKind::Vikara,
 
-               "sāmānya" | "Sāmānya" => TokenKind::Sāmānya,
+            "sāmānya" | "Sāmānya" => TokenKind::Sāmānya,
 
-               _ => TokenKind::Naama(id),
-        };
+            "dhara" | "Dhara" | "धरा" => TokenKind::Dharā,
+
+             _ => TokenKind::Naama(id),
+         };
         Ok(Token {
             kind,
             span: Span {

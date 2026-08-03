@@ -490,6 +490,46 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 ),
                 hint: None,
             },
+            TypeCheckError::AnumanaViphalata => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D073".to_string(),
+                sanskrit_title: "अनुमानविफलता".to_string(),
+                roman_title: "Anumana Viphalata".to_string(),
+                message: "Anumāṇa (type inference) is kshīṇa — expression se prakara \
+                          nirdhāraṇa nahi ho sakā. Nyāya vyākhyāna: anumāna ki \
+                          viphalatā (failure of inference) tab hotī hai jābartha \
+                          hetu (premise) aprakaṭa ho."
+                    .to_string(),
+                sutra_ref: Some(
+                    "Nyāya Sūtra (Anumāna pramāṇa — inference failure doctrine)".to_string()
+                ),
+                hint: Some(
+                    "Is expression ko ek spaṣṭa type ke saath declare karo ya \
+                     uske mūla (operands) ke types suniścit karo."
+                        .to_string(),
+                ),
+            },
+            TypeCheckError::AnumanaSamgatiBhanga => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D074".to_string(),
+                sanskrit_title: "अनुमानसंगतिभङ्ग".to_string(),
+                roman_title: "Anumana Samgati Bhanga".to_string(),
+                message: "Anumāṇa-ke anek mārga (return paths) mein prakara \
+                          asaman hai — ek mārga se eka prakaara, doosre mārga \
+                          se anya prakaara praapt hai. Nyāya vyākhyāna: \
+                          anumāna-saṃgati-bhaṅga (fragmentation of inference) \
+                          tab hotī hai jābartha vibhinna pathon se \
+                          viruddha anumeya nishchit hota hai."
+                    .to_string(),
+                sutra_ref: Some(
+                    "Nyāya Sūtra (Anumāna pramāṇa — conflicting inference across paths)".to_string()
+                ),
+                hint: Some(
+                    "Sab return paths ko eka samaan type ke banāo ya function ke \
+                     return type ko explicitly declare karo."
+                        .to_string(),
+                ),
+            },
         }
     }
 
@@ -961,5 +1001,27 @@ mod tests {
         assert!(diag.message.contains("avaghataka"));
         assert!(diag.message.contains("T"));
         assert!(diag.sutra_ref.unwrap().contains("Vaiśeṣika"));
+    }
+
+    #[test]
+    fn test_from_type_error_anumana_viphalata_d073() {
+        let err = TypeCheckError::AnumanaViphalata;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D073");
+        assert!(diag.display().contains("Anumana Viphalata"));
+        assert!(diag.sanskrit_title.contains("अनुमानविफलता"));
+        assert!(diag.message.contains("Anumāṇa"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya"));
+    }
+
+    #[test]
+    fn test_from_type_error_anumana_samgati_bhanga_d074() {
+        let err = TypeCheckError::AnumanaSamgatiBhanga;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D074");
+        assert!(diag.display().contains("Anumana Samgati Bhanga"));
+        assert!(diag.sanskrit_title.contains("अनुमानसंगतिभङ्ग"));
+        assert!(diag.message.contains("Anumāṇa"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya"));
     }
 }

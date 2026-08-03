@@ -80,6 +80,7 @@ pub struct Codegen {
     collected_dravya_instantiations: Vec<(String, String, Vec<(String, DevvaniType)>)>,
     collected_dhatu_instantiations: Vec<(String, String, HashMap<String, DevvaniType>, DevvaniType)>,
     current_dhatu_context: Option<(String, String)>,
+    current_inference: Option<HashMap<String, DevvaniType>>,
 }
 
 impl Codegen {
@@ -94,6 +95,7 @@ impl Codegen {
             collected_dravya_instantiations: Vec::new(),
             collected_dhatu_instantiations: Vec::new(),
             current_dhatu_context: None,
+            current_inference: None,
         }
     }
 
@@ -181,20 +183,18 @@ impl Codegen {
                         mutable: symbol.mutability.is_mutable,
                     });
 
-                    let line = format!(
-                        "{}let {}: {};\n",
+                    self.rust_output.push_str(&format!(
+                        "{}{}",
                         self.indent_str(),
                         if symbol.mutability.is_mutable {
                             format!("mut {}", display_name)
                         } else {
                             display_name.to_string()
                         },
-                        symbol.rust_type_hint
-                    );
-                    self.rust_output.push_str(&line);
+                    ));
                 } else {
-                    let line = format!("{}let {};\n", self.indent_str(), display_name);
-                    self.rust_output.push_str(&line);
+                    self.rust_output
+                        .push_str(&format!("{}{}", self.indent_str(), display_name));
                 }
             }
             ASTNode::PurnaankLiteral { value, .. } => {
@@ -254,6 +254,55 @@ impl Codegen {
                     rust_type: "auto".into(),
                     mutable: true,
                 });
+            }
+            ASTNode::DharaNode { naama, type_name, mulya, is_mutable, .. } => {
+                let node_ptr = node as *const ASTNode;
+                let mut rust_ty_str = None;
+
+                if let Some(tn) = type_name {
+                    let rust_ty = self.type_name_to_rust_type(tn);
+                    rust_ty_str = Some(rust_ty);
+                } else if let Some(ty) = self.type_checker.node_type_map().get(&node_ptr) {
+                    let resolved_ty = if let Some(ref inference) = self.current_inference {
+                        Codegen::substitute_samanya_in_type(ty.clone(), inference)
+                    } else {
+                        ty.clone()
+                    };
+                    let rust_ty = self.type_name_to_rust_type_by_type(&resolved_ty);
+                    if rust_ty != "auto" {
+                        rust_ty_str = Some(rust_ty);
+                    }
+                }
+
+                if let Some(rust_ty) = rust_ty_str {
+                    if *is_mutable {
+                        self.rust_output
+                            .push_str(&format!("{}let mut {}: {} = ", self.indent_str(), naama, rust_ty));
+                    } else {
+                        self.rust_output
+                            .push_str(&format!("{}let {}: {} = ", self.indent_str(), naama, rust_ty));
+                    }
+                    self.instructions.push(Instruction::Bind {
+                        name: naama.clone(),
+                        rust_type: rust_ty,
+                        mutable: *is_mutable,
+                    });
+                } else {
+                    if *is_mutable {
+                        self.rust_output
+                            .push_str(&format!("{}let mut {} = ", self.indent_str(), naama));
+                    } else {
+                        self.rust_output
+                            .push_str(&format!("{}let {} = ", self.indent_str(), naama));
+                    }
+                    self.instructions.push(Instruction::Bind {
+                        name: naama.clone(),
+                        rust_type: "auto".into(),
+                        mutable: *is_mutable,
+                    });
+                }
+                self.emit(mulya)?;
+                self.rust_output.push_str(";\n");
             }
             ASTNode::YogaNode { vama, dakshina } => {
                 self.emit(vama)?;
@@ -572,6 +621,32 @@ impl Codegen {
                         }
                     }
 
+                    if return_type_str.is_empty() {
+                        if let Some(inferred_rt) =
+                            self.type_checker.function_return_types().get(name)
+                        {
+                            match inferred_rt {
+                                DevvaniType::Phalam(success, error) => {
+                                    let success_rust =
+                                        self.type_name_to_rust_type_by_type(success);
+                                    let error_rust =
+                                        self.type_name_to_rust_type_by_type(error);
+                                    return_type_str = format!(
+                                        " -> Result<{}, {}>",
+                                        success_rust, error_rust
+                                    );
+                                }
+                                other => {
+                                    let rust_ty =
+                                        self.type_name_to_rust_type_by_type(other);
+                                    if rust_ty != "auto" {
+                                        return_type_str = format!(" -> {}", rust_ty);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     let async_kw = if scope.is_async { "async " } else { "" };
                     let line = format!(
                         "{}pub {}fn {}({}){return_type_str} {{\n",
@@ -598,7 +673,7 @@ impl Codegen {
                         .cloned()
                         .collect();
                     let mut emitted_names = HashSet::new();
-                    for (dhatu_name, mangled, inference, _concrete_return) in instantiations {
+                    for (dhatu_name, mangled, inference, concrete_return) in instantiations {
                         if dhatu_name == *name {
                             if emitted_names.insert(mangled.clone()) {
                                 let prev_context = self.current_dhatu_context.take();
@@ -607,7 +682,7 @@ impl Codegen {
                                     &mangled,
                                     params,
                                     &inference,
-                                    return_type.as_deref(),
+                                    Some(concrete_return),
                                     body,
                                 );
                                 self.current_dhatu_context = prev_context;
@@ -1109,7 +1184,7 @@ impl Codegen {
         mangled_name: &str,
         params: &[KarakaParam],
         inference: &HashMap<String, DevvaniType>,
-        return_type: Option<&ASTNode>,
+        return_type: Option<DevvaniType>,
         body: &[ASTNode],
     ) {
         let mut rust_params = Vec::new();
@@ -1136,45 +1211,19 @@ impl Codegen {
         let mut return_type_str = String::new();
         if let Some(rt) = return_type {
             match rt {
-                ASTNode::PhalamType {
-                    success_type,
-                    error_type,
-                    ..
-                } => {
-                    let success_rust = if inference.contains_key(success_type) {
-                        self.type_name_to_rust_type_by_type(
-                            inference.get(success_type).unwrap(),
-                        )
-                    } else {
-                        self.type_name_to_rust_type(success_type)
-                    };
-                    let error_rust = if inference.contains_key(error_type) {
-                        self.type_name_to_rust_type_by_type(
-                            inference.get(error_type).unwrap(),
-                        )
-                    } else {
-                        self.type_name_to_rust_type(error_type)
-                    };
+                DevvaniType::Phalam(success, error) => {
+                    let success_rust = self.type_name_to_rust_type_by_type(&success);
+                    let error_rust = self.type_name_to_rust_type_by_type(&error);
                     return_type_str = format!(
                         " -> Result<{}, {}>",
                         success_rust, error_rust
                     );
                 }
-                ASTNode::Nama { base, .. } => {
-                    let rust_ty = if inference.contains_key(base) {
-                        self.type_name_to_rust_type_by_type(
-                            inference.get(base).unwrap(),
-                        )
-                    } else {
-                        self.type_name_to_rust_type(base)
-                    };
-                    return_type_str = format!(" -> {}", rust_ty);
-                }
                 other => {
-                    return_type_str = format!(
-                        " -> {}",
-                        self.generate_to_string(other).unwrap_or_default()
-                    );
+                    let rust_ty = self.type_name_to_rust_type_by_type(&other);
+                    if rust_ty != "auto" {
+                        return_type_str = format!(" -> {}", rust_ty);
+                    }
                 }
             }
         }
@@ -1188,7 +1237,9 @@ impl Codegen {
         self.rust_output.push_str(&line);
 
         self.indent += 1;
+        self.current_inference = Some(inference.clone());
         self.emit_body(body).ok();
+        self.current_inference = None;
         self.indent -= 1;
 
         self.rust_output.push_str(&self.indent_str());
@@ -1349,6 +1400,7 @@ impl Codegen {
             ASTNode::VaakNode { mulya, .. } => self.walk_for_dhatu_instantiations(mulya, set),
             ASTNode::AstiNode { mulya, .. } => self.walk_for_dhatu_instantiations(mulya, set),
             ASTNode::BhavatiNode { mulya, .. } => self.walk_for_dhatu_instantiations(mulya, set),
+            ASTNode::DharaNode { mulya, .. } => self.walk_for_dhatu_instantiations(mulya, set),
             ASTNode::VadatiNode { mulya, .. } => self.walk_for_dhatu_instantiations(mulya, set),
             ASTNode::VinyasaNode { target, index, .. } => {
                 self.walk_for_dhatu_instantiations(target, set);
@@ -1476,6 +1528,7 @@ impl Codegen {
             ASTNode::VaakNode { mulya, .. } => self.walk_for_instantiations(mulya, set),
             ASTNode::AstiNode { mulya, .. } => self.walk_for_instantiations(mulya, set),
             ASTNode::BhavatiNode { mulya, .. } => self.walk_for_instantiations(mulya, set),
+            ASTNode::DharaNode { mulya, .. } => self.walk_for_instantiations(mulya, set),
             ASTNode::VadatiNode { mulya, .. } => self.walk_for_instantiations(mulya, set),
             ASTNode::KriyaCall { karta, karma, karana, sampradana, apadan, adhikarana, .. } => {
                 if let Some(k) = karta {
@@ -1553,7 +1606,7 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
             shareera: vec![node],
         };
         assert!(codegen.generate(&program).is_ok());
-        assert!(codegen.rust_source().contains("let Ram"));
+        assert!(codegen.rust_source().contains("Ram"));
     }
 
     #[test]
@@ -3277,5 +3330,296 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         assert!(output.contains("mulya: String"));
         assert!(output.contains("pub fn echo__i64(x: i64) -> Result<i64, String> {"));
         assert!(output.contains("echo__i64(42)"));
+    }
+
+    // ===== Anumana (Type Inference) Codegen Tests =====
+
+    #[test]
+    fn test_dhara_inferred_integer_literal_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DharaNode {
+                naama: "x".to_string(),
+                type_name: None,
+                mulya: Box::new(ASTNode::PurnaankLiteral {
+                    value: 5,
+                    span: dummy_span(),
+                }),
+                is_mutable: false,
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("let x: i64 = 5;"),
+            "expected explicit i64 type annotation, got:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_dhara_inferred_string_literal_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DharaNode {
+                naama: "s".to_string(),
+                type_name: None,
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "hello".to_string(),
+                    span: dummy_span(),
+                }),
+                is_mutable: false,
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("let s: String = \"hello\";"),
+            "expected explicit String type annotation, got:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_dhara_chained_inference_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![
+                ASTNode::DharaNode {
+                    naama: "x".to_string(),
+                    type_name: None,
+                    mulya: Box::new(ASTNode::PurnaankLiteral {
+                        value: 5,
+                        span: dummy_span(),
+                    }),
+                    is_mutable: false,
+                    span: dummy_span(),
+                },
+                ASTNode::DharaNode {
+                    naama: "y".to_string(),
+                    type_name: None,
+                    mulya: Box::new(ASTNode::Nama {
+                        base: "x".to_string(),
+                        vibhakti: devvani_ast::Vibhakti::Prathama,
+                        linga: AstLinga::Pullinga,
+                        vacana: AstVacana::Eka,
+                        span: dummy_span(),
+                    }),
+                    is_mutable: false,
+                    span: dummy_span(),
+                },
+            ],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("let x: i64 = 5;"),
+            "expected x to have explicit i64 type, got:\n{}",
+            output
+        );
+        assert!(
+            output.contains("let y: i64 ="),
+            "expected y to have explicit i64 type, got:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_dhatu_def_inferred_return_type_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "get_num".to_string(),
+                generic_params: vec![],
+                lakara: devvani_ast::Lakara::Lat,
+                gana: devvani_ast::Gana::Bhvadi,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                params: vec![],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: None,
+                body: vec![ASTNode::PurnaankLiteral {
+                    value: 42,
+                    span: dummy_span(),
+                }],
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("pub fn get_num() -> i64 {"),
+            "expected inferred i64 return type, got:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_dhatu_def_inferred_return_type_no_expression() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "do_nothing".to_string(),
+                generic_params: vec![],
+                lakara: devvani_ast::Lakara::Lat,
+                gana: devvani_ast::Gana::Bhvadi,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                params: vec![],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: None,
+                body: vec![],
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            !output.contains("->"),
+            "expected no return type for unit function, got:\n{}",
+            output
+        );
+        assert!(
+            output.contains("pub fn do_nothing() {"),
+            "expected function without return type, got:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_explicit_dhara_node_codegen_unchanged() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DharaNode {
+                naama: "x".to_string(),
+                type_name: Some("sankhya".to_string()),
+                mulya: Box::new(ASTNode::PurnaankLiteral {
+                    value: 5,
+                    span: dummy_span(),
+                }),
+                is_mutable: false,
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("let x: i64 = 5;"),
+            "explicit-type DharaNode should still emit explicit type, got:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_explicit_dhatu_def_return_type_codegen_unchanged() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "bhojan_dhatu".to_string(),
+                generic_params: vec![],
+                lakara: devvani_ast::Lakara::Lat,
+                gana: devvani_ast::Gana::Bhvadi,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                params: vec![],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: Some(Box::new(ASTNode::PhalamType {
+                    success_type: "sankhya".to_string(),
+                    error_type: "vaak".to_string(),
+                    span: dummy_span(),
+                })),
+                body: vec![],
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("pub fn bhojan_dhatu() -> Result<i64, String> {"),
+            "explicit-return-type DhatuDef should still emit explicit return type, got:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_generic_dhatu_inferred_dhara_inside_body() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![
+                ASTNode::DhatuDef {
+                    name: "make_pair".to_string(),
+                    generic_params: vec!["T".to_string()],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: AstLinga::Pullinga,
+                    vacana: AstVacana::Eka,
+                    params: vec![devvani_ast::KarakaParam {
+                        name: "x".to_string(),
+                        type_name: "T".to_string(),
+                        role: devvani_ast::KarakaRole::Karta,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        vibhakti: devvani_ast::Vibhakti::Prathama,
+                        span: dummy_span(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: None,
+                    body: vec![
+                        ASTNode::DharaNode {
+                            naama: "local".to_string(),
+                            type_name: None,
+                            mulya: Box::new(ASTNode::Nama {
+                                base: "x".to_string(),
+                                vibhakti: devvani_ast::Vibhakti::Prathama,
+                                linga: AstLinga::Pullinga,
+                                vacana: AstVacana::Eka,
+                                span: dummy_span(),
+                            }),
+                            is_mutable: false,
+                            span: dummy_span(),
+                        },
+                        ASTNode::Nama {
+                            base: "local".to_string(),
+                            vibhakti: devvani_ast::Vibhakti::Prathama,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        },
+                    ],
+                    span: dummy_span(),
+                },
+                ASTNode::KriyaCall {
+                    karta: None,
+                    kriya: "make_pair".to_string(),
+                    karma: vec![ASTNode::PurnaankLiteral {
+                        value: 10,
+                        span: dummy_span(),
+                    }],
+                    karana: None,
+                    sampradana: None,
+                    apadan: None,
+                    adhikarana: None,
+                    span: dummy_span(),
+                },
+            ],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("pub fn make_pair__i64(x: i64) -> i64 {"),
+            "expected monomorphized generic function with inferred return type, got:\n{}",
+            output
+        );
+        assert!(
+            output.contains("let local: i64 ="),
+            "expected inferred-type dhara inside generic body to have concrete type, got:\n{}",
+            output
+        );
     }
 }

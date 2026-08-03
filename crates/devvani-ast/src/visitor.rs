@@ -18,6 +18,7 @@ pub trait ASTVisitor {
     fn visit_nama(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_asti(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_bhavati(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_dhara(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_arithmetic(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_comparison(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_io(&mut self, node: &ASTNode) -> VisitResult;
@@ -50,6 +51,7 @@ ASTNode::NidanaNode { .. } => self.visit_nidana(node),
             ASTNode::Nama { .. } => self.visit_nama(node),
             ASTNode::AstiNode { .. } => self.visit_asti(node),
             ASTNode::BhavatiNode { .. } => self.visit_bhavati(node),
+            ASTNode::DharaNode { .. } => self.visit_dhara(node),
             ASTNode::YogaNode { .. }
             | ASTNode::ViyogaNode { .. }
             | ASTNode::GunaNode { .. }
@@ -234,6 +236,18 @@ fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
         if let ASTNode::BhavatiNode { naama, .. } = node {
             self.print_indent();
             println!("Bhavati [{}]", naama);
+        }
+        Ok(())
+    }
+
+    fn visit_dhara(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::DharaNode { naama, type_name, .. } = node {
+            self.print_indent();
+            if let Some(tn) = type_name {
+                println!("Dhara [{}:{}]", naama, tn);
+            } else {
+                println!("Dhara [{}:inferred]", naama);
+            }
         }
         Ok(())
     }

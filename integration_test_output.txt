@@ -1,0 +1,52 @@
+   Compiling devvani-lexer v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-lexer)
+   Compiling devvani-ast v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-ast)
+   Compiling devvani-typesystem v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-typesystem)
+   Compiling devvani-parser v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-parser)
+   Compiling devvani-stdlib v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-stdlib)
+   Compiling devvani-codegen v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-codegen)
+warning: unused variable: `generic_params`
+    --> crates/devvani-codegen/src/lib.rs:1328:25
+     |
+1328 |                     let generic_params: Vec<String> = angas.iter()
+     |                         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_generic_params`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling devvani-compiler v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-compiler)
+warning: `devvani-codegen` (lib) generated 1 warning (run `cargo fix --lib -p devvani-codegen` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 41.16s
+     Running tests/integration_test.rs (target/debug/deps/integration_test-fdca5f9df86df61a)
+
+running 16 tests
+test test_krit_tavya_obligation ... ok
+test test_krit_tum_infinitive ... ok
+test test_krit_kta_past_passive ... ok
+test test_diagnostics_clean_report ... ok
+test test_taddhita_iya_relational ... ok
+test test_taddhita_tama_superlative ... ok
+test test_taddhita_tva_abstract_noun ... ok
+test test_upasarga_export_private_conflict ... ok
+test test_vibhakti_dvitiya_parameter_type ... ok
+test test_pipeline_samasa ... ok
+test test_nirmana_codegen_pipeline ... ok
+test test_recursive_dhatu_codegen ... ok
+test test_nonrecursive_dhatu_call_codegen ... ok
+test test_pipeline_hello ... ok
+test test_rust_output_not_empty ... ok
+test test_pipeline_type_inference ... FAILED
+
+failures:
+
+---- test_pipeline_type_inference stdout ----
+
+thread 'test_pipeline_type_inference' (67088) panicked at crates/devvani-compiler/tests/integration_test.rs:188:5:
+compile failed: Some("D009: UnexpectedToken { expected: \"expression\", found: Iti, span: Span { line: 1, col: 46, len: 3 } }")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    test_pipeline_type_inference
+
+test result: FAILED. 15 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+error: test failed, to rerun pass `-p devvani-compiler --test integration_test`

@@ -1,0 +1,18 @@
+warning: unused variable: `generic_params`
+    --> crates/devvani-codegen/src/lib.rs:1328:25
+     |
+1328 |                     let generic_params: Vec<String> = angas.iter()
+     |                         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_generic_params`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `devvani-codegen` (lib) generated 1 warning (run `cargo fix --lib -p devvani-codegen` to apply 1 suggestion)
+   Compiling devvani-compiler v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-compiler)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.57s
+     Running tests/integration_test.rs (target/debug/deps/integration_test-fdca5f9df86df61a)
+
+running 1 test
+test test_pipeline_type_inference ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.03s
+

@@ -52,6 +52,7 @@ TokenKind::Sāmānya => self.parse_sāmānya_prefix(),
                  self.advance();
                  self.parse_dhatu_def(vec![])
              }
+             TokenKind::Dharā => self.parse_dhara(),
              TokenKind::Naama(ref name) => {
                   if name.ends_with("-dhatu") {
                       let lookup = self.symbols.lookup(name);
@@ -244,14 +245,49 @@ fn parse_dhatu_def(&mut self, generic_params: Vec<String>) -> Result<ASTNode, Pa
              vacana: Vacana::Eka,
              params,
              upasargas: vec![],
-             return_karaka: None,
-             return_type,
-             body,
-             span: name_tok.span,
-         })
-     }
+              return_karaka: None,
+              return_type,
+              body,
+              span: name_tok.span,
+          })
+      }
 
-    fn parse_sāmānya_prefix(&mut self) -> Result<ASTNode, ParseError> {
+     fn parse_dhara(&mut self) -> Result<ASTNode, ParseError> {
+          let start_span = self.peek().span;
+          self.advance(); // consume dharā
+
+          let name_tok = self.expect_identifier()?;
+          let naama = if let TokenKind::Naama(n) = name_tok.kind {
+              n
+          } else {
+              unreachable!()
+          };
+
+          let type_name = if self.check(&TokenKind::Equals) {
+              None
+          } else {
+              let type_tok = self.expect_identifier()?;
+              if let TokenKind::Naama(n) = type_tok.kind {
+                  Some(n)
+              } else {
+                  unreachable!()
+              }
+          };
+
+          self.expect(TokenKind::Equals)?;
+          let mulya = self.parse_arithmetic()?;
+          self.expect(TokenKind::Danda)?;
+
+          Ok(ASTNode::DharaNode {
+              naama,
+              type_name,
+              mulya: Box::new(mulya),
+              is_mutable: false,
+              span: start_span,
+          })
+      }
+
+     fn parse_sāmānya_prefix(&mut self) -> Result<ASTNode, ParseError> {
          self.advance(); // consume Sāmānya
 
          let mut generic_params = Vec::new();
@@ -2105,5 +2141,95 @@ other => panic!("expected KaryakramNode, got {:?}", other),
         ];
         let result = parse_tokens(tokens);
         assert!(result.is_err(), "should fail when sāmānya not followed by dravya or dhātu");
+    }
+
+    // Dhara with explicit type parses correctly (regression)
+    #[test]
+    fn test_parse_dhara_with_explicit_type() {
+        let tokens = vec![
+            kw(TokenKind::Dharā),
+            nm("x"),
+            nm("i64"),
+            kw(TokenKind::Equals),
+            kw(TokenKind::PurnaankLiteral(5)),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DharaNode { naama, type_name, mulya, is_mutable, .. } => {
+                        assert_eq!(naama, "x");
+                        assert_eq!(type_name, &Some("i64".to_string()));
+                        assert!(!is_mutable);
+                        assert!(matches!(mulya.as_ref(), ASTNode::PurnaankLiteral { value, .. } if *value == 5));
+                    }
+                    other => panic!("expected DharaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Dhara without explicit type parses correctly and type_name is None (Anumana / Type Inference)
+    #[test]
+    fn test_parse_dhara_without_type() {
+        let tokens = vec![
+            kw(TokenKind::Dharā),
+            nm("x"),
+            kw(TokenKind::Equals),
+            kw(TokenKind::PurnaankLiteral(5)),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DharaNode { naama, type_name, mulya, is_mutable, .. } => {
+                        assert_eq!(naama, "x");
+                        assert!(type_name.is_none(), "type_name should be None for inferred type");
+                        assert!(!is_mutable);
+                        assert!(matches!(mulya.as_ref(), ASTNode::PurnaankLiteral { value, .. } if *value == 5));
+                    }
+                    other => panic!("expected DharaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Dhātu without explicit return type parses correctly and return_type is None (Anumana)
+    #[test]
+    fn test_parse_dhatu_without_phalam_return_type() {
+        let tokens = vec![
+            nm("square-dhatu"),
+            nm("n"),
+            nm("karoti"),
+            kw(TokenKind::Danda),
+            nm("n"),
+            kw(TokenKind::Yoga),
+            nm("n"),
+            kw(TokenKind::Iti),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DhatuDef { name, return_type, .. } => {
+                        assert_eq!(name, "square-dhatu");
+                        assert!(return_type.is_none(), "return_type should be None when phalam is omitted");
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
     }
 }

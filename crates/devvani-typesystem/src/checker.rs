@@ -3,6 +3,7 @@ use devvani_ast::node::KarakaParam;
 use devvani_ast::ASTNode;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::mem;
 
 #[derive(Debug, Clone)]
 pub enum TypeCheckError {
@@ -91,6 +92,10 @@ pub enum TypeCheckError {
         name: String,
         param_name: String,
     },
+    /// D073 — अनुमानविफलता (AnumanaViphalata): type could not be inferred from expression
+    AnumanaViphalata,
+    /// D074 — अनुमानसंगतिभङ्ग (AnumanaSamgatiBhanga): conflicting inferred types across return paths
+    AnumanaSamgatiBhanga,
 }
 
 impl fmt::Display for TypeCheckError {
@@ -244,6 +249,12 @@ impl fmt::Display for TypeCheckError {
                     param_name, name
                 )
             }
+            TypeCheckError::AnumanaViphalata => {
+                write!(f, "Anumana-viphalata: type could not be inferred from the given expression")
+            }
+            TypeCheckError::AnumanaSamgatiBhanga => {
+                write!(f, "Anumana-samgati-bhanga: conflicting inferred types across return paths")
+            }
         }
     }
 }
@@ -279,7 +290,7 @@ fn each_child(node: &ASTNode, f: &mut dyn FnMut(&ASTNode)) {
                 f(k);
             }
         }
-        ASTNode::AstiNode { mulya, .. } | ASTNode::BhavatiNode { mulya, .. } => f(mulya),
+        ASTNode::AstiNode { mulya, .. } | ASTNode::BhavatiNode { mulya, .. } | ASTNode::DharaNode { mulya, .. } => f(mulya),
         ASTNode::YogaNode { vama, dakshina }
         | ASTNode::ViyogaNode { vama, dakshina }
         | ASTNode::GunaNode { vama, dakshina }
@@ -451,6 +462,9 @@ pub struct TypeChecker {
     current_scope_vars: HashSet<String>,
     /// Stack for saving current_scope_vars across nested scopes
     current_scope_vars_stack: Vec<HashSet<String>>,
+    /// Temporary map for recording node types during DhatuDef body checking
+    /// (used for return-type inference across branches).
+    node_type_map: HashMap<*const ASTNode, DevvaniType>,
 }
 
     impl TypeChecker {
@@ -472,6 +486,7 @@ pub struct TypeChecker {
             closed_scope_vars: HashSet::new(),
             current_scope_vars: HashSet::new(),
             current_scope_vars_stack: Vec::new(),
+            node_type_map: HashMap::new(),
         }
     }
 
@@ -488,6 +503,11 @@ pub struct TypeChecker {
     /// Public accessor for the function return types registry
     pub fn function_return_types(&self) -> &HashMap<String, DevvaniType> {
         &self.function_return_types
+    }
+
+    /// Public accessor for the node type inference map
+    pub fn node_type_map(&self) -> &HashMap<*const ASTNode, DevvaniType> {
+        &self.node_type_map
     }
 
     /// Public accessor for the function generic params registry
@@ -626,7 +646,7 @@ pub struct TypeChecker {
     }
 
     pub fn check(&mut self, node: &ASTNode) -> DevvaniType {
-        match node {
+        let ty = match node {
             ASTNode::KaryakramNode { shareera, .. } => {
                 self.push_ownership_state();
                 let mut last_type = DevvaniType::Unknown;
@@ -645,6 +665,43 @@ pub struct TypeChecker {
 
             ASTNode::AstiNode { naama, mulya } | ASTNode::BhavatiNode { naama, mulya } => {
                 let ty = self.check(mulya);
+                if let ASTNode::Nama { base, .. } = mulya.as_ref() {
+                    if Self::is_non_copy_type(&ty) {
+                        self.moved_vars.insert(base.clone());
+                    }
+                }
+                let symbol = Symbol::new(naama, ty.clone(), &Vacana::Eka, &Linga::Pullinga, "var");
+                self.env.define_symbol(naama, symbol);
+                self.current_scope_vars.insert(naama.clone());
+                ty
+            }
+
+            ASTNode::DharaNode { naama, type_name, mulya, .. } => {
+                let ty = if let Some(t) = type_name {
+                    let expected = match self.resolve_type_name(t) {
+                        Some(ty) => ty,
+                        None => {
+                            self.errors.push(TypeCheckError::PrakaaraAsangata(
+                                format!("unknown type '{}'", t),
+                            ));
+                            DevvaniType::Unknown
+                        }
+                    };
+                    let mulya_ty = self.check(mulya);
+                    if mulya_ty != DevvaniType::Unknown && mulya_ty != expected {
+                        self.errors.push(TypeCheckError::PanktiAsangata {
+                            expected: expected.clone(),
+                            found: mulya_ty,
+                        });
+                    }
+                    expected
+                } else {
+                    let mulya_ty = self.check(mulya);
+                    if matches!(mulya_ty, DevvaniType::Unknown) {
+                        self.errors.push(TypeCheckError::AnumanaViphalata);
+                    }
+                    mulya_ty
+                };
                 if let ASTNode::Nama { base, .. } = mulya.as_ref() {
                     if Self::is_non_copy_type(&ty) {
                         self.moved_vars.insert(base.clone());
@@ -875,12 +932,41 @@ pub struct TypeChecker {
                 }
                 self.function_params.insert(name.clone(), params.clone());
 
+                let mut saved_map = mem::take(&mut self.node_type_map);
+
                 for stmt in body {
                     self.check(stmt);
                 }
 
-                if let Some(rt) = &self.current_return_type {
-                    self.function_return_types.insert(name.clone(), rt.clone());
+                let body_map = mem::take(&mut self.node_type_map);
+                for (k, v) in body_map {
+                    saved_map.insert(k, v);
+                }
+                self.node_type_map = saved_map;
+
+                let type_map = &self.node_type_map;
+
+                if let Some(_rt) = return_type {
+                    if let Some(resolved_rt) = &self.current_return_type {
+                        self.function_return_types.insert(name.clone(), resolved_rt.clone());
+                    }
+                } else {
+                    let return_types =
+                        Self::collect_return_types_from_body(body, &type_map);
+                    if return_types.is_empty() {
+                        // No return-producing expression; leave function out of the registry
+                    } else if return_types.len() == 1 {
+                        self.function_return_types
+                            .insert(name.clone(), return_types[0].clone());
+                    } else {
+                        let first = &return_types[0];
+                        if return_types[1..].iter().all(|t| t == first) {
+                            self.function_return_types
+                                .insert(name.clone(), first.clone());
+                        } else {
+                            self.errors.push(TypeCheckError::AnumanaSamgatiBhanga);
+                        }
+                    }
                 }
                 self.function_generic_params
                     .insert(name.clone(), generic_params.clone());
@@ -1553,7 +1639,69 @@ ASTNode::SamprapatiNode { expr, .. } => {
                  DevvaniType::Sandarbha(Box::new(target_type), borrow_is_mutable)
              }
 
-             _ => DevvaniType::Unknown,
+              _ => DevvaniType::Unknown,
+          };
+          self.node_type_map.insert(node as *const ASTNode, ty.clone());
+          ty
+      }
+
+    /// Collect inferred return types from all terminal expressions in a function body.
+    fn collect_return_types_from_body(
+        body: &[ASTNode],
+        type_map: &HashMap<*const ASTNode, DevvaniType>,
+    ) -> Vec<DevvaniType> {
+        if body.is_empty() {
+            return vec![];
+        }
+        let last = body.last().unwrap();
+        let mut return_types = Self::collect_return_types_from_node(last, type_map);
+        return_types.retain(|t| !matches!(t, DevvaniType::Unknown));
+        return_types
+    }
+
+    fn collect_return_types_from_node(
+        node: &ASTNode,
+        type_map: &HashMap<*const ASTNode, DevvaniType>,
+    ) -> Vec<DevvaniType> {
+        match node {
+            ASTNode::YadiNode { tarhi, anyatha, .. } => {
+                let mut types = Vec::new();
+                if let Some(last_tarhi) = tarhi.last() {
+                    types.extend(Self::collect_return_types_from_node(last_tarhi, type_map));
+                }
+                if let Some(anyatha_body) = anyatha {
+                    if let Some(last_anyatha) = anyatha_body.last() {
+                        types.extend(Self::collect_return_types_from_node(last_anyatha, type_map));
+                    }
+                }
+                types
+            }
+            ASTNode::YavatNode { shareera, .. } => {
+                if let Some(last) = shareera.last() {
+                    Self::collect_return_types_from_node(last, type_map)
+                } else {
+                    vec![]
+                }
+            }
+            ASTNode::PunahNode { shareera, .. } => {
+                if let Some(last) = shareera.last() {
+                    Self::collect_return_types_from_node(last, type_map)
+                } else {
+                    vec![]
+                }
+            }
+            ASTNode::KaryakramNode { shareera, .. } => {
+                if let Some(last) = shareera.last() {
+                    Self::collect_return_types_from_node(last, type_map)
+                } else {
+                    vec![]
+                }
+            }
+            _ => type_map
+                .get(&(node as *const ASTNode))
+                .cloned()
+                .into_iter()
+                .collect(),
         }
     }
 
@@ -3872,6 +4020,240 @@ type_name: "sankhya".to_string(),
         }]);
         let _ty = checker.check(&dhatu);
         assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    // ===== Anumāṇa (Type Inference) Tests =====
+
+    // (a) DharaNode with inferred integer literal → Purnaank
+
+    #[test]
+    fn test_dhara_inferred_integer_literal() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::DharaNode {
+            naama: "x".to_string(),
+            type_name: None,
+            mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            is_mutable: false,
+            span: span(),
+        }];
+        let dhatu = dhatu_def("main", body);
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        if let Some(symbol) = checker.env.lookup("x") {
+            assert_eq!(
+                symbol.devvani_type,
+                DevvaniType::Subject("Purnaank".to_string())
+            );
+        }
+    }
+
+    // (b) DharaNode with inferred string literal → Vaak
+
+    #[test]
+    fn test_dhara_inferred_string_literal() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::DharaNode {
+            naama: "s".to_string(),
+            type_name: None,
+            mulya: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }),
+            is_mutable: false,
+            span: span(),
+        }];
+        let dhatu = dhatu_def("main", body);
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        if let Some(symbol) = checker.env.lookup("s") {
+            assert_eq!(symbol.devvani_type, DevvaniType::Vaak);
+        }
+    }
+
+    // (c) Chained inference: dhara x = 5, then dhara y = x
+
+    #[test]
+    fn test_dhara_chained_inference() {
+        let mut checker = TypeChecker::new();
+        let body = vec![
+            ASTNode::DharaNode {
+                naama: "x".to_string(),
+                type_name: None,
+                mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+                is_mutable: false,
+                span: span(),
+            },
+            ASTNode::DharaNode {
+                naama: "y".to_string(),
+                type_name: None,
+                mulya: Box::new(ASTNode::Nama {
+                    base: "x".to_string(),
+                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: span(),
+                }),
+                is_mutable: false,
+                span: span(),
+            },
+        ];
+        let dhatu = dhatu_def("main", body);
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        if let Some(symbol) = checker.env.lookup("y") {
+            assert_eq!(
+                symbol.devvani_type,
+                DevvaniType::Subject("Purnaank".to_string())
+            );
+        }
+    }
+
+    // (d) DharaNode explicit type — matches value
+
+    #[test]
+    fn test_dhara_explicit_type_matches() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::DharaNode {
+            naama: "x".to_string(),
+            type_name: Some("sankhya".to_string()),
+            mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            is_mutable: false,
+            span: span(),
+        }];
+        let dhatu = dhatu_def("main", body);
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        if let Some(symbol) = checker.env.lookup("x") {
+            assert_eq!(
+                symbol.devvani_type,
+                DevvaniType::Subject("Purnaank".to_string())
+            );
+        }
+    }
+
+    // (e) DharaNode explicit type — mismatches value
+
+    #[test]
+    fn test_dhara_explicit_type_mismatch() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::DharaNode {
+            naama: "x".to_string(),
+            type_name: Some("vaak".to_string()),
+            mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            is_mutable: false,
+            span: span(),
+        }];
+        let dhatu = dhatu_def("main", body);
+        let _ty = checker.check(&dhatu);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PanktiAsangata { .. })),
+            "expected PanktiAsangata for explicit type mismatch, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // (f) Dhatu return inference — single consistent path
+
+    #[test]
+    fn test_dhatu_return_inference_single_path() {
+        let mut checker = TypeChecker::new();
+        let body = vec![
+            ASTNode::DharaNode {
+                naama: "x".to_string(),
+                type_name: None,
+                mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+                is_mutable: false,
+                span: span(),
+            },
+            ASTNode::PurnaankLiteral { value: 10, span: span() },
+        ];
+        let dhatu = dhatu_def("get_num", body);
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        let inferred = checker.function_return_types().get("get_num");
+        assert!(inferred.is_some(), "expected inferred return type for get_num");
+        assert_eq!(
+            inferred.unwrap(),
+            &DevvaniType::Subject("Purnaank".to_string())
+        );
+    }
+
+    // (g) Dhatu return inference — conflicting paths triggers D074
+
+    #[test]
+    fn test_dhatu_return_inference_conflicting_paths_d074() {
+        let mut checker = TypeChecker::new();
+        let body = vec![yadi(
+            vec![ASTNode::PurnaankLiteral { value: 1, span: span() }],
+            Some(vec![ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }]),
+        )];
+        let dhatu = dhatu_def("infer_me", body);
+        let _ty = checker.check(&dhatu);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AnumanaSamgatiBhanga)),
+            "expected AnumanaSamgatiBhanga (D074), got: {:?}",
+            checker.errors
+        );
+    }
+
+    // (h) Dhatu no return expression with omitted return type — no entry in registry
+
+    #[test]
+    fn test_dhatu_no_return_expression_no_return_type() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::VadatiNode {
+            mulya: Box::new(ASTNode::VaakLiteral {
+                value: "data".to_string(),
+                span: span(),
+            }),
+        }];
+        let dhatu = dhatu_def("fetch", body);
+        let _ty = checker.check(&dhatu);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        assert!(
+            !checker.function_return_types().contains_key("fetch"),
+            "fetch should not have an inferred return type when body has no return expression"
+        );
+    }
+
+    // (i) D073 trigger: DharaNode whose mulya evaluates to an unknown type.
+    //     VadatiNode returns Unknown (it is an output statement, not a value), so
+    //     using it as an expression inside DharaNode exercises the defensive check.
+
+    #[test]
+    fn test_dhara_inference_unknown_triggers_d073() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::DharaNode {
+            naama: "x".to_string(),
+            type_name: None,
+            mulya: Box::new(ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "hi".to_string(),
+                    span: span(),
+                }),
+            }),
+            is_mutable: false,
+            span: span(),
+        }];
+        let dhatu = dhatu_def("main", body);
+        let _ty = checker.check(&dhatu);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::AnumanaViphalata)),
+            "expected AnumanaViphalata (D073), got: {:?}",
+            checker.errors
+        );
     }
 }
 

@@ -1,0 +1,84 @@
+   Compiling devvani-codegen v0.1.0 (/mnt/c/Users/Rishi/Desktop/GV/Adipragya corporation/Devvani/crates/devvani-codegen)
+warning: unused variable: `generic_params`
+    --> crates/devvani-codegen/src/lib.rs:1328:25
+     |
+1328 |                     let generic_params: Vec<String> = angas.iter()
+     |                         ^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_generic_params`
+     |
+     = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `devvani-codegen` (lib) generated 1 warning (run `cargo fix --lib -p devvani-codegen` to apply 1 suggestion)
+warning: `devvani-codegen` (lib test) generated 1 warning (1 duplicate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.76s
+     Running unittests src/lib.rs (target/debug/deps/devvani_codegen-5f4c895b3a60f725)
+
+running 60 tests
+test tests::test_avali_literal_empty_codegen ... ok
+test tests::test_borrowed_immutable_param_signature ... ok
+test tests::test_apakarshana_codegen ... ok
+test tests::test_avali_nested_codegen ... ok
+test tests::test_avali_literal_codegen ... ok
+test tests::test_arogya_node_codegen ... ok
+test tests::test_call_site_auto_wrap_immutable ... ok
+test tests::test_borrowed_mutable_param_signature ... ok
+test tests::test_call_site_auto_wrap_mutable ... ok
+test tests::test_dhara_chained_inference_codegen ... ok
+test tests::test_dhara_inferred_integer_literal_codegen ... ok
+test tests::test_dhara_inferred_string_literal_codegen ... ok
+test tests::test_dhatu_def_with_phalam_return_type_codegen ... ok
+test tests::test_dravya_def_codegen ... ok
+test tests::test_dhatu_def_inferred_return_type_no_expression ... ok
+test tests::test_dhatu_def_phalam_wrapping_dravya_success_type ... ok
+test tests::test_dhatu_def_inferred_return_type_codegen ... ok
+test tests::test_dravya_def_empty_fields_codegen ... ok
+test tests::test_dosha_node_codegen ... ok
+test tests::test_dravya_with_dravya_typed_field_codegen ... ok
+test tests::test_empty_program ... ok
+test tests::test_empty_pankti_codegen ... ok
+test tests::test_explicit_dhatu_def_return_type_codegen_unchanged ... ok
+test tests::test_explicit_dhara_node_codegen_unchanged ... ok
+test tests::test_generic_dhatu_inferred_dhara_inside_body ... ok
+test tests::test_full_sandarbha_signature_roundtrip ... ok
+test tests::test_generic_dhatu_two_params_single_instantiation ... ok
+test tests::test_generic_dhatu_same_param_same_type_deduplicates ... ok
+test tests::test_generic_dravya_same_param_two_different_types ... ok
+test tests::test_generic_dravya_and_dhatu_together ... ok
+test tests::test_generic_dhatu_recursive_self_call ... ok
+test tests::test_generic_dravya_same_param_same_type_deduplicates ... ok
+test tests::test_generic_dhatu_same_param_two_different_types ... ok
+test tests::test_generic_dhatu_single_param_single_instantiation ... ok
+test tests::test_generic_dravya_single_param_single_instantiation ... ok
+test tests::test_kramashah_basic_codegen ... ok
+test tests::test_generic_dravya_two_params_single_instantiation ... ok
+test tests::test_kramashah_over_pankti_literal_codegen ... ok
+test tests::test_nested_pankti_codegen ... ok
+test tests::test_nidana_nested_codegen ... ok
+test tests::test_nidana_node_codegen ... ok
+test tests::test_nirmana_codegen ... ok
+test tests::test_nirmana_empty_dravya_codegen ... ok
+test tests::test_kramashah_empty_body_codegen ... ok
+test tests::test_no_double_wrap_on_sandarbha_arg ... ok
+test tests::test_nirmana_unknown_dravya_codegen ... ok
+test tests::test_nirmana_field_ordering ... ok
+test tests::test_nama_node ... ok
+test tests::test_pankti_of_kriya_call_results_codegen ... ok
+test tests::test_prakshepa_codegen ... ok
+test tests::test_pankti_literal_codegen ... ok
+test tests::test_samavaya_codegen ... ok
+test tests::test_samprapati_on_kriya_call_codegen ... ok
+test tests::test_round_trip_phalam_arogya_dosha_samprapti ... ok
+test tests::test_sandarbha_mutable_codegen ... ok
+test tests::test_samavaya_chained_codegen ... ok
+test tests::test_vinyasa_codegen ... ok
+test tests::test_samprapati_node_codegen ... ok
+test tests::test_vinyasa_with_expression_index_codegen ... ok
+test tests::test_sandarbha_immutable_codegen ... ok
+
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+   Doc-tests devvani_codegen
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

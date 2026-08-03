@@ -179,3 +179,23 @@ fn test_nirmana_codegen_pipeline() {
         code
     );
 }
+
+#[test]
+fn test_pipeline_type_inference() {
+    let source = "dhara x = 5 । dhātu getnum karoti । x yoga 5 iti ।";
+    let _ = fs::write("examples/inference_integration.dvn", source);
+    let result = Compiler::new("examples/inference_integration.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    println!("GENERATED RUST:\n{}", code);
+    assert!(
+        code.contains("let x: i64 = 5;"),
+        "expected inferred integer variable to have explicit i64 type, got:\n{}",
+        code
+    );
+    assert!(
+        code.contains("pub fn getnum() -> i64 {"),
+        "expected inferred return type function to have explicit i64 return type, got:\n{}",
+        code
+    );
+}

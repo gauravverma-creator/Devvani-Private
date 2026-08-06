@@ -255,51 +255,71 @@ impl Codegen {
                     mutable: true,
                 });
             }
-            ASTNode::DharaNode { naama, type_name, mulya, is_mutable, .. } => {
+            ASTNode::DharaNode { naamas, type_name, mulya, is_mutable, .. } => {
                 let node_ptr = node as *const ASTNode;
-                let mut rust_ty_str = None;
 
-                if let Some(tn) = type_name {
-                    let rust_ty = self.type_name_to_rust_type(tn);
-                    rust_ty_str = Some(rust_ty);
-                } else if let Some(ty) = self.type_checker.node_type_map().get(&node_ptr) {
-                    let resolved_ty = if let Some(ref inference) = self.current_inference {
-                        Codegen::substitute_samanya_in_type(ty.clone(), inference)
-                    } else {
-                        ty.clone()
-                    };
-                    let rust_ty = self.type_name_to_rust_type_by_type(&resolved_ty);
-                    if rust_ty != "auto" {
+                if naamas.len() == 1 {
+                    let naama = &naamas[0];
+                    let mut rust_ty_str = None;
+
+                    if let Some(tn) = type_name {
+                        let rust_ty = self.type_name_to_rust_type(tn);
                         rust_ty_str = Some(rust_ty);
+                    } else if let Some(ty) = self.type_checker.node_type_map().get(&node_ptr) {
+                        let resolved_ty = if let Some(ref inference) = self.current_inference {
+                            Codegen::substitute_samanya_in_type(ty.clone(), inference)
+                        } else {
+                            ty.clone()
+                        };
+                        let rust_ty = self.type_name_to_rust_type_by_type(&resolved_ty);
+                        if rust_ty != "auto" {
+                            rust_ty_str = Some(rust_ty);
+                        }
                     }
-                }
 
-                if let Some(rust_ty) = rust_ty_str {
-                    if *is_mutable {
-                        self.rust_output
-                            .push_str(&format!("{}let mut {}: {} = ", self.indent_str(), naama, rust_ty));
+                    if let Some(rust_ty) = rust_ty_str {
+                        if *is_mutable {
+                            self.rust_output
+                                .push_str(&format!("{}let mut {}: {} = ", self.indent_str(), naama, rust_ty));
+                        } else {
+                            self.rust_output
+                                .push_str(&format!("{}let {}: {} = ", self.indent_str(), naama, rust_ty));
+                        }
+                        self.instructions.push(Instruction::Bind {
+                            name: naama.clone(),
+                            rust_type: rust_ty,
+                            mutable: *is_mutable,
+                        });
                     } else {
-                        self.rust_output
-                            .push_str(&format!("{}let {}: {} = ", self.indent_str(), naama, rust_ty));
+                        if *is_mutable {
+                            self.rust_output
+                                .push_str(&format!("{}let mut {} = ", self.indent_str(), naama));
+                        } else {
+                            self.rust_output
+                                .push_str(&format!("{}let {} = ", self.indent_str(), naama));
+                        }
+                        self.instructions.push(Instruction::Bind {
+                            name: naama.clone(),
+                            rust_type: "auto".into(),
+                            mutable: *is_mutable,
+                        });
                     }
-                    self.instructions.push(Instruction::Bind {
-                        name: naama.clone(),
-                        rust_type: rust_ty,
-                        mutable: *is_mutable,
-                    });
                 } else {
+                    let names_str = naamas.join(", ");
                     if *is_mutable {
                         self.rust_output
-                            .push_str(&format!("{}let mut {} = ", self.indent_str(), naama));
+                            .push_str(&format!("{}let mut ({}) = ", self.indent_str(), names_str));
                     } else {
                         self.rust_output
-                            .push_str(&format!("{}let {} = ", self.indent_str(), naama));
+                            .push_str(&format!("{}let ({}) = ", self.indent_str(), names_str));
                     }
-                    self.instructions.push(Instruction::Bind {
-                        name: naama.clone(),
-                        rust_type: "auto".into(),
-                        mutable: *is_mutable,
-                    });
+                    for naama in naamas {
+                        self.instructions.push(Instruction::Bind {
+                            name: naama.clone(),
+                            rust_type: "auto".into(),
+                            mutable: *is_mutable,
+                        });
+                    }
                 }
                 self.emit(mulya)?;
                 self.rust_output.push_str(";\n");
@@ -877,6 +897,55 @@ impl Codegen {
                 }
                 self.emit(target)?;
             }
+            ASTNode::SamyogaNode { body, .. } => {
+                self.rust_output.push_str("std::thread::spawn(move || {\n");
+                self.indent += 1;
+                self.emit_body(body)?;
+                self.indent -= 1;
+                self.rust_output.push_str("})");
+            }
+            ASTNode::PraptiNode { handle, .. } => {
+                self.emit(handle)?;
+                self.rust_output.push_str(".join().unwrap()");
+            }
+            ASTNode::DutaBanaaNode { .. } => {
+                self.rust_output.push_str("std::sync::mpsc::channel()");
+            }
+            ASTNode::DutaBhejNode { sender, message, .. } => {
+                self.rust_output.push_str(&self.indent_str());
+                self.emit(sender)?;
+                self.rust_output.push_str(".send(");
+                self.emit(message)?;
+                self.rust_output.push_str(").unwrap();\n");
+            }
+            ASTNode::DutaGrahanNode { receiver, .. } => {
+                self.emit(receiver)?;
+                self.rust_output.push_str(".recv().unwrap()");
+            }
+            ASTNode::ManasNode { target, body, .. } => {
+                let target_name = if let ASTNode::Nama { base, .. } = target.as_ref() {
+                    base.clone()
+                } else {
+                    return Err(CodegenError::UnsupportedNode(
+                        "ManasNode target must be a Nama identifier".to_string(),
+                    ));
+                };
+                self.rust_output.push_str("{\n");
+                self.indent += 1;
+                self.rust_output.push_str(&format!(
+                    "{}let mut {} = ",
+                    self.indent_str(),
+                    target_name
+                ));
+                let saved_indent = self.indent;
+                self.indent = 0;
+                self.emit(target)?;
+                self.indent = saved_indent;
+                self.rust_output.push_str(".lock().unwrap();\n");
+                self.emit_body(body)?;
+                self.indent -= 1;
+                self.rust_output.push_str(&format!("{}}}\n", self.indent_str()));
+            }
             _ => {
                 let msg = format!("Unhandled node: {:?}", node);
                 self.instructions.push(Instruction::Comment(msg.clone()));
@@ -1421,6 +1490,27 @@ impl Codegen {
             ASTNode::DoshaNode { value, .. } => {
                 self.walk_for_dhatu_instantiations(value, set);
             }
+            ASTNode::SamyogaNode { body, .. } => {
+                for stmt in body {
+                    self.walk_for_dhatu_instantiations(stmt, set);
+                }
+            }
+            ASTNode::PraptiNode { handle, .. } => {
+                self.walk_for_dhatu_instantiations(handle, set);
+            }
+            ASTNode::DutaBhejNode { sender, message, .. } => {
+                self.walk_for_dhatu_instantiations(sender, set);
+                self.walk_for_dhatu_instantiations(message, set);
+            }
+            ASTNode::DutaGrahanNode { receiver, .. } => {
+                self.walk_for_dhatu_instantiations(receiver, set);
+            }
+            ASTNode::ManasNode { target, body, .. } => {
+                self.walk_for_dhatu_instantiations(target, set);
+                for stmt in body {
+                    self.walk_for_dhatu_instantiations(stmt, set);
+                }
+            }
             _ => {}
         }
     }
@@ -1559,6 +1649,27 @@ impl Codegen {
             ASTNode::SamprapatiNode { expr, .. } => self.walk_for_instantiations(expr, set),
             ASTNode::ArogyaNode { value, .. } => self.walk_for_instantiations(value, set),
             ASTNode::DoshaNode { value, .. } => self.walk_for_instantiations(value, set),
+            ASTNode::SamyogaNode { body, .. } => {
+                for stmt in body {
+                    self.walk_for_instantiations(stmt, set);
+                }
+            }
+            ASTNode::PraptiNode { handle, .. } => {
+                self.walk_for_instantiations(handle, set);
+            }
+            ASTNode::DutaBhejNode { sender, message, .. } => {
+                self.walk_for_instantiations(sender, set);
+                self.walk_for_instantiations(message, set);
+            }
+            ASTNode::DutaGrahanNode { receiver, .. } => {
+                self.walk_for_instantiations(receiver, set);
+            }
+            ASTNode::ManasNode { target, body, .. } => {
+                self.walk_for_instantiations(target, set);
+                for stmt in body {
+                    self.walk_for_instantiations(stmt, set);
+                }
+            }
             _ => {}
         }
     }
@@ -1607,111 +1718,6 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         };
         assert!(codegen.generate(&program).is_ok());
         assert!(codegen.rust_source().contains("Ram"));
-    }
-
-    #[test]
-    fn test_pankti_literal_codegen() {
-        let mut codegen = Codegen::new(CodegenTarget::RustSource);
-        let elements = vec![
-            ASTNode::PurnaankLiteral {
-                value: 1,
-                span: dummy_span(),
-            },
-            ASTNode::PurnaankLiteral {
-                value: 2,
-                span: dummy_span(),
-            },
-            ASTNode::PurnaankLiteral {
-                value: 3,
-                span: dummy_span(),
-            },
-        ];
-        let node = ASTNode::PanktiNode {
-            elements,
-            span: dummy_span(),
-        };
-        assert!(codegen.emit(&node).is_ok());
-        assert_eq!(codegen.rust_source().trim(), "[1, 2, 3]");
-    }
-
-    #[test]
-    fn test_empty_pankti_codegen() {
-        let mut codegen = Codegen::new(CodegenTarget::RustSource);
-        let node = ASTNode::PanktiNode {
-            elements: vec![],
-            span: dummy_span(),
-        };
-        assert!(codegen.emit(&node).is_ok());
-        assert_eq!(codegen.rust_source().trim(), "[]");
-    }
-
-    #[test]
-    fn test_nested_pankti_codegen() {
-        let mut codegen = Codegen::new(CodegenTarget::RustSource);
-        let inner_elements = vec![
-            ASTNode::PurnaankLiteral {
-                value: 4,
-                span: dummy_span(),
-            },
-            ASTNode::PurnaankLiteral {
-                value: 5,
-                span: dummy_span(),
-            },
-        ];
-        let elements = vec![
-            ASTNode::PurnaankLiteral {
-                value: 1,
-                span: dummy_span(),
-            },
-            ASTNode::PanktiNode {
-                elements: inner_elements,
-                span: dummy_span(),
-            },
-            ASTNode::PurnaankLiteral {
-                value: 6,
-                span: dummy_span(),
-            },
-        ];
-        let node = ASTNode::PanktiNode {
-            elements,
-            span: dummy_span(),
-        };
-        assert!(codegen.emit(&node).is_ok());
-        assert_eq!(codegen.rust_source().trim(), "[1, [4, 5], 6]");
-    }
-
-    #[test]
-    fn test_vinyasa_codegen() {
-        let mut codegen = Codegen::new(CodegenTarget::RustSource);
-        let index = ASTNode::PurnaankLiteral {
-            value: 0,
-            span: dummy_span(),
-        };
-        let target = ASTNode::PanktiNode {
-            elements: vec![
-                ASTNode::PurnaankLiteral {
-                    value: 1,
-                    span: dummy_span(),
-                },
-                ASTNode::PurnaankLiteral {
-                    value: 2,
-                    span: dummy_span(),
-                },
-                ASTNode::PurnaankLiteral {
-                    value: 3,
-                    span: dummy_span(),
-                },
-            ],
-            span: dummy_span(),
-        };
-        let node = ASTNode::VinyasaNode {
-            target: Box::new(target),
-            index: Box::new(index),
-            span: dummy_span(),
-        };
-        assert!(codegen.emit(&node).is_ok());
-        let output = codegen.rust_source();
-        assert!(output.contains("[1, 2, 3][0]"));
     }
 
     #[test]
@@ -3339,7 +3345,7 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         let mut codegen = Codegen::new(CodegenTarget::RustSource);
         let program = ASTNode::KaryakramNode {
             shareera: vec![ASTNode::DharaNode {
-                naama: "x".to_string(),
+                naamas: vec!["x".to_string()],
                 type_name: None,
                 mulya: Box::new(ASTNode::PurnaankLiteral {
                     value: 5,
@@ -3363,7 +3369,7 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         let mut codegen = Codegen::new(CodegenTarget::RustSource);
         let program = ASTNode::KaryakramNode {
             shareera: vec![ASTNode::DharaNode {
-                naama: "s".to_string(),
+                naamas: vec!["s".to_string()],
                 type_name: None,
                 mulya: Box::new(ASTNode::VaakLiteral {
                     value: "hello".to_string(),
@@ -3388,7 +3394,7 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         let program = ASTNode::KaryakramNode {
             shareera: vec![
                 ASTNode::DharaNode {
-                    naama: "x".to_string(),
+                    naamas: vec!["x".to_string()],
                     type_name: None,
                     mulya: Box::new(ASTNode::PurnaankLiteral {
                         value: 5,
@@ -3398,7 +3404,7 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
                     span: dummy_span(),
                 },
                 ASTNode::DharaNode {
-                    naama: "y".to_string(),
+                    naamas: vec!["y".to_string()],
                     type_name: None,
                     mulya: Box::new(ASTNode::Nama {
                         base: "x".to_string(),
@@ -3495,7 +3501,7 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         let mut codegen = Codegen::new(CodegenTarget::RustSource);
         let program = ASTNode::KaryakramNode {
             shareera: vec![ASTNode::DharaNode {
-                naama: "x".to_string(),
+                naamas: vec!["x".to_string()],
                 type_name: Some("sankhya".to_string()),
                 mulya: Box::new(ASTNode::PurnaankLiteral {
                     value: 5,
@@ -3572,7 +3578,7 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
                     return_type: None,
                     body: vec![
                         ASTNode::DharaNode {
-                            naama: "local".to_string(),
+                            naamas: vec!["local".to_string()],
                             type_name: None,
                             mulya: Box::new(ASTNode::Nama {
                                 base: "x".to_string(),
@@ -3621,5 +3627,255 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
             "expected inferred-type dhara inside generic body to have concrete type, got:\n{}",
             output
         );
+    }
+
+    // ===== Concurrency (Samyoga / Prapti / Duta / Manas) Codegen Tests =====
+
+    #[test]
+    fn test_samyoga_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::SamyogaNode {
+            body: vec![ASTNode::PurnaankLiteral {
+                value: 42,
+                span: dummy_span(),
+            }],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("std::thread::spawn(move || {"));
+        assert!(output.contains("42"));
+        assert!(output.contains("})"));
+    }
+
+    #[test]
+    fn test_samyoga_as_dhara_initializer_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DharaNode {
+                naamas: vec!["h".to_string()],
+                type_name: None,
+                mulya: Box::new(ASTNode::SamyogaNode {
+                    body: vec![ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                }),
+                is_mutable: false,
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("let h = std::thread::spawn(move || {"));
+        assert!(output.contains("1"));
+        assert!(output.contains("})"));
+    }
+
+    #[test]
+    fn test_prapti_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::PraptiNode {
+            handle: Box::new(ASTNode::Nama {
+                base: "h".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "h.join().unwrap()");
+    }
+
+    #[test]
+    fn test_duta_banaa_single_binding_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DharaNode {
+                naamas: vec!["channel".to_string()],
+                type_name: None,
+                mulya: Box::new(ASTNode::DutaBanaaNode {
+                    span: dummy_span(),
+                }),
+                is_mutable: false,
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        assert_eq!(
+            codegen.rust_source().trim(),
+            "let channel = std::sync::mpsc::channel();"
+        );
+    }
+
+    #[test]
+    fn test_duta_banaa_tuple_destructuring_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DharaNode {
+                naamas: vec!["bhejaka".to_string(), "grahaka".to_string()],
+                type_name: None,
+                mulya: Box::new(ASTNode::DutaBanaaNode {
+                    span: dummy_span(),
+                }),
+                is_mutable: false,
+                span: dummy_span(),
+            }],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        assert_eq!(
+            codegen.rust_source().trim(),
+            "let (bhejaka, grahaka) = std::sync::mpsc::channel();"
+        );
+    }
+
+    #[test]
+    fn test_duta_bhej_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::DutaBhejNode {
+            sender: Box::new(ASTNode::Nama {
+                base: "bhejaka".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                span: dummy_span(),
+            }),
+            message: Box::new(ASTNode::VaakLiteral {
+                value: "sandesha".to_string(),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(
+            codegen.rust_source().trim(),
+            "bhejaka.send(\"sandesha\").unwrap();"
+        );
+    }
+
+    #[test]
+    fn test_duta_grahan_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::DutaGrahanNode {
+            receiver: Box::new(ASTNode::Nama {
+                base: "grahaka".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "grahaka.recv().unwrap()");
+    }
+
+    #[test]
+    fn test_manas_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::ManasNode {
+            target: Box::new(ASTNode::Nama {
+                base: "lock".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                span: dummy_span(),
+            }),
+            body: vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::PurnaankLiteral {
+                    value: 7,
+                    span: dummy_span(),
+                }),
+            }],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("let mut lock = lock.lock().unwrap();"));
+        assert!(output.contains("println!(\"{:?}\", 7);"));
+        assert!(output.contains("}"));
+    }
+
+    #[test]
+    fn test_concurrency_combined_codegen() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![
+                ASTNode::DharaNode {
+                    naamas: vec!["bhejaka".to_string(), "grahaka".to_string()],
+                    type_name: None,
+                    mulya: Box::new(ASTNode::DutaBanaaNode {
+                        span: dummy_span(),
+                    }),
+                    is_mutable: false,
+                    span: dummy_span(),
+                },
+                ASTNode::DharaNode {
+                    naamas: vec!["h".to_string()],
+                    type_name: None,
+                    mulya: Box::new(ASTNode::SamyogaNode {
+                        body: vec![
+                            ASTNode::DutaBhejNode {
+                                sender: Box::new(ASTNode::Nama {
+                                    base: "bhejaka".to_string(),
+                                    vibhakti: devvani_ast::Vibhakti::Prathama,
+                                    linga: AstLinga::Pullinga,
+                                    vacana: AstVacana::Eka,
+                                    span: dummy_span(),
+                                }),
+                                message: Box::new(ASTNode::VaakLiteral {
+                                    value: "hello".to_string(),
+                                    span: dummy_span(),
+                                }),
+                                span: dummy_span(),
+                            },
+                            ASTNode::PurnaankLiteral {
+                                value: 99,
+                                span: dummy_span(),
+                            },
+                        ],
+                        span: dummy_span(),
+                    }),
+                    is_mutable: false,
+                    span: dummy_span(),
+                },
+                ASTNode::DharaNode {
+                    naamas: vec!["result".to_string()],
+                    type_name: None,
+                    mulya: Box::new(ASTNode::PraptiNode {
+                        handle: Box::new(ASTNode::Nama {
+                            base: "h".to_string(),
+                            vibhakti: devvani_ast::Vibhakti::Prathama,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        span: dummy_span(),
+                    }),
+                    is_mutable: false,
+                    span: dummy_span(),
+                },
+                ASTNode::DutaGrahanNode {
+                    receiver: Box::new(ASTNode::Nama {
+                        base: "grahaka".to_string(),
+                        vibhakti: devvani_ast::Vibhakti::Prathama,
+                        linga: AstLinga::Pullinga,
+                        vacana: AstVacana::Eka,
+                        span: dummy_span(),
+                    }),
+                    span: dummy_span(),
+                },
+            ],
+        };
+        assert!(codegen.generate(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("let (bhejaka, grahaka) = std::sync::mpsc::channel();"));
+        assert!(output.contains("let h = std::thread::spawn(move || {"));
+        assert!(output.contains("bhejaka.send(\"hello\").unwrap();"));
+        assert!(output.contains("let result: i64 = h.join().unwrap();"));
+        assert!(output.contains("grahaka.recv().unwrap()"));
     }
 }

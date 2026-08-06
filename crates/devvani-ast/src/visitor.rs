@@ -33,6 +33,12 @@ pub trait ASTVisitor {
     fn visit_avali(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_vinyasa(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_kramasah(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_samyoga(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_prapti(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_duta_banaa(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_duta_bhej(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_duta_grahan(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_manas(&mut self, node: &ASTNode) -> VisitResult;
 
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
@@ -73,8 +79,14 @@ ASTNode::NidanaNode { .. } => self.visit_nidana(node),
 ASTNode::PanktiNode { .. } => self.visit_pankti(node),
              ASTNode::AvaliNode { .. } => self.visit_avali(node),
              ASTNode::VinyasaNode { .. } => self.visit_vinyasa(node),
-            ASTNode::KramashahNode { .. } => self.visit_kramasah(node),
-            _ => Ok(()),
+             ASTNode::KramashahNode { .. } => self.visit_kramasah(node),
+             ASTNode::SamyogaNode { .. } => self.visit_samyoga(node),
+             ASTNode::PraptiNode { .. } => self.visit_prapti(node),
+             ASTNode::DutaBanaaNode { .. } => self.visit_duta_banaa(node),
+             ASTNode::DutaBhejNode { .. } => self.visit_duta_bhej(node),
+             ASTNode::DutaGrahanNode { .. } => self.visit_duta_grahan(node),
+             ASTNode::ManasNode { .. } => self.visit_manas(node),
+             _ => Ok(()),
         }
     }
 }
@@ -241,12 +253,12 @@ fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
     }
 
     fn visit_dhara(&mut self, node: &ASTNode) -> VisitResult {
-        if let ASTNode::DharaNode { naama, type_name, .. } = node {
+        if let ASTNode::DharaNode { naamas, type_name, .. } = node {
             self.print_indent();
             if let Some(tn) = type_name {
-                println!("Dhara [{}:{}]", naama, tn);
+                println!("Dhara [{}:{}]", naamas.join(", "), tn);
             } else {
-                println!("Dhara [{}:inferred]", naama);
+                println!("Dhara [{}:inferred]", naamas.join(", "));
             }
         }
         Ok(())
@@ -363,6 +375,73 @@ fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
             println!("Kramasah [{}]", item_name);
             self.indent += 1;
             self.visit(iterable)?;
+            for stmt in body {
+                self.visit(stmt)?;
+            }
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_samyoga(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::SamyogaNode { body, .. } = node {
+            self.print_indent();
+            println!("Samyoga");
+            self.indent += 1;
+            for stmt in body {
+                self.visit(stmt)?;
+            }
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_prapti(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::PraptiNode { handle, .. } = node {
+            self.print_indent();
+            println!("Prapti");
+            self.indent += 1;
+            self.visit(handle)?;
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_duta_banaa(&mut self, _node: &ASTNode) -> VisitResult {
+        self.print_indent();
+        println!("DutaBanaa");
+        Ok(())
+    }
+
+    fn visit_duta_bhej(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::DutaBhejNode { sender, message, .. } = node {
+            self.print_indent();
+            println!("DutaBhej");
+            self.indent += 1;
+            self.visit(sender)?;
+            self.visit(message)?;
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_duta_grahan(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::DutaGrahanNode { receiver, .. } = node {
+            self.print_indent();
+            println!("DutaGrahan");
+            self.indent += 1;
+            self.visit(receiver)?;
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_manas(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::ManasNode { target, body, .. } = node {
+            self.print_indent();
+            println!("Manas");
+            self.indent += 1;
+            self.visit(target)?;
             for stmt in body {
                 self.visit(stmt)?;
             }

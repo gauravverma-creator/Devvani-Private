@@ -39,6 +39,16 @@ pub enum DevvaniType {
     Sandarbha(Box<DevvaniType>, bool),
     /// Samanya — generic type parameter (unresolved universal)
     Samanya(String),
+    /// Samyoga — thread handle wrapping the inner result type of the spawned block
+    Samyoga(Box<DevvaniType>),
+    /// DutaBhejaka — channel sender wrapping the message type
+    DutaBhejaka(Box<DevvaniType>),
+    /// DutaGrahaka — channel receiver wrapping the message type
+    DutaGrahaka(Box<DevvaniType>),
+    /// Duta — channel pair (sender, receiver)
+    Duta(Box<DevvaniType>, Box<DevvaniType>),
+    /// Manas — mutex-guarded value wrapping the inner type
+    Manas(Box<DevvaniType>),
 }
 
 pub fn vibhakti_to_type(role: &VibhaktiRole, name: &str) -> DevvaniType {
@@ -114,6 +124,11 @@ DevvaniType::Phalam(success, error) => write!(f, "Phalam({}, {})", success, erro
             DevvaniType::Sandarbha(inner, true) => write!(f, "vikara adhikara<{}>", inner),
             DevvaniType::Sandarbha(inner, false) => write!(f, "adhikara<{}>", inner),
             DevvaniType::Samanya(s) => write!(f, "Samanya({})", s),
+            DevvaniType::Samyoga(inner) => write!(f, "Samyoga({})", inner),
+            DevvaniType::DutaBhejaka(msg) => write!(f, "DutaBhejaka({})", msg),
+            DevvaniType::DutaGrahaka(msg) => write!(f, "DutaGrahaka({})", msg),
+            DevvaniType::Duta(sender, receiver) => write!(f, "Duta({}, {})", sender, receiver),
+            DevvaniType::Manas(inner) => write!(f, "Manas({})", inner),
         }
     }
 }

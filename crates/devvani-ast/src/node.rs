@@ -291,8 +291,9 @@ NidanaNode {
     },
     /// DhāraNode — typed or inferred variable declaration using the dhara keyword.
     /// Syntax: dhara <name> [<type>] = <expr> ।
+    /// Multi-name tuple destructuring: dhara [a, b] = <expr> ।
     DharaNode {
-        naama: String,
+        naamas: Vec<String>,
         type_name: Option<String>,
         mulya: Box<ASTNode>,
         is_mutable: bool,
@@ -358,10 +359,48 @@ PanktiNode {
          anga_name: String,
          span: Span,
      },
-     KramashahNode {
-        item_name: String,
-        iterable: Box<ASTNode>,
-        body: Vec<ASTNode>,
-        span: Span,
-    },
-}
+      KramashahNode {
+         item_name: String,
+         iterable: Box<ASTNode>,
+         body: Vec<ASTNode>,
+         span: Span,
+     },
+     /// SamyogaNode — spawn a concurrent thread/task block.
+     /// Can appear as a bare statement or as the initializer expression of a `dhara` binding.
+     /// Syntax: samyoga { <statements> }
+     SamyogaNode {
+         body: Vec<ASTNode>,
+         span: Span,
+     },
+     /// PraptiNode — join/wait for a spawned thread's result expression.
+     /// Syntax: prapti <handle>
+     PraptiNode {
+         handle: Box<ASTNode>,
+         span: Span,
+     },
+     /// DutaBanaaNode — channel creation expression, produces a (sender, receiver) pair.
+     /// Syntax: duta banaa
+     DutaBanaaNode {
+         span: Span,
+     },
+     /// DutaBhejNode — send a message on a channel sender.
+     /// Syntax: <sender> bhej sandesha <message> ।
+     DutaBhejNode {
+         sender: Box<ASTNode>,
+         message: Box<ASTNode>,
+         span: Span,
+     },
+     /// DutaGrahanNode — receive a message on a channel receiver (blocking expression).
+     /// Syntax: grahaka grahan karo
+     DutaGrahanNode {
+         receiver: Box<ASTNode>,
+         span: Span,
+     },
+     /// ManasNode — mutex-guarded block (scoped lock, auto-unlock at end of block).
+     /// Syntax: manas <mutex_var> { <statements> }
+     ManasNode {
+         target: Box<ASTNode>,
+         body: Vec<ASTNode>,
+         span: Span,
+     },
+ }

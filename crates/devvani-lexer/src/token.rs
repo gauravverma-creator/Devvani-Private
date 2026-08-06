@@ -143,21 +143,36 @@ pub enum TokenKind {
         Sāmānya, // generic type parameter declaration keyword (सामान्य)
         Dhātu,   // function declaration keyword (धातु)
 
-        // --- VARIABLE DECLARATION (Anumana / Type Inference) ---
-        Dharā,   // धरा — variable declaration keyword (typed or inferred)
-        Equals,  // = — assignment operator
+         // --- CONCURRENCY ---
+         Samyoga,  // spawn a concurrent thread/task block (संयोग)
+         Prapti,   // join/wait for a spawned thread's result (प्राप्ति)
+         Duta,     // channel creation keyword (दूत)
+         Banaa,    // channel creation expression (बाणा — "to shoot/messenger")
+         Bhej,     // send a message (भेज्)
+         Sandesha, // message marker in send statement (सन्देश)
+         Grahan,   // receive a message (ग्रहण)
+         Karo,     // imperative marker used with grahan (करो)
+
+         // --- SYNCHRONIZATION ---
+         Manas,    // mutex-guarded block (मनस्)
+
+         // --- VARIABLE DECLARATION (Anumana / Type Inference) ---
+         Dharā,   // धरा — variable declaration keyword (typed or inferred)
+         Equals,  // = — assignment operator
 
        // --- SANDHI SPECIAL TOKENS ---
       Visarga,  // ḥ character standalone
       Anusvara, // ṃ character standalone
 
-     // --- META ---
-     NavaPankti, // Newline
-     Aavakaasha, // Whitespace
-     Tippani,    // Comment
-     Samaapti,   // EOF
-     Unknown(char),
-      LBracket, // [
-      RBracket, // ]
-      Dot,      // .
+      // --- META ---
+      NavaPankti, // Newline
+      Aavakaasha, // Whitespace
+      Tippani,    // Comment
+      Samaapti,   // EOF
+      Unknown(char),
+       LBracket, // [
+       RBracket, // ]
+       LBrace,   // { — block delimiter (samyoga, manas bodies)
+       RBrace,   // } — block end delimiter
+       Dot,      // .
 }

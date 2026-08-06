@@ -517,7 +517,7 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 message: "Anumāṇa-ke anek mārga (return paths) mein prakara \
                           asaman hai — ek mārga se eka prakaara, doosre mārga \
                           se anya prakaara praapt hai. Nyāya vyākhyāna: \
-                          anumāna-saṃgati-bhaṅga (fragmentation of inference) \
+                          anumāṇa-saṃgati-bhaṅga (fragmentation of inference) \
                           tab hotī hai jābartha vibhinna pathon se \
                           viruddha anumeya nishchit hota hai."
                     .to_string(),
@@ -526,8 +526,104 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 ),
                 hint: Some(
                     "Sab return paths ko eka samaan type ke banāo ya function ke \
-                     return type ko explicitly declare karo."
+                      return type ko explicitly declare karo."
                         .to_string(),
+                ),
+            },
+            TypeCheckError::PraptiAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D075".to_string(),
+                sanskrit_title: "प्राप्त्यप्रयुक्त".to_string(),
+                roman_title: "Prapti Aprayukta".to_string(),
+                message: format!(
+                    "Prapti (join) sirf Samyoga (thread handle) type par prayukt hota hai. \
+                     Found type: {:?}. Nyaya-Vaisheshika: Samyoga = conjunction/attainment \
+                     of a result through connection.",
+                    found
+                ),
+                sutra_ref: Some(
+                    "Nyaya-Vaisheshika (Samyoga — conjunction/attainment doctrine)".to_string()
+                ),
+                hint: Some(
+                    "Prapti ko Samyoga type ke handle ke saath hi upyog karo.".to_string()
+                ),
+            },
+            TypeCheckError::DutaBhejAprayukta { found } => {
+                Diagnostic {
+                    severity: Severity::Dosha,
+                    code: "D076".to_string(),
+                    sanskrit_title: "दूतभेजअप्रयुक्त".to_string(),
+                    roman_title: "Duta Bhej Aprayukta".to_string(),
+                    message: format!(
+                        "Bhej (send) operation sirf DutaBhejaka (channel sender) type par \
+                         prayukt hota hai. Found type: {:?}. Sandesha-kavya tradition: \
+                         Duta (messenger) carries the message from sender to receiver.",
+                        found
+                    ),
+                    sutra_ref: Some(
+                        "Sandesha-kavya / Nyaya-Vaisheshika (messenger-conjunction context)".to_string()
+                    ),
+                    hint: Some(
+                        "Bhej ko DutaBhejaka type ke variable ke saath hi call karo.".to_string()
+                    ),
+                }
+            }
+            TypeCheckError::DutaGrahanAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D077".to_string(),
+                sanskrit_title: "दूतग्रहणअप्रयुक्त".to_string(),
+                roman_title: "Duta Grahan Aprayukta".to_string(),
+                message: format!(
+                    "Grahan karo (receive) operation sirf DutaGrahaka (channel receiver) \
+                     type par prayukt hota hai. Found type: {:?}. Sandesha-kavya tradition: \
+                     Grahaka is the recipient who receives the messenger's message.",
+                    found
+                ),
+                sutra_ref: Some(
+                    "Sandesha-kavya / Nyaya-Vaisheshika (recipient-conjunction context)".to_string()
+                ),
+                hint: Some(
+                    "Grahan karo ko DutaGrahaka type ke variable ke saath hi call karo.".to_string()
+                ),
+            },
+            TypeCheckError::ManasAprayukta { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D078".to_string(),
+                sanskrit_title: "मनसअप्रयुक्त".to_string(),
+                roman_title: "Manas Aprayukta".to_string(),
+                message: format!(
+                    "Manas (mutex-guarded block) sirf Manas (mutex-guarded) type par \
+                     prayukt hota hai. Found type: {:?}. Nyaya Sutra: Manas is the \
+                     internal instrument that sequentially coordinates cognitions \
+                     (NS 1.1.16 — manah parikshah).",
+                    found
+                ),
+                sutra_ref: Some(
+                    "Nyaya Sutra NS 1.1.16 (manas — sequential-cognition doctrine)".to_string()
+                ),
+                hint: Some(
+                    "Manas ko Manas type ke mutex variable ke saath hi upyog karo.".to_string()
+                ),
+            },
+            TypeCheckError::DharaVinyasaAsangati { found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D079".to_string(),
+                sanskrit_title: "धाराविन्यासासंगति".to_string(),
+                roman_title: "Dhara Vinyasa Asangati".to_string(),
+                message: format!(
+                    "Dhara (dhāraṇa / binding) mein vinyāsa (pattern) asangata hai: \
+                     bahu-naama (multi-name) destructuring ke liye Duta (sender, receiver) \
+                     pair type chahiye. Found type: {:?}. Nyaya Sutra: vinyāsa śakti \
+                     binds multiple artha-s (meanings) only to a dvandva (pair) \
+                     (NS 2.2.33 — dvandva samāsa doctrine).",
+                    found
+                ),
+                sutra_ref: Some(
+                    "Nyaya Sutra NS 2.2.33 (dvandva samasa — compound-of-two doctrine)".to_string()
+                ),
+                hint: Some(
+                    "Bahu-naama dhara binding ke liye `duta banaa` ya koi Duta pair type \
+                     expression hi upyog karo.".to_string()
                 ),
             },
         }
@@ -1023,5 +1119,70 @@ mod tests {
         assert!(diag.sanskrit_title.contains("अनुमानसंगतिभङ्ग"));
         assert!(diag.message.contains("Anumāṇa"));
         assert!(diag.sutra_ref.unwrap().contains("Nyāya"));
+    }
+
+    #[test]
+    fn test_from_type_error_prapti_aprayukta_d075() {
+        let err = TypeCheckError::PraptiAprayukta {
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D075");
+        assert!(diag.display().contains("Prapti Aprayukta"));
+        assert!(diag.sanskrit_title.contains("प्राप्त्यप्रयुक्त"));
+        assert!(diag.message.contains("Samyoga"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyaya-Vaisheshika"));
+    }
+
+    #[test]
+    fn test_from_type_error_duta_bhej_aprayukta_d076() {
+        let err = TypeCheckError::DutaBhejAprayukta {
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D076");
+        assert!(diag.display().contains("Duta Bhej Aprayukta"));
+        assert!(diag.sanskrit_title.contains("दूतभेजअप्रयुक्त"));
+        assert!(diag.message.contains("DutaBhejaka"));
+        assert!(diag.sutra_ref.unwrap().contains("Sandesha-kavya"));
+    }
+
+    #[test]
+    fn test_from_type_error_duta_grahan_aprayukta_d077() {
+        let err = TypeCheckError::DutaGrahanAprayukta {
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D077");
+        assert!(diag.display().contains("Duta Grahan Aprayukta"));
+        assert!(diag.sanskrit_title.contains("दूतग्रहणअप्रयुक्त"));
+        assert!(diag.message.contains("DutaGrahaka"));
+        assert!(diag.sutra_ref.unwrap().contains("Sandesha-kavya"));
+    }
+
+    #[test]
+    fn test_from_type_error_manas_aprayukta_d078() {
+        let err = TypeCheckError::ManasAprayukta {
+            found: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D078");
+        assert!(diag.display().contains("Manas Aprayukta"));
+        assert!(diag.sanskrit_title.contains("मनसअप्रयुक्त"));
+        assert!(diag.message.contains("Manas"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyaya Sutra"));
+    }
+
+    #[test]
+    fn test_from_type_error_dhara_vinyasa_asangati_d079() {
+        let err = TypeCheckError::DharaVinyasaAsangati {
+            found: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D079");
+        assert!(diag.display().contains("Dhara Vinyasa Asangati"));
+        assert!(diag.sanskrit_title.contains("धाराविन्यासासंगति"));
+        assert!(diag.message.contains("Duta"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyaya Sutra"));
     }
 }

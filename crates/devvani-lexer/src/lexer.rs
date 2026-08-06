@@ -134,11 +134,19 @@ impl<'a> Lexer<'a> {
                   self.advance();
                   TokenKind::Dot
               }
-              '=' => {
-                  self.advance();
-                  TokenKind::Equals
-              }
-             _ => {
+               '=' => {
+                   self.advance();
+                   TokenKind::Equals
+               }
+               '{' => {
+                   self.advance();
+                   TokenKind::LBrace
+               }
+               '}' => {
+                   self.advance();
+                   TokenKind::RBrace
+               }
+              _ => {
                  self.advance();
                  TokenKind::Unknown(c)
              }
@@ -268,11 +276,22 @@ impl<'a> Lexer<'a> {
                "adhikara" | "Adhikara" => TokenKind::Adhikara,
                "vikara" | "Vikara" => TokenKind::Vikara,
 
-            "sāmānya" | "Sāmānya" => TokenKind::Sāmānya,
+             "sāmānya" | "Sāmānya" => TokenKind::Sāmānya,
 
-            "dhara" | "Dhara" | "धरा" => TokenKind::Dharā,
+             "dhara" | "Dhara" | "धरा" => TokenKind::Dharā,
 
-             _ => TokenKind::Naama(id),
+             // --- CONCURRENCY KEYWORDS ---
+             "samyoga" | "Samyoga" => TokenKind::Samyoga,
+             "prapti" | "Prapti" => TokenKind::Prapti,
+             "duta" | "Duta" => TokenKind::Duta,
+             "banaa" | "Banaa" => TokenKind::Banaa,
+             "bhej" | "Bhej" => TokenKind::Bhej,
+             "sandesha" | "Sandesha" => TokenKind::Sandesha,
+             "grahan" | "Grahan" => TokenKind::Grahan,
+             "karo" | "Karo" => TokenKind::Karo,
+             "manas" | "Manas" => TokenKind::Manas,
+
+              _ => TokenKind::Naama(id),
          };
         Ok(Token {
             kind,
@@ -748,5 +767,149 @@ mod tests {
         assert_eq!(tokens[1].kind, TokenKind::Naama("T".to_string()));
         assert_eq!(tokens[2].kind, TokenKind::Dhātu);
         assert_eq!(tokens[3].kind, TokenKind::Naama("pratirūpa".to_string()));
+    }
+
+    // --- CONCURRENCY KEYWORD TESTS ---
+
+    #[test]
+    fn test_samyoga_keyword() {
+        let mut lexer = Lexer::new("samyoga");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Samyoga);
+    }
+
+    #[test]
+    fn test_Samyoga_keyword() {
+        let mut lexer = Lexer::new("Samyoga");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Samyoga);
+    }
+
+    #[test]
+    fn test_prapti_keyword() {
+        let mut lexer = Lexer::new("prapti");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Prapti);
+    }
+
+    #[test]
+    fn test_Prapti_keyword() {
+        let mut lexer = Lexer::new("Prapti");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Prapti);
+    }
+
+    #[test]
+    fn test_duta_keyword() {
+        let mut lexer = Lexer::new("duta");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Duta);
+    }
+
+    #[test]
+    fn test_Duta_keyword() {
+        let mut lexer = Lexer::new("Duta");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Duta);
+    }
+
+    #[test]
+    fn test_banaa_keyword() {
+        let mut lexer = Lexer::new("banaa");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Banaa);
+    }
+
+    #[test]
+    fn test_Banaa_keyword() {
+        let mut lexer = Lexer::new("Banaa");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Banaa);
+    }
+
+    #[test]
+    fn test_bhej_keyword() {
+        let mut lexer = Lexer::new("bhej");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Bhej);
+    }
+
+    #[test]
+    fn test_Bhej_keyword() {
+        let mut lexer = Lexer::new("Bhej");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Bhej);
+    }
+
+    #[test]
+    fn test_grahan_keyword() {
+        let mut lexer = Lexer::new("grahan");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Grahan);
+    }
+
+    #[test]
+    fn test_Grahan_keyword() {
+        let mut lexer = Lexer::new("Grahan");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Grahan);
+    }
+
+    #[test]
+    fn test_karo_keyword() {
+        let mut lexer = Lexer::new("karo");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Karo);
+    }
+
+    #[test]
+    fn test_Karo_keyword() {
+        let mut lexer = Lexer::new("Karo");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Karo);
+    }
+
+    #[test]
+    fn test_manas_keyword() {
+        let mut lexer = Lexer::new("manas");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Manas);
+    }
+
+    #[test]
+    fn test_Manas_keyword() {
+        let mut lexer = Lexer::new("Manas");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Manas);
+    }
+
+    #[test]
+    fn test_manas_keyword_substring_not_keyword() {
+        let mut lexer = Lexer::new("manasah");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naama("manasah".to_string()));
+    }
+
+    #[test]
+    fn test_sandesha_keyword() {
+        let mut lexer = Lexer::new("sandesha");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Sandesha);
+    }
+
+    #[test]
+    fn test_Sandesha_keyword() {
+        let mut lexer = Lexer::new("Sandesha");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Sandesha);
+    }
+
+    #[test]
+    fn test_concurrency_keywords_not_substrings() {
+        let mut lexer = Lexer::new("samyogah praptih dutah");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naama("samyogah".to_string()));
+        assert_eq!(tokens[1].kind, TokenKind::Naama("praptih".to_string()));
+        assert_eq!(tokens[2].kind, TokenKind::Naama("dutah".to_string()));
     }
 }

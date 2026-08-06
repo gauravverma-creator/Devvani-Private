@@ -96,6 +96,26 @@ pub enum TypeCheckError {
     AnumanaViphalata,
     /// D074 — अनुमानसंगतिभङ्ग (AnumanaSamgatiBhanga): conflicting inferred types across return paths
     AnumanaSamgatiBhanga,
+    /// D075 — प्राप्त्यप्रयुक्त (PraptiAprayukta): prapti applied to non-thread-handle type
+    PraptiAprayukta {
+        found: DevvaniType,
+    },
+    /// D076 — दूतभेजअप्रयुक्त (DutaBhejAprayukta): bhej applied to non-sender type
+    DutaBhejAprayukta {
+        found: DevvaniType,
+    },
+    /// D077 — दूतग्रहणअप्रयुक्त (DutaGrahanAprayukta): grahan karo applied to non-receiver type
+    DutaGrahanAprayukta {
+        found: DevvaniType,
+    },
+    /// D078 — मनसअप्रयुक्त (ManasAprayukta): manas applied to non-mutex-guarded type
+    ManasAprayukta {
+        found: DevvaniType,
+    },
+    /// D079 — धाराविन्यासासंगति (DharaVinyasaAsangati): multi-name dhara binding arity mismatch
+    DharaVinyasaAsangati {
+        found: DevvaniType,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -255,6 +275,41 @@ impl fmt::Display for TypeCheckError {
             TypeCheckError::AnumanaSamgatiBhanga => {
                 write!(f, "Anumana-samgati-bhanga: conflicting inferred types across return paths")
             }
+            TypeCheckError::PraptiAprayukta { found } => {
+                write!(
+                    f,
+                    "Prapti-aprayukta: prapti requires a Samyoga (thread handle) type; found {:?}",
+                    found
+                )
+            }
+            TypeCheckError::DutaBhejAprayukta { found } => {
+                write!(
+                    f,
+                    "Duta-bhej-aprayukta: bhej requires a DutaBhejaka (channel sender) type; found {:?}",
+                    found
+                )
+            }
+            TypeCheckError::DutaGrahanAprayukta { found } => {
+                write!(
+                    f,
+                    "Duta-grahan-aprayukta: grahan karo requires a DutaGrahaka (channel receiver) type; found {:?}",
+                    found
+                )
+            }
+            TypeCheckError::ManasAprayukta { found } => {
+                write!(
+                    f,
+                    "Manas-aprayukta: manas requires a Manas (mutex-guarded) type; found {:?}",
+                    found
+                )
+            }
+            TypeCheckError::DharaVinyasaAsangati { found } => {
+                write!(
+                    f,
+                    "Dhara-vinyasa-asangata: multi-name binding requires a Duta (sender, receiver) pair type; found {:?}",
+                    found
+                )
+            }
         }
     }
 }
@@ -347,21 +402,33 @@ ASTNode::VinyasaNode { target, index, .. } => {
              body.iter().for_each(|n| f(n));
          }
           ASTNode::SamavayaNode { target, .. } => f(target),
-          ASTNode::DravyaDef { .. } => {}
-          ASTNode::NirmanaNode { values, .. } => {
-              values.iter().for_each(|n| f(n));
-          }
-          ASTNode::PhalamType { .. } => {}
-          ASTNode::ArogyaNode { value, .. } => f(value),
-          ASTNode::DoshaNode { value, .. } => f(value),
-ASTNode::NidanaNode { target, arogya_body, dosha_body, .. } => {
-               f(target);
-               arogya_body.iter().for_each(|n| f(n));
-               dosha_body.iter().for_each(|n| f(n));
+           ASTNode::DravyaDef { .. } => {}
+           ASTNode::NirmanaNode { values, .. } => {
+               values.iter().for_each(|n| f(n));
            }
+           ASTNode::PhalamType { .. } => {}
+           ASTNode::ArogyaNode { value, .. } => f(value),
+           ASTNode::DoshaNode { value, .. } => f(value),
+           ASTNode::NidanaNode { target, arogya_body, dosha_body, .. } => {
+                f(target);
+                arogya_body.iter().for_each(|n| f(n));
+                dosha_body.iter().for_each(|n| f(n));
+            }
            ASTNode::SandarbhaNode { target, .. } => f(target),
            ASTNode::SamprapatiNode { expr, .. } => f(expr),
-          _ => {}
+           ASTNode::SamyogaNode { body, .. } => body.iter().for_each(|n| f(n)),
+           ASTNode::PraptiNode { handle, .. } => f(handle),
+           ASTNode::DutaBanaaNode { .. } => {}
+           ASTNode::DutaBhejNode { sender, message, .. } => {
+               f(sender);
+               f(message);
+           }
+           ASTNode::DutaGrahanNode { receiver, .. } => f(receiver),
+           ASTNode::ManasNode { target, body, .. } => {
+               f(target);
+               body.iter().for_each(|n| f(n));
+           }
+            _ => {}
     }
 }
 
@@ -556,6 +623,14 @@ pub struct TypeChecker {
             DevvaniType::Pankti(elem, _) => Self::collect_samanya_from_type(elem),
             DevvaniType::Avali(elem) => Self::collect_samanya_from_type(elem),
             DevvaniType::Sandarbha(inner, _) => Self::collect_samanya_from_type(inner),
+            DevvaniType::Samyoga(inner) => Self::collect_samanya_from_type(inner),
+            DevvaniType::DutaBhejaka(inner) => Self::collect_samanya_from_type(inner),
+            DevvaniType::DutaGrahaka(inner) => Self::collect_samanya_from_type(inner),
+            DevvaniType::Duta(sender, receiver) => Self::collect_samanya_from_type(sender)
+                .into_iter()
+                .chain(Self::collect_samanya_from_type(receiver))
+                .collect(),
+            DevvaniType::Manas(inner) => Self::collect_samanya_from_type(inner),
             _ => Vec::new(),
         }
     }
@@ -592,6 +667,14 @@ pub struct TypeChecker {
                 Box::new(Self::substitute_samanya_in_type(*inner, inference)),
                 mut_,
             ),
+            DevvaniType::Samyoga(inner) => DevvaniType::Samyoga(Box::new(Self::substitute_samanya_in_type(*inner, inference))),
+            DevvaniType::DutaBhejaka(inner) => DevvaniType::DutaBhejaka(Box::new(Self::substitute_samanya_in_type(*inner, inference))),
+            DevvaniType::DutaGrahaka(inner) => DevvaniType::DutaGrahaka(Box::new(Self::substitute_samanya_in_type(*inner, inference))),
+            DevvaniType::Duta(sender, receiver) => DevvaniType::Duta(
+                Box::new(Self::substitute_samanya_in_type(*sender, inference)),
+                Box::new(Self::substitute_samanya_in_type(*receiver, inference)),
+            ),
+            DevvaniType::Manas(inner) => DevvaniType::Manas(Box::new(Self::substitute_samanya_in_type(*inner, inference))),
             other => other,
         }
     }
@@ -676,42 +759,64 @@ pub struct TypeChecker {
                 ty
             }
 
-            ASTNode::DharaNode { naama, type_name, mulya, .. } => {
-                let ty = if let Some(t) = type_name {
-                    let expected = match self.resolve_type_name(t) {
-                        Some(ty) => ty,
-                        None => {
-                            self.errors.push(TypeCheckError::PrakaaraAsangata(
-                                format!("unknown type '{}'", t),
-                            ));
-                            DevvaniType::Unknown
-                        }
-                    };
-                    let mulya_ty = self.check(mulya);
-                    if mulya_ty != DevvaniType::Unknown && mulya_ty != expected {
-                        self.errors.push(TypeCheckError::PanktiAsangata {
-                            expected: expected.clone(),
-                            found: mulya_ty,
-                        });
-                    }
-                    expected
-                } else {
-                    let mulya_ty = self.check(mulya);
-                    if matches!(mulya_ty, DevvaniType::Unknown) {
-                        self.errors.push(TypeCheckError::AnumanaViphalata);
-                    }
-                    mulya_ty
-                };
-                if let ASTNode::Nama { base, .. } = mulya.as_ref() {
-                    if Self::is_non_copy_type(&ty) {
-                        self.moved_vars.insert(base.clone());
-                    }
-                }
-                let symbol = Symbol::new(naama, ty.clone(), &Vacana::Eka, &Linga::Pullinga, "var");
-                self.env.define_symbol(naama, symbol);
-                self.current_scope_vars.insert(naama.clone());
-                ty
-            }
+             ASTNode::DharaNode { naamas, type_name, mulya, .. } => {
+                  let mulya_ty_raw = if let Some(t) = type_name {
+                      let expected = match self.resolve_type_name(t) {
+                          Some(ty) => ty,
+                          None => {
+                              self.errors.push(TypeCheckError::PrakaaraAsangata(
+                                  format!("unknown type '{}'", t),
+                              ));
+                              DevvaniType::Unknown
+                          }
+                      };
+                      let mulya_ty = self.check(mulya);
+                      if mulya_ty != DevvaniType::Unknown && mulya_ty != expected {
+                          self.errors.push(TypeCheckError::PanktiAsangata {
+                              expected: expected.clone(),
+                              found: mulya_ty,
+                          });
+                      }
+                      expected
+                  } else {
+                      let mulya_ty = self.check(mulya);
+                      if matches!(mulya_ty, DevvaniType::Unknown) {
+                          self.errors.push(TypeCheckError::AnumanaViphalata);
+                      }
+                      mulya_ty
+                  };
+
+                  let bind_types: Vec<DevvaniType> = if naamas.len() > 1 {
+                      if let DevvaniType::Duta(sender_ty, receiver_ty) = &mulya_ty_raw {
+                          vec![sender_ty.as_ref().clone(), receiver_ty.as_ref().clone()]
+                      } else {
+                          self.errors.push(TypeCheckError::DharaVinyasaAsangati {
+                              found: mulya_ty_raw.clone(),
+                          });
+                          vec![mulya_ty_raw.clone(); naamas.len()]
+                      }
+                  } else if matches!(mulya.as_ref(), ASTNode::DutaBanaaNode { .. }) {
+                      if let DevvaniType::Duta(sender_ty, _receiver_ty) = &mulya_ty_raw {
+                          vec![sender_ty.as_ref().clone()]
+                      } else {
+                          vec![mulya_ty_raw.clone()]
+                      }
+                  } else {
+                      vec![mulya_ty_raw.clone()]
+                  };
+
+                  for (naama, ty) in naamas.iter().zip(bind_types.iter()) {
+                      if let ASTNode::Nama { base, .. } = mulya.as_ref() {
+                          if Self::is_non_copy_type(ty) {
+                              self.moved_vars.insert(base.clone());
+                          }
+                      }
+                      let symbol = Symbol::new(naama, ty.clone(), &Vacana::Eka, &Linga::Pullinga, "var");
+                      self.env.define_symbol(naama, symbol);
+                      self.current_scope_vars.insert(naama.clone());
+                  }
+                  bind_types.into_iter().next().unwrap_or(mulya_ty_raw)
+              }
 
             ASTNode::YogaNode { vama, dakshina }
             | ASTNode::ViyogaNode { vama, dakshina }
@@ -1636,7 +1741,85 @@ ASTNode::SamprapatiNode { expr, .. } => {
                          .or_default()
                          .push(borrow_is_mutable);
                  }
-                 DevvaniType::Sandarbha(Box::new(target_type), borrow_is_mutable)
+                  DevvaniType::Sandarbha(Box::new(target_type), borrow_is_mutable)
+              }
+
+             ASTNode::SamyogaNode { body, .. } => {
+                 self.push_ownership_state();
+                 let mut last_type = DevvaniType::Unknown;
+                 for stmt in body {
+                     last_type = self.check(stmt);
+                 }
+                 self.pop_ownership_state();
+                 DevvaniType::Samyoga(Box::new(last_type))
+             }
+
+             ASTNode::PraptiNode { handle, .. } => {
+                 let handle_type = self.check(handle);
+                 match handle_type {
+                     DevvaniType::Samyoga(inner) => *inner,
+                     _ => {
+                         self.errors.push(TypeCheckError::PraptiAprayukta {
+                             found: handle_type,
+                         });
+                         DevvaniType::Unknown
+                     }
+                 }
+             }
+
+             ASTNode::DutaBanaaNode { .. } => {
+                 let msg_ty = DevvaniType::Unknown;
+                 DevvaniType::Duta(
+                     Box::new(DevvaniType::DutaBhejaka(Box::new(msg_ty.clone()))),
+                     Box::new(DevvaniType::DutaGrahaka(Box::new(msg_ty))),
+                 )
+             }
+
+             ASTNode::DutaBhejNode { sender, message, .. } => {
+                 let sender_type = self.check(sender);
+                 match &sender_type {
+                     DevvaniType::DutaBhejaka(_) => {}
+                     _ => {
+                         self.errors.push(TypeCheckError::DutaBhejAprayukta {
+                             found: sender_type.clone(),
+                         });
+                     }
+                 }
+                 let _msg_type = self.check(message);
+                 DevvaniType::Unknown
+             }
+
+             ASTNode::DutaGrahanNode { receiver, .. } => {
+                 let receiver_type = self.check(receiver);
+                 match receiver_type {
+                     DevvaniType::DutaGrahaka(msg_ty) => *msg_ty,
+                     _ => {
+                         self.errors.push(TypeCheckError::DutaGrahanAprayukta {
+                             found: receiver_type,
+                         });
+                         DevvaniType::Unknown
+                     }
+                 }
+             }
+
+             ASTNode::ManasNode { target, body, .. } => {
+                 let target_type = self.check(target);
+                 match target_type {
+                     DevvaniType::Manas(_inner_ty) => {
+                         self.push_ownership_state();
+                         for stmt in body {
+                             self.check(stmt);
+                         }
+                         self.pop_ownership_state();
+                         DevvaniType::Unknown
+                     }
+                     _ => {
+                         self.errors.push(TypeCheckError::ManasAprayukta {
+                             found: target_type,
+                         });
+                         DevvaniType::Unknown
+                     }
+                 }
              }
 
               _ => DevvaniType::Unknown,
@@ -4030,7 +4213,7 @@ type_name: "sankhya".to_string(),
     fn test_dhara_inferred_integer_literal() {
         let mut checker = TypeChecker::new();
         let body = vec![ASTNode::DharaNode {
-            naama: "x".to_string(),
+            naamas: vec!["x".to_string()],
             type_name: None,
             mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
             is_mutable: false,
@@ -4053,7 +4236,7 @@ type_name: "sankhya".to_string(),
     fn test_dhara_inferred_string_literal() {
         let mut checker = TypeChecker::new();
         let body = vec![ASTNode::DharaNode {
-            naama: "s".to_string(),
+            naamas: vec!["s".to_string()],
             type_name: None,
             mulya: Box::new(ASTNode::VaakLiteral {
                 value: "hello".to_string(),
@@ -4077,14 +4260,14 @@ type_name: "sankhya".to_string(),
         let mut checker = TypeChecker::new();
         let body = vec![
             ASTNode::DharaNode {
-                naama: "x".to_string(),
+                naamas: vec!["x".to_string()],
                 type_name: None,
                 mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
                 is_mutable: false,
                 span: span(),
             },
             ASTNode::DharaNode {
-                naama: "y".to_string(),
+                naamas: vec!["y".to_string()],
                 type_name: None,
                 mulya: Box::new(ASTNode::Nama {
                     base: "x".to_string(),
@@ -4114,7 +4297,7 @@ type_name: "sankhya".to_string(),
     fn test_dhara_explicit_type_matches() {
         let mut checker = TypeChecker::new();
         let body = vec![ASTNode::DharaNode {
-            naama: "x".to_string(),
+            naamas: vec!["x".to_string()],
             type_name: Some("sankhya".to_string()),
             mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
             is_mutable: false,
@@ -4137,7 +4320,7 @@ type_name: "sankhya".to_string(),
     fn test_dhara_explicit_type_mismatch() {
         let mut checker = TypeChecker::new();
         let body = vec![ASTNode::DharaNode {
-            naama: "x".to_string(),
+            naamas: vec!["x".to_string()],
             type_name: Some("vaak".to_string()),
             mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
             is_mutable: false,
@@ -4162,7 +4345,7 @@ type_name: "sankhya".to_string(),
         let mut checker = TypeChecker::new();
         let body = vec![
             ASTNode::DharaNode {
-                naama: "x".to_string(),
+                naamas: vec!["x".to_string()],
                 type_name: None,
                 mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
                 is_mutable: false,
@@ -4233,7 +4416,7 @@ type_name: "sankhya".to_string(),
     fn test_dhara_inference_unknown_triggers_d073() {
         let mut checker = TypeChecker::new();
         let body = vec![ASTNode::DharaNode {
-            naama: "x".to_string(),
+            naamas: vec!["x".to_string()],
             type_name: None,
             mulya: Box::new(ASTNode::VadatiNode {
                 mulya: Box::new(ASTNode::VaakLiteral {
@@ -4252,6 +4435,312 @@ type_name: "sankhya".to_string(),
                 .iter()
                 .any(|e| matches!(e, TypeCheckError::AnumanaViphalata)),
             "expected AnumanaViphalata (D073), got: {:?}",
+            checker.errors
+        );
+    }
+
+    // ===== Concurrency (Samyoga / Prapti / Duta / Manas) Tests =====
+
+    #[test]
+    fn test_samyoga_block_produces_thread_handle_type() {
+        let mut checker = TypeChecker::new();
+        let samyoga = ASTNode::SamyogaNode {
+            body: vec![ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }],
+            span: span(),
+        };
+        let ty = checker.check(&samyoga);
+        assert!(matches!(ty, DevvaniType::Samyoga(_)));
+        if let DevvaniType::Samyoga(inner) = &ty {
+            assert_eq!(**inner, DevvaniType::Subject("Purnaank".to_string()));
+        }
+    }
+
+    #[test]
+    fn test_prapti_on_valid_handle_unwraps_inner_type() {
+        let mut checker = TypeChecker::new();
+        let handle = ASTNode::SamyogaNode {
+            body: vec![ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }],
+            span: span(),
+        };
+        let prapti = ASTNode::PraptiNode {
+            handle: Box::new(handle),
+            span: span(),
+        };
+        let ty = checker.check(&prapti);
+        assert_eq!(ty, DevvaniType::Subject("Purnaank".to_string()));
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_prapti_on_non_handle_produces_d075() {
+        let mut checker = TypeChecker::new();
+        let prapti = ASTNode::PraptiNode {
+            handle: Box::new(ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&prapti);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::PraptiAprayukta { .. })),
+            "expected PraptiAprayukta D075, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_duta_banaa_binding_produces_sender_receiver_types() {
+        let mut checker = TypeChecker::new();
+        let binding = ASTNode::DharaNode {
+            naamas: vec!["bhejaka".to_string()],
+            type_name: None,
+            mulya: Box::new(ASTNode::DutaBanaaNode { span: span() }),
+            is_mutable: false,
+            span: span(),
+        };
+        let _ty = checker.check(&binding);
+        if let Some(sym) = checker.env.lookup("bhejaka") {
+            assert!(
+                matches!(sym.devvani_type, DevvaniType::DutaBhejaka(_)),
+                "expected DutaBhejaka, got {:?}",
+                sym.devvani_type
+            );
+        }
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_duta_bhej_on_valid_sender_succeeds() {
+        let mut checker = TypeChecker::new();
+        let channel = ASTNode::DutaBanaaNode { span: span() };
+        let _pair_ty = checker.check(&channel);
+
+        let sender_binding = ASTNode::DharaNode {
+            naamas: vec!["bhejaka".to_string()],
+            type_name: None,
+            mulya: Box::new(channel),
+            is_mutable: false,
+            span: span(),
+        };
+        checker.check(&sender_binding);
+
+        let bhej = ASTNode::DutaBhejNode {
+            sender: Box::new(ASTNode::Nama {
+                base: "bhejaka".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: devvani_ast::Vacana::Eka,
+                span: span(),
+            }),
+            message: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let ty = checker.check(&bhej);
+        assert_eq!(ty, DevvaniType::Unknown);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_duta_bhej_on_non_sender_produces_d076() {
+        let mut checker = TypeChecker::new();
+        let bhej = ASTNode::DutaBhejNode {
+            sender: Box::new(ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }),
+            message: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&bhej);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::DutaBhejAprayukta { .. })),
+            "expected DutaBhejAprayukta D076, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_duta_grahan_on_valid_receiver_succeeds() {
+        let mut checker = TypeChecker::new();
+        let channel = ASTNode::DutaBanaaNode { span: span() };
+        let _pair_ty = checker.check(&channel);
+
+        let sender_binding = ASTNode::DharaNode {
+            naamas: vec!["bhejaka".to_string()],
+            type_name: None,
+            mulya: Box::new(channel),
+            is_mutable: false,
+            span: span(),
+        };
+        checker.check(&sender_binding);
+
+        checker.env.define(
+            "grahaka",
+            DevvaniType::DutaGrahaka(Box::new(DevvaniType::Unknown)),
+        );
+
+        let grahan = ASTNode::DutaGrahanNode {
+            receiver: Box::new(ASTNode::Nama {
+                base: "grahaka".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: devvani_ast::Vacana::Eka,
+                span: span(),
+            }),
+            span: span(),
+        };
+        let ty = checker.check(&grahan);
+        assert_eq!(ty, DevvaniType::Unknown);
+        assert!(
+            !checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::DutaGrahanAprayukta { .. })),
+            "expected no DutaGrahanAprayukta error for valid receiver, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_duta_grahan_on_non_receiver_produces_d077() {
+        let mut checker = TypeChecker::new();
+        let grahan = ASTNode::DutaGrahanNode {
+            receiver: Box::new(ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&grahan);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::DutaGrahanAprayukta { .. })),
+            "expected DutaGrahanAprayukta D077, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_manas_on_valid_mutex_target_scopes_body() {
+        let mut checker = TypeChecker::new();
+        checker.env.define(
+            "lock",
+            DevvaniType::Manas(Box::new(DevvaniType::Vaak)),
+        );
+
+        let manas = ASTNode::ManasNode {
+            target: Box::new(ASTNode::Nama {
+                base: "lock".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: devvani_ast::Vacana::Eka,
+                span: span(),
+            }),
+            body: vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "inside manas".to_string(),
+                    span: span(),
+                }),
+            }],
+            span: span(),
+        };
+        let ty = checker.check(&manas);
+        assert_eq!(ty, DevvaniType::Unknown);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_manas_on_non_mutex_target_produces_d078() {
+        let mut checker = TypeChecker::new();
+        let manas = ASTNode::ManasNode {
+            target: Box::new(ASTNode::PurnaankLiteral {
+                value: 42,
+                span: span(),
+            }),
+            body: vec![],
+            span: span(),
+        };
+        let _ty = checker.check(&manas);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ManasAprayukta { .. })),
+            "expected ManasAprayukta D078, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_duta_banaa_tuple_destructuring_produces_correct_types() {
+        let mut checker = TypeChecker::new();
+        let binding = ASTNode::DharaNode {
+            naamas: vec!["bhejaka".to_string(), "grahaka".to_string()],
+            type_name: None,
+            mulya: Box::new(ASTNode::DutaBanaaNode { span: span() }),
+            is_mutable: false,
+            span: span(),
+        };
+        let _ty = checker.check(&binding);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        if let Some(sym) = checker.env.lookup("bhejaka") {
+            assert!(
+                matches!(sym.devvani_type, DevvaniType::DutaBhejaka(_)),
+                "expected bhejaka to be DutaBhejaka, got {:?}",
+                sym.devvani_type
+            );
+        } else {
+            panic!("bhejaka not found in symbol table");
+        }
+        if let Some(sym) = checker.env.lookup("grahaka") {
+            assert!(
+                matches!(sym.devvani_type, DevvaniType::DutaGrahaka(_)),
+                "expected grahaka to be DutaGrahaka, got {:?}",
+                sym.devvani_type
+            );
+        } else {
+            panic!("grahaka not found in symbol table");
+        }
+    }
+
+    #[test]
+    fn test_dhara_multi_name_arity_mismatch_produces_d079() {
+        let mut checker = TypeChecker::new();
+        let binding = ASTNode::DharaNode {
+            naamas: vec!["a".to_string(), "b".to_string()],
+            type_name: None,
+            mulya: Box::new(ASTNode::PurnaankLiteral { value: 42, span: span() }),
+            is_mutable: false,
+            span: span(),
+        };
+        let _ty = checker.check(&binding);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::DharaVinyasaAsangati { .. })),
+            "expected DharaVinyasaAsangati D079 for non-Duta multi-name binding, got: {:?}",
             checker.errors
         );
     }

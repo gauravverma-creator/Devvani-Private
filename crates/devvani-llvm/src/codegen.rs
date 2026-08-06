@@ -234,11 +234,11 @@ impl<'ctx> IrEmitter<'ctx> {
                 self.variables.insert(naama.clone(), val);
                 Ok(Some(val))
             }
-            ASTNode::DharaNode { naama, mulya, .. } => {
+            ASTNode::DharaNode { naamas, mulya, .. } => {
                 let val = self
                     .compile_node(mulya)?
                     .ok_or_else(|| DevvaniLLVMError::CodeGenError("DharaNode: no mulya".into()))?;
-                self.variables.insert(naama.clone(), val);
+                self.variables.insert(naamas[0].clone(), val);
                 Ok(Some(val))
             }
             ASTNode::YogaNode { vama, dakshina } => {

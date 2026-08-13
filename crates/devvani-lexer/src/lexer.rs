@@ -289,9 +289,12 @@ impl<'a> Lexer<'a> {
              "sandesha" | "Sandesha" => TokenKind::Sandesha,
              "grahan" | "Grahan" => TokenKind::Grahan,
              "karo" | "Karo" => TokenKind::Karo,
-             "manas" | "Manas" => TokenKind::Manas,
+              "manas" | "Manas" => TokenKind::Manas,
 
-              _ => TokenKind::Naama(id),
+              // --- PIPELINE (PARIṆĀMA) KEYWORDS ---
+              "pariṇāma" | "Pariṇāma" | "parinama" | "Parinama" => TokenKind::Parinama,
+
+               _ => TokenKind::Naama(id),
          };
         Ok(Token {
             kind,
@@ -911,5 +914,35 @@ mod tests {
         assert_eq!(tokens[0].kind, TokenKind::Naama("samyogah".to_string()));
         assert_eq!(tokens[1].kind, TokenKind::Naama("praptih".to_string()));
         assert_eq!(tokens[2].kind, TokenKind::Naama("dutah".to_string()));
+    }
+
+    // --- PARINAMA KEYWORD TESTS ---
+
+    #[test]
+    fn test_parinama_keyword_ascii() {
+        let mut lexer = Lexer::new("parinama");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Parinama);
+    }
+
+    #[test]
+    fn test_Parinama_keyword_ascii() {
+        let mut lexer = Lexer::new("Parinama");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Parinama);
+    }
+
+    #[test]
+    fn test_parinama_keyword_iast() {
+        let mut lexer = Lexer::new("pariṇāma");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Parinama);
+    }
+
+    #[test]
+    fn test_Pariṇāma_keyword_iast() {
+        let mut lexer = Lexer::new("Pariṇāma");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Parinama);
     }
 }

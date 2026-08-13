@@ -396,11 +396,19 @@ PanktiNode {
          receiver: Box<ASTNode>,
          span: Span,
      },
-     /// ManasNode — mutex-guarded block (scoped lock, auto-unlock at end of block).
-     /// Syntax: manas <mutex_var> { <statements> }
-     ManasNode {
-         target: Box<ASTNode>,
-         body: Vec<ASTNode>,
-         span: Span,
-     },
- }
+      /// ManasNode — mutex-guarded block (scoped lock, auto-unlock at end of block).
+      /// Syntax: manas <mutex_var> { <statements> }
+      ManasNode {
+          target: Box<ASTNode>,
+          body: Vec<ASTNode>,
+          span: Span,
+      },
+      /// ParinamaNode — pipeline/postfix-transform expression.
+      /// Syntax: <expr> pariṇāma [ <ident> (, <ident>)* ]
+      /// Value flows left-to-right through each dhatu in `dhatus`.
+      ParinamaNode {
+          mulyam: Box<ASTNode>,
+          dhatus: Vec<String>,
+          span: Span,
+      },
+  }

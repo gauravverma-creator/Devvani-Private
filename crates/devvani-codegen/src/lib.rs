@@ -8,6 +8,50 @@ use devvani_typesystem::{
     Lakara, TypeChecker, DevvaniType,
 };
 
+// ── Identifier sanitization ──────────────────────────────────
+fn sanitize_rust_ident(ident: &str) -> String {
+    ident.replace('-', "_")
+}
+
+fn infer_return_type_from_body(body: &[ASTNode]) -> Option<String> {
+    let last = body.last()?;
+    match last {
+        ASTNode::YogaNode { vama, dakshina }
+        | ASTNode::ViyogaNode { vama, dakshina }
+        | ASTNode::GunaNode { vama, dakshina }
+        | ASTNode::BhagaNode { vama, dakshina } => {
+            if matches!(vama.as_ref(), ASTNode::PurnaankLiteral { .. }) {
+                Some("i64".to_string())
+            } else if matches!(dakshina.as_ref(), ASTNode::PurnaankLiteral { .. }) {
+                Some("i64".to_string())
+            } else if matches!(vama.as_ref(), ASTNode::DashaamshaLiteral { .. }) {
+                Some("f64".to_string())
+            } else if matches!(dakshina.as_ref(), ASTNode::DashaamshaLiteral { .. }) {
+                Some("f64".to_string())
+            } else {
+                None
+            }
+        }
+        ASTNode::SamaNode { vama, dakshina }
+        | ASTNode::AsamaNode { vama, dakshina }
+        | ASTNode::NyuunaNode { vama, dakshina }
+        | ASTNode::AdhikaNode { vama, dakshina } => {
+            if matches!(vama.as_ref(), ASTNode::PurnaankLiteral { .. })
+                || matches!(dakshina.as_ref(), ASTNode::PurnaankLiteral { .. })
+            {
+                Some("i64".to_string())
+            } else if matches!(vama.as_ref(), ASTNode::DashaamshaLiteral { .. })
+                || matches!(dakshina.as_ref(), ASTNode::DashaamshaLiteral { .. })
+            {
+                Some("f64".to_string())
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 // ── Error type ──────────────────────────────────────────────
 #[derive(Debug)]
 pub enum CodegenError {
@@ -187,14 +231,14 @@ impl Codegen {
                         "{}{}",
                         self.indent_str(),
                         if symbol.mutability.is_mutable {
-                            format!("mut {}", display_name)
+                            format!("mut {}", sanitize_rust_ident(display_name))
                         } else {
-                            display_name.to_string()
+                            sanitize_rust_ident(display_name).to_string()
                         },
                     ));
                 } else {
                     self.rust_output
-                        .push_str(&format!("{}{}", self.indent_str(), display_name));
+                        .push_str(&format!("{}{}", self.indent_str(), sanitize_rust_ident(display_name)));
                 }
             }
             ASTNode::PurnaankLiteral { value, .. } => {
@@ -235,7 +279,7 @@ impl Codegen {
             }
             ASTNode::AstiNode { naama, mulya } => {
                 self.rust_output
-                    .push_str(&format!("{}let {} = ", self.indent_str(), naama));
+                    .push_str(&format!("{}let {} = ", self.indent_str(), sanitize_rust_ident(naama)));
                 self.emit(mulya)?;
                 self.rust_output.push_str(";\n");
                 self.instructions.push(Instruction::Bind {
@@ -246,7 +290,7 @@ impl Codegen {
             }
             ASTNode::BhavatiNode { naama, mulya } => {
                 self.rust_output
-                    .push_str(&format!("{}let mut {} = ", self.indent_str(), naama));
+                    .push_str(&format!("{}let mut {} = ", self.indent_str(), sanitize_rust_ident(naama)));
                 self.emit(mulya)?;
                 self.rust_output.push_str(";\n");
                 self.instructions.push(Instruction::Bind {
@@ -280,10 +324,10 @@ impl Codegen {
                     if let Some(rust_ty) = rust_ty_str {
                         if *is_mutable {
                             self.rust_output
-                                .push_str(&format!("{}let mut {}: {} = ", self.indent_str(), naama, rust_ty));
+                                .push_str(&format!("{}let mut {}: {} = ", self.indent_str(), sanitize_rust_ident(naama), rust_ty));
                         } else {
                             self.rust_output
-                                .push_str(&format!("{}let {}: {} = ", self.indent_str(), naama, rust_ty));
+                                .push_str(&format!("{}let {}: {} = ", self.indent_str(), sanitize_rust_ident(naama), rust_ty));
                         }
                         self.instructions.push(Instruction::Bind {
                             name: naama.clone(),
@@ -293,10 +337,10 @@ impl Codegen {
                     } else {
                         if *is_mutable {
                             self.rust_output
-                                .push_str(&format!("{}let mut {} = ", self.indent_str(), naama));
+                                .push_str(&format!("{}let mut {} = ", self.indent_str(), sanitize_rust_ident(naama)));
                         } else {
                             self.rust_output
-                                .push_str(&format!("{}let {} = ", self.indent_str(), naama));
+                                .push_str(&format!("{}let {} = ", self.indent_str(), sanitize_rust_ident(naama)));
                         }
                         self.instructions.push(Instruction::Bind {
                             name: naama.clone(),
@@ -305,7 +349,7 @@ impl Codegen {
                         });
                     }
                 } else {
-                    let names_str = naamas.join(", ");
+                    let names_str = naamas.iter().map(|n| sanitize_rust_ident(n)).collect::<Vec<_>>().join(", ");
                     if *is_mutable {
                         self.rust_output
                             .push_str(&format!("{}let mut ({}) = ", self.indent_str(), names_str));
@@ -380,11 +424,12 @@ impl Codegen {
                 self.instructions.push(Instruction::Output("stdout".into()));
             }
             ASTNode::PathatiNode { naama } => {
+                let sanitized = sanitize_rust_ident(naama);
                 self.rust_output.push_str(&format!(
                     "{}let mut {} = String::new(); std::io::stdin().read_line(&mut {}).unwrap();\n",
                     self.indent_str(),
-                    naama,
-                    naama
+                    sanitized,
+                    sanitized
                 ));
                 self.instructions.push(Instruction::Input(naama.clone()));
             }
@@ -443,7 +488,7 @@ impl Codegen {
                             } else {
                                 base
                             };
-                            self.rust_output.push_str(display_name);
+                            self.rust_output.push_str(&sanitize_rust_ident(display_name));
                         } else {
                             self.emit(karta_node)?;
                         }
@@ -463,7 +508,7 @@ impl Codegen {
                             } else {
                                 base
                             };
-                            self.rust_output.push_str(display_name);
+                            self.rust_output.push_str(&sanitize_rust_ident(display_name));
                         } else {
                             self.emit(karta_node)?;
                         }
@@ -507,7 +552,7 @@ impl Codegen {
                     };
 
                     self.rust_output.push_str(&self.indent_str());
-                    self.rust_output.push_str(&emit_name);
+                    self.rust_output.push_str(&sanitize_rust_ident(&emit_name));
                     self.rust_output.push_str("(");
                      for (i, arg) in karma.iter().enumerate() {
                          if i > 0 {
@@ -567,7 +612,7 @@ impl Codegen {
                 ..
             } => {
                 self.rust_output
-                    .push_str(&format!("{}for {} in ", self.indent_str(), item_name));
+                    .push_str(&format!("{}for {} in ", self.indent_str(), sanitize_rust_ident(item_name)));
                 self.emit(iterable)?;
                 self.rust_output.push_str(".iter() {\n");
                 self.indent += 1;
@@ -607,7 +652,7 @@ impl Codegen {
                         } else {
                             "i64".to_string()
                         };
-                        rust_params.push(format!("{}: {}", param.name, type_str));
+                        rust_params.push(format!("{}: {}", sanitize_rust_ident(&param.name), type_str));
                         self.instructions.push(Instruction::Bind {
                             name: param.name.clone(),
                             rust_type: type_str.clone(),
@@ -665,6 +710,12 @@ impl Codegen {
                                 }
                             }
                         }
+
+                        if return_type_str.is_empty() {
+                            if let Some(inferred) = infer_return_type_from_body(body) {
+                                return_type_str = format!(" -> {}", inferred);
+                            }
+                        }
                     }
 
                     let async_kw = if scope.is_async { "async " } else { "" };
@@ -672,7 +723,7 @@ impl Codegen {
                         "{}pub {}fn {}({}){return_type_str} {{\n",
                         self.indent_str(),
                         async_kw,
-                        name,
+                        sanitize_rust_ident(name),
                         rust_params.join(", ")
                     );
                     self.rust_output.push_str(&line);
@@ -719,10 +770,10 @@ impl Codegen {
                         .push_str(&format!("{}#[derive(Debug, Clone)]\n", self.indent_str()));
                     if angas.is_empty() {
                         self.rust_output
-                            .push_str(&format!("{}struct {} {{}};\n", self.indent_str(), name));
+                            .push_str(&format!("{}struct {} {{}};\n", self.indent_str(), sanitize_rust_ident(name)));
                     } else {
                         self.rust_output
-                            .push_str(&format!("{}struct {} {{\n", self.indent_str(), name));
+                            .push_str(&format!("{}struct {} {{\n", self.indent_str(), sanitize_rust_ident(name)));
 
                         self.indent += 1;
                         for (i, anga) in angas.iter().enumerate() {
@@ -733,7 +784,7 @@ impl Codegen {
                             self.rust_output.push_str(&format!(
                                 "{}{}: {}",
                                 self.indent_str(),
-                                anga.name,
+                                sanitize_rust_ident(&anga.name),
                                 rust_ty
                             ));
                         }
@@ -772,7 +823,7 @@ impl Codegen {
             ASTNode::SamavayaNode { target, anga_name, .. } => {
                 self.emit(target)?;
                 self.rust_output.push_str(".");
-                self.rust_output.push_str(anga_name);
+                self.rust_output.push_str(&sanitize_rust_ident(anga_name));
             }
             ASTNode::NirmanaNode {
                 dravya_name,
@@ -811,15 +862,15 @@ impl Codegen {
 
                 if angas.is_empty() {
                     self.rust_output
-                        .push_str(&format!("{}{} {{}}", self.indent_str(), emit_name));
+                        .push_str(&format!("{}{} {{}}", self.indent_str(), sanitize_rust_ident(&emit_name)));
                 } else {
                     self.rust_output
-                        .push_str(&format!("{}{} {{ ", self.indent_str(), emit_name));
+                        .push_str(&format!("{}{} {{ ", self.indent_str(), sanitize_rust_ident(&emit_name)));
                     for (i, (field_name, _)) in angas.iter().enumerate() {
                         if i > 0 {
                             self.rust_output.push_str(", ");
                         }
-                        self.rust_output.push_str(&format!("{}: ", field_name));
+                        self.rust_output.push_str(&format!("{}: ", sanitize_rust_ident(field_name)));
                         self.emit(&values[i])?;
                     }
                     self.rust_output.push_str(" }");
@@ -860,7 +911,7 @@ impl Codegen {
                 self.rust_output.push_str(&format!(
                     "{}Ok({}) => {{\n",
                     self.indent_str(),
-                    arogya_bind
+                    sanitize_rust_ident(arogya_bind)
                 ));
                 self.indent += 1;
                 self.emit_body(arogya_body)?;
@@ -870,7 +921,7 @@ impl Codegen {
                 self.rust_output.push_str(&format!(
                     "{}Err({}) => {{\n",
                     self.indent_str(),
-                    dosha_bind
+                    sanitize_rust_ident(dosha_bind)
                 ));
                 self.indent += 1;
                 self.emit_body(dosha_body)?;
@@ -935,7 +986,7 @@ impl Codegen {
                 self.rust_output.push_str(&format!(
                     "{}let mut {} = ",
                     self.indent_str(),
-                    target_name
+                    sanitize_rust_ident(&target_name)
                 ));
                 let saved_indent = self.indent;
                 self.indent = 0;
@@ -945,6 +996,121 @@ impl Codegen {
                 self.emit_body(body)?;
                 self.indent -= 1;
                 self.rust_output.push_str(&format!("{}}}\n", self.indent_str()));
+            }
+            ASTNode::ParinamaNode { mulyam, dhatus, .. } => {
+                if dhatus.is_empty() {
+                    return Err(CodegenError::UnsupportedNode(
+                        "ParinamaNode with empty dhatus".to_string(),
+                    ));
+                }
+
+                let is_fallible = dhatus.iter().any(|d| {
+                    if let Some(return_ty) = self.type_checker.function_return_types().get(d) {
+                        matches!(return_ty, DevvaniType::Phalam(_, _))
+                    } else {
+                        false
+                    }
+                });
+
+                if dhatus.len() == 1 {
+                    let dhatu_name = &dhatus[0];
+                    let emit_name = self
+                        .mangled_name_for_dhatu_call(dhatu_name, &None, &[], &None, &None, &None, &None)
+                        .unwrap_or_else(|| dhatu_name.clone());
+
+                    self.rust_output.push_str(&sanitize_rust_ident(&emit_name));
+                    self.rust_output.push_str("(");
+
+                    if let Some(params) = self.type_checker.function_params().get(dhatu_name) {
+                        if let Some(param) = params.get(0) {
+                            if param.is_borrowed {
+                                if param.is_mutable_borrow {
+                                    self.rust_output.push_str("&mut ");
+                                } else {
+                                    self.rust_output.push_str("&");
+                                }
+                            }
+                        }
+                    }
+
+                    self.emit(mulyam)?;
+                    self.rust_output.push_str(")");
+                } else if is_fallible {
+                    let mut expr = String::new();
+
+                    for (i, dhatu_name) in dhatus.iter().enumerate() {
+                        let emit_name = self
+                            .mangled_name_for_dhatu_call(dhatu_name, &None, &[], &None, &None, &None, &None)
+                            .unwrap_or_else(|| dhatu_name.clone());
+
+                        let is_dhatu_fallible = if let Some(return_ty) =
+                            self.type_checker.function_return_types().get(dhatu_name)
+                        {
+                            matches!(return_ty, DevvaniType::Phalam(_, _))
+                        } else {
+                            false
+                        };
+
+                        if i == 0 {
+                            let mut borrow_prefix = String::new();
+                            if let Some(params) = self.type_checker.function_params().get(dhatu_name) {
+                                if let Some(param) = params.get(0) {
+                                    if param.is_borrowed {
+                                        if param.is_mutable_borrow {
+                                            borrow_prefix = "&mut ".to_string();
+                                        } else {
+                                            borrow_prefix = "&".to_string();
+                                        }
+                                    }
+                                }
+                            }
+
+                            let arg_str = self.expr_to_string(mulyam)?;
+                            if is_dhatu_fallible {
+                                expr = format!("{}({}{})", sanitize_rust_ident(&emit_name), borrow_prefix, arg_str);
+                            } else {
+                                expr = format!("Ok({}({}{}))", sanitize_rust_ident(&emit_name), borrow_prefix, arg_str);
+                            }
+                        } else {
+                            let var_name = format!("v{}", i - 1);
+                            if is_dhatu_fallible {
+                                expr = format!("{}.and_then(|{}| {}({}))", expr, var_name, sanitize_rust_ident(&emit_name), var_name);
+                            } else {
+                                expr = format!(
+                                    "{}.and_then(|{}| Ok({}({})))",
+                                    expr, var_name, sanitize_rust_ident(&emit_name), var_name
+                                );
+                            }
+                        }
+                    }
+
+                    self.rust_output.push_str(&expr);
+                } else {
+                    let mut expr = self.expr_to_string(mulyam)?;
+
+                    for dhatu_name in dhatus.iter() {
+                        let emit_name = self
+                            .mangled_name_for_dhatu_call(dhatu_name, &None, &[], &None, &None, &None, &None)
+                            .unwrap_or_else(|| dhatu_name.clone());
+
+                        let mut borrow_prefix = String::new();
+                        if let Some(params) = self.type_checker.function_params().get(dhatu_name) {
+                            if let Some(param) = params.get(0) {
+                                if param.is_borrowed {
+                                    if param.is_mutable_borrow {
+                                        borrow_prefix = "&mut ".to_string();
+                                    } else {
+                                        borrow_prefix = "&".to_string();
+                                    }
+                                }
+                            }
+                        }
+
+                        expr = format!("{}({}{})", sanitize_rust_ident(&emit_name), borrow_prefix, expr);
+                    }
+
+                    self.rust_output.push_str(&expr);
+                }
             }
             _ => {
                 let msg = format!("Unhandled node: {:?}", node);
@@ -976,6 +1142,18 @@ impl Codegen {
         self.emit(node)?;
         let result = self.rust_output.clone();
         self.rust_output = old_output;
+        Ok(result)
+    }
+
+    fn expr_to_string(&mut self, node: &ASTNode) -> Result<String, CodegenError> {
+        let old_output = self.rust_output.clone();
+        let old_indent = self.indent;
+        self.rust_output = String::new();
+        self.indent = 0;
+        self.emit(node)?;
+        let result = self.rust_output.clone();
+        self.rust_output = old_output;
+        self.indent = old_indent;
         Ok(result)
     }
 
@@ -1191,10 +1369,10 @@ impl Codegen {
             .push_str(&format!("{}#[derive(Debug, Clone)]\n", self.indent_str()));
         if angas.is_empty() {
             self.rust_output
-                .push_str(&format!("{}struct {} {{}};\n", self.indent_str(), mangled_name));
+                .push_str(&format!("{}struct {} {{}};\n", self.indent_str(), sanitize_rust_ident(mangled_name)));
         } else {
             self.rust_output
-                .push_str(&format!("{}struct {} {{\n", self.indent_str(), mangled_name));
+                .push_str(&format!("{}struct {} {{\n", self.indent_str(), sanitize_rust_ident(mangled_name)));
             self.indent += 1;
             for (i, (field_name, field_ty)) in angas.iter().enumerate() {
                 if i > 0 {
@@ -1204,7 +1382,7 @@ impl Codegen {
                 self.rust_output.push_str(&format!(
                     "{}{}: {}",
                     self.indent_str(),
-                    field_name,
+                    sanitize_rust_ident(field_name),
                     rust_ty
                 ));
             }
@@ -1274,7 +1452,7 @@ impl Codegen {
             } else {
                 concrete_ty
             };
-            rust_params.push(format!("{}: {}", param.name, type_str));
+            rust_params.push(format!("{}: {}", sanitize_rust_ident(&param.name), type_str));
         }
 
         let mut return_type_str = String::new();
@@ -1300,7 +1478,7 @@ impl Codegen {
         let line = format!(
             "{}pub fn {}({}){return_type_str} {{\n",
             self.indent_str(),
-            mangled_name,
+            sanitize_rust_ident(mangled_name),
             rust_params.join(", ")
         );
         self.rust_output.push_str(&line);
@@ -1511,6 +1689,9 @@ impl Codegen {
                     self.walk_for_dhatu_instantiations(stmt, set);
                 }
             }
+            ASTNode::ParinamaNode { mulyam, .. } => {
+                self.walk_for_dhatu_instantiations(mulyam, set);
+            }
             _ => {}
         }
     }
@@ -1669,6 +1850,9 @@ impl Codegen {
                 for stmt in body {
                     self.walk_for_instantiations(stmt, set);
                 }
+            }
+            ASTNode::ParinamaNode { mulyam, .. } => {
+                self.walk_for_instantiations(mulyam, set);
             }
             _ => {}
         }
@@ -3877,5 +4061,424 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         assert!(output.contains("bhejaka.send(\"hello\").unwrap();"));
         assert!(output.contains("let result: i64 = h.join().unwrap();"));
         assert!(output.contains("grahaka.recv().unwrap()"));
+    }
+
+    // ===== Pariṇāma (Pipeline) Codegen Tests =====
+
+    #[test]
+    fn test_parinama_three_dhatu_nonfallible() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![
+                ASTNode::DhatuDef {
+                    name: "inc".to_string(),
+                    generic_params: vec![],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: devvani_ast::Linga::Pullinga,
+                    vacana: devvani_ast::Vacana::Eka,
+                    params: vec![KarakaParam {
+                        name: "n".to_string(),
+                        role: KarakaRole::Karma,
+                        vibhakti: Vibhakti::Dvitiya,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        span: dummy_span(),
+                        type_name: "sankhya".to_string(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: None,
+                    body: vec![ASTNode::YogaNode {
+                        vama: Box::new(ASTNode::Nama {
+                            base: "n".to_string(),
+                            vibhakti: Vibhakti::Dvitiya,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        dakshina: Box::new(ASTNode::PurnaankLiteral {
+                            value: 1,
+                            span: dummy_span(),
+                        }),
+                    }],
+                    span: dummy_span(),
+                },
+                ASTNode::DhatuDef {
+                    name: "double".to_string(),
+                    generic_params: vec![],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: devvani_ast::Linga::Pullinga,
+                    vacana: devvani_ast::Vacana::Eka,
+                    params: vec![KarakaParam {
+                        name: "n".to_string(),
+                        role: KarakaRole::Karma,
+                        vibhakti: Vibhakti::Dvitiya,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        span: dummy_span(),
+                        type_name: "sankhya".to_string(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: None,
+                    body: vec![ASTNode::YogaNode {
+                        vama: Box::new(ASTNode::Nama {
+                            base: "n".to_string(),
+                            vibhakti: Vibhakti::Dvitiya,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        dakshina: Box::new(ASTNode::PurnaankLiteral {
+                            value: 2,
+                            span: dummy_span(),
+                        }),
+                    }],
+                    span: dummy_span(),
+                },
+                ASTNode::DhatuDef {
+                    name: "triple".to_string(),
+                    generic_params: vec![],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: devvani_ast::Linga::Pullinga,
+                    vacana: devvani_ast::Vacana::Eka,
+                    params: vec![KarakaParam {
+                        name: "n".to_string(),
+                        role: KarakaRole::Karma,
+                        vibhakti: Vibhakti::Dvitiya,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        span: dummy_span(),
+                        type_name: "sankhya".to_string(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: None,
+                    body: vec![ASTNode::YogaNode {
+                        vama: Box::new(ASTNode::Nama {
+                            base: "n".to_string(),
+                            vibhakti: Vibhakti::Dvitiya,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        dakshina: Box::new(ASTNode::PurnaankLiteral {
+                            value: 3,
+                            span: dummy_span(),
+                        }),
+                    }],
+                    span: dummy_span(),
+                },
+            ],
+        };
+        let _ = codegen.type_checker.check_program(&program);
+
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral {
+                value: 5,
+                span: dummy_span(),
+            }),
+            dhatus: vec!["inc".to_string(), "double".to_string(), "triple".to_string()],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&parinama).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "triple(double(inc(5)))");
+    }
+
+    #[test]
+    fn test_parinama_single_dhatu_nonfallible() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "inc".to_string(),
+                generic_params: vec![],
+                lakara: devvani_ast::Lakara::Lat,
+                gana: devvani_ast::Gana::Bhvadi,
+                linga: devvani_ast::Linga::Pullinga,
+                vacana: devvani_ast::Vacana::Eka,
+                params: vec![KarakaParam {
+                    name: "n".to_string(),
+                    role: KarakaRole::Karma,
+                    vibhakti: Vibhakti::Dvitiya,
+                    is_borrowed: false,
+                    is_mutable_borrow: false,
+                    span: dummy_span(),
+                    type_name: "sankhya".to_string(),
+                }],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: None,
+                body: vec![ASTNode::YogaNode {
+                    vama: Box::new(ASTNode::Nama {
+                        base: "n".to_string(),
+                        vibhakti: Vibhakti::Dvitiya,
+                        linga: AstLinga::Pullinga,
+                        vacana: AstVacana::Eka,
+                        span: dummy_span(),
+                    }),
+                    dakshina: Box::new(ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: dummy_span(),
+                    }),
+                }],
+                span: dummy_span(),
+            }],
+        };
+        let _ = codegen.type_checker.check_program(&program);
+
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral {
+                value: 5,
+                span: dummy_span(),
+            }),
+            dhatus: vec!["inc".to_string()],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&parinama).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "inc(5)");
+    }
+
+    #[test]
+    fn test_parinama_all_fallible() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![
+                ASTNode::DhatuDef {
+                    name: "fa".to_string(),
+                    generic_params: vec![],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: devvani_ast::Linga::Pullinga,
+                    vacana: devvani_ast::Vacana::Eka,
+                    params: vec![KarakaParam {
+                        name: "n".to_string(),
+                        role: KarakaRole::Karma,
+                        vibhakti: Vibhakti::Dvitiya,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        span: dummy_span(),
+                        type_name: "sankhya".to_string(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: Some(Box::new(ASTNode::PhalamType {
+                        success_type: "sankhya".to_string(),
+                        error_type: "vaak".to_string(),
+                        span: dummy_span(),
+                    })),
+                    body: vec![ASTNode::ArogyaNode {
+                        value: Box::new(ASTNode::Nama {
+                            base: "n".to_string(),
+                            vibhakti: Vibhakti::Dvitiya,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                },
+                ASTNode::DhatuDef {
+                    name: "fb".to_string(),
+                    generic_params: vec![],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: devvani_ast::Linga::Pullinga,
+                    vacana: devvani_ast::Vacana::Eka,
+                    params: vec![KarakaParam {
+                        name: "n".to_string(),
+                        role: KarakaRole::Karma,
+                        vibhakti: Vibhakti::Dvitiya,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        span: dummy_span(),
+                        type_name: "sankhya".to_string(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: Some(Box::new(ASTNode::PhalamType {
+                        success_type: "sankhya".to_string(),
+                        error_type: "vaak".to_string(),
+                        span: dummy_span(),
+                    })),
+                    body: vec![ASTNode::ArogyaNode {
+                        value: Box::new(ASTNode::Nama {
+                            base: "n".to_string(),
+                            vibhakti: Vibhakti::Dvitiya,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                },
+            ],
+        };
+        let _ = codegen.type_checker.check_program(&program);
+
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral {
+                value: 5,
+                span: dummy_span(),
+            }),
+            dhatus: vec!["fa".to_string(), "fb".to_string()],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&parinama).is_ok());
+        assert_eq!(
+            codegen.rust_source().trim(),
+            "fa(5).and_then(|v0| fb(v0))"
+        );
+    }
+
+    #[test]
+    fn test_parinama_mixed_fallible() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![
+                ASTNode::DhatuDef {
+                    name: "fa".to_string(),
+                    generic_params: vec![],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: devvani_ast::Linga::Pullinga,
+                    vacana: devvani_ast::Vacana::Eka,
+                    params: vec![KarakaParam {
+                        name: "n".to_string(),
+                        role: KarakaRole::Karma,
+                        vibhakti: Vibhakti::Dvitiya,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        span: dummy_span(),
+                        type_name: "sankhya".to_string(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: Some(Box::new(ASTNode::PhalamType {
+                        success_type: "sankhya".to_string(),
+                        error_type: "vaak".to_string(),
+                        span: dummy_span(),
+                    })),
+                    body: vec![ASTNode::ArogyaNode {
+                        value: Box::new(ASTNode::Nama {
+                            base: "n".to_string(),
+                            vibhakti: Vibhakti::Dvitiya,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                },
+                ASTNode::DhatuDef {
+                    name: "g".to_string(),
+                    generic_params: vec![],
+                    lakara: devvani_ast::Lakara::Lat,
+                    gana: devvani_ast::Gana::Bhvadi,
+                    linga: devvani_ast::Linga::Pullinga,
+                    vacana: devvani_ast::Vacana::Eka,
+                    params: vec![KarakaParam {
+                        name: "n".to_string(),
+                        role: KarakaRole::Karma,
+                        vibhakti: Vibhakti::Dvitiya,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        span: dummy_span(),
+                        type_name: "sankhya".to_string(),
+                    }],
+                    upasargas: vec![],
+                    return_karaka: None,
+                    return_type: None,
+                    body: vec![ASTNode::YogaNode {
+                        vama: Box::new(ASTNode::Nama {
+                            base: "n".to_string(),
+                            vibhakti: Vibhakti::Dvitiya,
+                            linga: AstLinga::Pullinga,
+                            vacana: AstVacana::Eka,
+                            span: dummy_span(),
+                        }),
+                        dakshina: Box::new(ASTNode::PurnaankLiteral {
+                            value: 1,
+                            span: dummy_span(),
+                        }),
+                    }],
+                    span: dummy_span(),
+                },
+            ],
+        };
+        let _ = codegen.type_checker.check_program(&program);
+
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral {
+                value: 5,
+                span: dummy_span(),
+            }),
+            dhatus: vec!["fa".to_string(), "g".to_string()],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&parinama).is_ok());
+        assert_eq!(
+            codegen.rust_source().trim(),
+            "fa(5).and_then(|v0| Ok(g(v0)))"
+        );
+    }
+
+    #[test]
+    fn test_parinama_single_dhatu_fallible() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "fa".to_string(),
+                generic_params: vec![],
+                lakara: devvani_ast::Lakara::Lat,
+                gana: devvani_ast::Gana::Bhvadi,
+                linga: devvani_ast::Linga::Pullinga,
+                vacana: devvani_ast::Vacana::Eka,
+                params: vec![KarakaParam {
+                    name: "n".to_string(),
+                    role: KarakaRole::Karma,
+                    vibhakti: Vibhakti::Dvitiya,
+                    is_borrowed: false,
+                    is_mutable_borrow: false,
+                    span: dummy_span(),
+                    type_name: "sankhya".to_string(),
+                }],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: Some(Box::new(ASTNode::PhalamType {
+                    success_type: "sankhya".to_string(),
+                    error_type: "vaak".to_string(),
+                    span: dummy_span(),
+                })),
+                body: vec![ASTNode::ArogyaNode {
+                    value: Box::new(ASTNode::Nama {
+                        base: "n".to_string(),
+                        vibhakti: Vibhakti::Dvitiya,
+                        linga: AstLinga::Pullinga,
+                        vacana: AstVacana::Eka,
+                        span: dummy_span(),
+                    }),
+                    span: dummy_span(),
+                }],
+                span: dummy_span(),
+            }],
+        };
+        let _ = codegen.type_checker.check_program(&program);
+
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral {
+                value: 5,
+                span: dummy_span(),
+            }),
+            dhatus: vec!["fa".to_string()],
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&parinama).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "fa(5)");
     }
 }

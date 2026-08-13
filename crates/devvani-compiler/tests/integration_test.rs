@@ -1,5 +1,7 @@
 use devvani_compiler::Compiler;
 use std::fs;
+use std::process::Command;
+use tempfile::TempDir;
 
 #[test]
 fn test_pipeline_hello() {
@@ -34,10 +36,10 @@ fn test_recursive_dhatu_codegen() {
     let result = Compiler::new("examples/recursive_integration.dvn").compile();
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
     let code = result.unwrap();
-    let call_count = code.matches("avartanah-dhatu(").count();
+    let call_count = code.matches("avartanah_dhatu(").count();
     assert!(
         call_count >= 2,
-        "expected avartanah-dhatu( to appear >= 2 times, got {} in:\n{}",
+        "expected avartanah_dhatu( to appear >= 2 times, got {} in:\n{}",
         call_count,
         code
     );
@@ -51,8 +53,8 @@ fn test_nonrecursive_dhatu_call_codegen() {
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
     let code = result.unwrap();
     assert!(
-        code.contains("prathamah-dhatu("),
-        "expected prathamah-dhatu( in generated code:\n{}",
+        code.contains("prathamah_dhatu("),
+        "expected prathamah_dhatu( in generated code:\n{}",
         code
     );
 }
@@ -199,3 +201,146 @@ fn test_pipeline_type_inference() {
         code
     );
 }
+
+// ===== Pariṇāma (Pipeline) End-to-End Tests =====
+
+#[test]
+fn test_parinama_e2e_nonfallible() {
+    let source =
+        "inc-dhatu n karoti । n yoga 1 iti ।\n\
+         double-dhatu n karoti । n yoga 2 iti ।\n\
+         \n\
+         dhara result = 5 pariṇāma [inc-dhatu, double-dhatu] ।\n";
+    let _ = fs::write("examples/parinama_nonfallible.dvn", source);
+    let result = Compiler::new("examples/parinama_nonfallible.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        code.contains("double_dhatu(inc_dhatu(5))"),
+        "expected nested parinama calls in generated code:\n{}",
+        code
+    );
+}
+
+#[test]
+fn test_parinama_e2e_fallible() {
+    let source =
+        "fail-dhatu n phalam sankhya vaak karoti । arogya 5 । iti ।\n\
+         \n\
+         dhara result = 5 pariṇāma [fail-dhatu] ।\n";
+    let _ = fs::write("examples/parinama_fallible.dvn", source);
+    let result = Compiler::new("examples/parinama_fallible.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        code.contains("fail_dhatu(5)"),
+        "expected single fallible parinama call in generated code:\n{}",
+        code
+    );
+}
+
+#[test]
+fn test_parinama_e2e_mixed_fallible() {
+    let source =
+        "fail-dhatu n phalam sankhya vaak karoti । arogya 5 । iti ।\n\
+         double-dhatu n karoti । n yoga 2 iti ।\n\
+         \n\
+         dhara result = 5 pariṇāma [fail-dhatu, double-dhatu] ।\n";
+    let _ = fs::write("examples/parinama_mixed.dvn", source);
+    let result = Compiler::new("examples/parinama_mixed.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        code.contains("fail_dhatu(5).and_then(|v0| Ok(double_dhatu(v0)))"),
+        "expected mixed fallible parinama chain in generated code:\n{}",
+        code
+    );
+}
+
+fn assert_compiles(name: &str, generated_code: &str) {
+    let tmp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
+    let tmp_path = tmp_dir.path().join("parinama_verify.rs");
+    let out_path = tmp_dir.path().join("parinama_verify_out");
+
+    let wrapped = format!("fn main() {{\n{}\n}}", generated_code);
+    fs::write(&tmp_path, wrapped)
+        .expect("failed to write temp file");
+
+    let status = Command::new("rustc")
+        .arg("--edition")
+        .arg("2021")
+        .arg("--crate-type")
+        .arg("bin")
+        .arg("--crate-name")
+        .arg("parinama_verify")
+        .arg(&tmp_path)
+        .arg("-o")
+        .arg(&out_path)
+        .output()
+        .expect("failed to run rustc");
+
+    let stderr = String::from_utf8_lossy(&status.stderr);
+    assert!(
+        status.status.success(),
+        "rustc failed for {}:\n{}",
+        name,
+        stderr
+    );
+}
+
+#[test]
+fn test_parinama_e2e_nonfallible_compiles() {
+    let source =
+        "inc-dhatu n karoti । n yoga 1 iti ।\n\
+         double-dhatu n karoti । n yoga 2 iti ।\n\
+         \n\
+         dhara result = 5 pariṇāma [inc-dhatu, double-dhatu] ।\n";
+    let _ = fs::write("examples/parinama_nonfallible.dvn", source);
+    let result = Compiler::new("examples/parinama_nonfallible.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        code.contains("double_dhatu(inc_dhatu(5))"),
+        "expected nested parinama calls in generated code:\n{}",
+        code
+    );
+    assert_compiles("nonfallible parinama", &code);
+}
+
+#[test]
+fn test_parinama_e2e_fallible_compiles() {
+    let source =
+        "fail-dhatu n phalam sankhya vaak karoti । arogya 5 । iti ।\n\
+         \n\
+         dhara result = 5 pariṇāma [fail-dhatu] ।\n";
+    let _ = fs::write("examples/parinama_fallible.dvn", source);
+    let result = Compiler::new("examples/parinama_fallible.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        code.contains("fail_dhatu(5)"),
+        "expected single fallible parinama call in generated code:\n{}",
+        code
+    );
+    assert_compiles("fallible parinama", &code);
+}
+
+#[test]
+fn test_parinama_e2e_mixed_fallible_compiles() {
+    let source =
+        "fail-dhatu n phalam sankhya vaak karoti । arogya 5 । iti ।\n\
+         double-dhatu n karoti । n yoga 2 iti ।\n\
+         \n\
+         dhara result = 5 pariṇāma [fail-dhatu, double-dhatu] ।\n";
+    let _ = fs::write("examples/parinama_mixed.dvn", source);
+    let result = Compiler::new("examples/parinama_mixed.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        code.contains("fail_dhatu(5).and_then(|v0| Ok(double_dhatu(v0)))"),
+        "expected mixed fallible parinama chain in generated code:\n{}",
+        code
+    );
+    assert_compiles("mixed fallible parinama", &code);
+}
+

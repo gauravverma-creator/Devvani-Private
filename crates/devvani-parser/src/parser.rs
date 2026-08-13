@@ -786,17 +786,28 @@ let is_mutable;
             };
          }
 
-         if self.check(&TokenKind::Prapti) {
-             let current = self.peek().clone();
-             self.advance();
-             left = ASTNode::PraptiNode {
-                 handle: Box::new(left),
-                 span: current.span,
-             };
-         }
+          if self.check(&TokenKind::Prapti) {
+              let current = self.peek().clone();
+              self.advance();
+              left = ASTNode::PraptiNode {
+                  handle: Box::new(left),
+                  span: current.span,
+              };
+          }
 
-         Ok(left)
-    }
+          if self.check(&TokenKind::Parinama) {
+              let current = self.peek().clone();
+              self.advance();
+              let dhatus = self.parse_parinama_dhatu_list()?;
+              left = ASTNode::ParinamaNode {
+                  mulyam: Box::new(left),
+                  dhatus,
+                  span: current.span,
+              };
+          }
+
+          Ok(left)
+      }
 
      fn parse_primary(&mut self) -> Result<ASTNode, ParseError> {
          let start_span = self.peek().span;
@@ -1013,26 +1024,47 @@ fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
          })
      }
 
-     fn parse_manas(&mut self) -> Result<ASTNode, ParseError> {
-         let start_span = self.peek().span;
-         self.expect(TokenKind::Manas)?;
-         let target = self.parse_arithmetic()?;
-         self.expect(TokenKind::LBrace)?;
+      fn parse_manas(&mut self) -> Result<ASTNode, ParseError> {
+          let start_span = self.peek().span;
+          self.expect(TokenKind::Manas)?;
+          let target = self.parse_arithmetic()?;
+          self.expect(TokenKind::LBrace)?;
 
-         let mut body = Vec::new();
-         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
-             body.push(self.parse_vakya()?);
-         }
-         self.expect(TokenKind::RBrace)?;
+          let mut body = Vec::new();
+          while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+              body.push(self.parse_vakya()?);
+          }
+          self.expect(TokenKind::RBrace)?;
 
-         Ok(ASTNode::ManasNode {
-             target: Box::new(target),
-             body,
-             span: start_span,
-         })
-     }
+          Ok(ASTNode::ManasNode {
+              target: Box::new(target),
+              body,
+              span: start_span,
+          })
+      }
 
-     fn parse_kriya_call(&mut self, name: String, span: Span) -> Result<ASTNode, ParseError> {
+      fn parse_parinama_dhatu_list(&mut self) -> Result<Vec<String>, ParseError> {
+          self.expect(TokenKind::LBracket)?;
+          let mut dhatus = Vec::new();
+          if !self.check(&TokenKind::RBracket) {
+              loop {
+                  let tok = self.expect_identifier()?;
+                  if let TokenKind::Naama(n) = tok.kind {
+                      dhatus.push(n);
+                  } else {
+                      unreachable!()
+                  }
+                  if !self.check(&TokenKind::Unknown(',')) {
+                      break;
+                  }
+                  self.advance();
+              }
+          }
+          self.expect(TokenKind::RBracket)?;
+          Ok(dhatus)
+      }
+
+      fn parse_kriya_call(&mut self, name: String, span: Span) -> Result<ASTNode, ParseError> {
          let stop_kinds = [
              TokenKind::Danda,
              TokenKind::Iti,
@@ -1049,10 +1081,11 @@ fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
              TokenKind::Tarhi,
              TokenKind::Anyatha,
              TokenKind::Samaapti,
-             TokenKind::Samyoga,
-             TokenKind::Manas,
-             TokenKind::Prapti,
-         ];
+              TokenKind::Samyoga,
+              TokenKind::Manas,
+              TokenKind::Prapti,
+              TokenKind::Parinama,
+          ];
 
         let mut karma = Vec::new();
         while !self.check_any(&stop_kinds) && !self.is_at_end() {
@@ -2687,6 +2720,149 @@ other => panic!("expected KaryakramNode, got {:?}", other),
                         assert_eq!(body.len(), 1);
                     }
                     other => panic!("stmt 4: expected ManasNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+}
+
+// --- PARINAMA PIPELINE PARSER TESTS ---
+
+#[cfg(test)]
+mod parinama_tests {
+    use super::*;
+
+    fn span() -> Span {
+        Span { line: 1, col: 1, len: 1 }
+    }
+
+    fn nm(s: &str) -> Token {
+        Token { kind: TokenKind::Naama(s.to_string()), span: span() }
+    }
+
+    fn kw(kind: TokenKind) -> Token {
+        Token { kind, span: span() }
+    }
+
+    fn parse_tokens(tokens: Vec<Token>) -> Result<ASTNode, ParseError> {
+        let mut parser = Parser::new(tokens);
+        parser.parse()
+    }
+
+    // x pariṇāma [f, g, h] parses to ParinamaNode with all three dhatus present
+    #[test]
+    fn test_parse_parinama_three_dhatus() {
+        let tokens = vec![
+            nm("x"),
+            kw(TokenKind::Parinama),
+            kw(TokenKind::LBracket),
+            nm("f"),
+            kw(TokenKind::Unknown(',')),
+            nm("g"),
+            kw(TokenKind::Unknown(',')),
+            nm("h"),
+            kw(TokenKind::RBracket),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse parinama with three dhatus");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::ParinamaNode { mulyam, dhatus, .. } => {
+                        assert!(matches!(mulyam.as_ref(), ASTNode::Nama { base, .. } if base == "x"));
+                        assert_eq!(dhatus, &vec!["f".to_string(), "g".to_string(), "h".to_string()]);
+                    }
+                    other => panic!("expected ParinamaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // x pariṇāma [f] parses to ParinamaNode with a single dhatu
+    #[test]
+    fn test_parse_parinama_single_dhatu() {
+        let tokens = vec![
+            nm("x"),
+            kw(TokenKind::Parinama),
+            kw(TokenKind::LBracket),
+            nm("f"),
+            kw(TokenKind::RBracket),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse parinama with single dhatu");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::ParinamaNode { mulyam, dhatus, .. } => {
+                        assert!(matches!(mulyam.as_ref(), ASTNode::Nama { base, .. } if base == "x"));
+                        assert_eq!(dhatus, &vec!["f".to_string()]);
+                    }
+                    other => panic!("expected ParinamaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // x pariṇāma [] parses to ParinamaNode with empty dhatus list (no panic)
+    #[test]
+    fn test_parse_parinama_empty_list() {
+        let tokens = vec![
+            nm("x"),
+            kw(TokenKind::Parinama),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::RBracket),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse parinama with empty list without panic");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::ParinamaNode { mulyam, dhatus, .. } => {
+                        assert!(matches!(mulyam.as_ref(), ASTNode::Nama { base, .. } if base == "x"));
+                        assert!(dhatus.is_empty(), "empty dhatu list should parse to empty vec");
+                    }
+                    other => panic!("expected ParinamaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // ParinamaNode is usable as the initializer of a dhara binding
+    #[test]
+    fn test_parse_parinama_as_dhara_initializer() {
+        let tokens = vec![
+            kw(TokenKind::Dharā),
+            nm("result"),
+            kw(TokenKind::Equals),
+            nm("x"),
+            kw(TokenKind::Parinama),
+            kw(TokenKind::LBracket),
+            nm("f"),
+            kw(TokenKind::Unknown(',')),
+            nm("g"),
+            kw(TokenKind::RBracket),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse parinama as dhara initializer");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DharaNode { mulya, .. } => match mulya.as_ref() {
+                        ASTNode::ParinamaNode { dhatus, .. } => {
+                            assert_eq!(dhatus, &vec!["f".to_string(), "g".to_string()]);
+                        }
+                        other => panic!("expected ParinamaNode in mulya, got {:?}", other),
+                    },
+                    other => panic!("expected DharaNode, got {:?}", other),
                 }
             }
             other => panic!("expected KaryakramNode, got {:?}", other),

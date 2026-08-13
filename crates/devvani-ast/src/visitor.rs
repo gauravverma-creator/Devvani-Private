@@ -39,6 +39,7 @@ pub trait ASTVisitor {
     fn visit_duta_bhej(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_duta_grahan(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_manas(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_parinama(&mut self, node: &ASTNode) -> VisitResult;
 
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
@@ -84,9 +85,10 @@ ASTNode::PanktiNode { .. } => self.visit_pankti(node),
              ASTNode::PraptiNode { .. } => self.visit_prapti(node),
              ASTNode::DutaBanaaNode { .. } => self.visit_duta_banaa(node),
              ASTNode::DutaBhejNode { .. } => self.visit_duta_bhej(node),
-             ASTNode::DutaGrahanNode { .. } => self.visit_duta_grahan(node),
-             ASTNode::ManasNode { .. } => self.visit_manas(node),
-             _ => Ok(()),
+              ASTNode::DutaGrahanNode { .. } => self.visit_duta_grahan(node),
+              ASTNode::ManasNode { .. } => self.visit_manas(node),
+              ASTNode::ParinamaNode { .. } => self.visit_parinama(node),
+              _ => Ok(()),
         }
     }
 }
@@ -446,6 +448,14 @@ fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
                 self.visit(stmt)?;
             }
             self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_parinama(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::ParinamaNode { dhatus, .. } = node {
+            self.print_indent();
+            println!("Parinama [{}]", dhatus.join(", "));
         }
         Ok(())
     }

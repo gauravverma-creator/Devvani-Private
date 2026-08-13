@@ -116,6 +116,19 @@ pub enum TypeCheckError {
     DharaVinyasaAsangati {
         found: DevvaniType,
     },
+    /// D080 — परिणामासंगति (ParinamaAsangati): type or arity mismatch in a Pariṇāma chain stage
+    ParinamaAsangati {
+        stage: usize,
+        expected: DevvaniType,
+        found: DevvaniType,
+    },
+    /// D081 — परिणामशून्यता (ParinamaShunya): empty dhatu chain `pariṇāma []` used where concrete type required
+    ParinamaShunya,
+    /// D082 — परिणामदोषवैषम्य (ParinamaDoshaVaisamya): incompatible error types from multiple fallible dhatus
+    ParinamaDoshaVaisamya {
+        error_a: DevvaniType,
+        error_b: DevvaniType,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -303,16 +316,33 @@ impl fmt::Display for TypeCheckError {
                     found
                 )
             }
-            TypeCheckError::DharaVinyasaAsangati { found } => {
-                write!(
-                    f,
-                    "Dhara-vinyasa-asangata: multi-name binding requires a Duta (sender, receiver) pair type; found {:?}",
-                    found
-                )
-            }
-        }
-    }
-}
+             TypeCheckError::DharaVinyasaAsangati { found } => {
+                 write!(
+                     f,
+                     "Dhara-vinyasa-asangata: multi-name binding requires a Duta (sender, receiver) pair type; found {:?}",
+                     found
+                 )
+             }
+             TypeCheckError::ParinamaAsangati { stage, expected, found } => {
+                 write!(
+                     f,
+                     "Parinama-asangata: stage {} type mismatch; expected {:?}, found {:?}",
+                     stage, expected, found
+                 )
+             }
+             TypeCheckError::ParinamaShunya => {
+                 write!(f, "Parinama-shunya: empty dhatu chain")
+             }
+             TypeCheckError::ParinamaDoshaVaisamya { error_a, error_b } => {
+                 write!(
+                     f,
+                     "Parinama-dosha-vaisamya: incompatible error types {:?} vs {:?}",
+                     error_a, error_b
+                 )
+             }
+         }
+     }
+ }
 
 /// Recursively walk a node's children, invoking `f` on each direct child.
 fn each_child(node: &ASTNode, f: &mut dyn FnMut(&ASTNode)) {
@@ -606,6 +636,19 @@ pub struct TypeChecker {
             ty,
             DevvaniType::Subject(s) if s == "Purnaank" || s == "Dashaamsha" || s == "Bool"
         )
+    }
+
+    fn types_compatible(t1: &DevvaniType, t2: &DevvaniType) -> bool {
+        if t1 == t2 {
+            return true;
+        }
+        if matches!(t1, DevvaniType::Parameter(_)) || matches!(t2, DevvaniType::Parameter(_)) {
+            return true;
+        }
+        if matches!(t1, DevvaniType::Samanya(_)) || matches!(t2, DevvaniType::Samanya(_)) {
+            return true;
+        }
+        false
     }
 
     /// Recursively collect all generic param names (Samanya) from a DevvaniType.
@@ -984,6 +1027,43 @@ pub struct TypeChecker {
                 DevvaniType::Unknown
             }
 
+            ASTNode::ParinamaNode { mulyam, dhatus, .. } => {
+                if dhatus.is_empty() {
+                    self.errors.push(TypeCheckError::ParinamaShunya);
+                    return DevvaniType::Unknown;
+                }
+                let mut current_type = self.check(mulyam);
+                for (stage_idx, dhatu_name) in dhatus.iter().enumerate() {
+                    if let Some(params) = self.function_params.get(dhatu_name) {
+                        if let Some(param) = params.first() {
+                            let expected_input = self.resolve_type_name(&param.type_name)
+                                .unwrap_or_else(|| DevvaniType::Parameter(param.name.clone()));
+                            if current_type != DevvaniType::Unknown
+                                && expected_input != DevvaniType::Unknown
+                                && !Self::types_compatible(&current_type, &expected_input)
+                            {
+                                self.errors.push(TypeCheckError::ParinamaAsangati {
+                                    stage: stage_idx,
+                                    expected: expected_input.clone(),
+                                    found: current_type.clone(),
+                                });
+                            }
+                            current_type = self.function_return_types
+                                .get(dhatu_name)
+                                .cloned()
+                                .unwrap_or_else(|| expected_input);
+                        }
+                    } else {
+                        self.errors.push(TypeCheckError::ParinamaAsangati {
+                            stage: stage_idx,
+                            expected: DevvaniType::Unknown,
+                            found: current_type.clone(),
+                        });
+                    }
+                }
+                current_type
+            }
+
             ASTNode::DhatuDef {
                 name,
                 generic_params,
@@ -1028,7 +1108,8 @@ pub struct TypeChecker {
                     let ty = if self.current_generic_params.contains(&param.type_name) {
                         DevvaniType::Samanya(param.type_name.clone())
                     } else {
-                        DevvaniType::Parameter(param.name.clone())
+                        self.resolve_type_name(&param.type_name)
+                            .unwrap_or_else(|| DevvaniType::Parameter(param.name.clone()))
                     };
                     let param_symbol =
                         Symbol::new(&param.name, ty, &Vacana::Eka, &Linga::Pullinga, "i64");

@@ -156,9 +156,12 @@ pub enum TokenKind {
          // --- SYNCHRONIZATION ---
          Manas,    // mutex-guarded block (मनस्)
 
-         // --- VARIABLE DECLARATION (Anumana / Type Inference) ---
-         Dharā,   // धरा — variable declaration keyword (typed or inferred)
-         Equals,  // = — assignment operator
+          // --- PIPELINE (PARIṆĀMA) ---
+          Parinama, // pariṇāma — pipeline/postfix-transform operator
+
+          // --- VARIABLE DECLARATION (Anumana / Type Inference) ---
+          Dharā,   // धरा — variable declaration keyword (typed or inferred)
+          Equals,  // = — assignment operator
 
        // --- SANDHI SPECIAL TOKENS ---
       Visarga,  // ḥ character standalone

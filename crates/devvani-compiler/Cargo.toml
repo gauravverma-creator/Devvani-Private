@@ -12,3 +12,6 @@ devvani-typesystem = { path = "../devvani-typesystem" }
 devvani-stdlib = { path = "../devvani-stdlib" }
 devvani-module = { path = "../devvani-module" }
 devvani-reversible = { path = "../devvani-reversible" }
+
+[dev-dependencies]
+tempfile = "3"

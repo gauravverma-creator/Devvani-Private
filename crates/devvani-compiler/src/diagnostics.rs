@@ -626,6 +626,59 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                      expression hi upyog karo.".to_string()
                 ),
             },
+            TypeCheckError::ParinamaAsangati { stage, expected, found } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D080".to_string(),
+                sanskrit_title: "परिणामासंगति".to_string(),
+                roman_title: "Parinama Asangati".to_string(),
+                message: format!(
+                    "Pariṇāma chain stage {} mein prakara asangata hai: \
+                     expected {:?}, found {:?}. Sāṃkhya pariṇāma-vāda: \
+                     each transformation must accept the prior stage's output type.",
+                    stage, expected, found
+                ),
+                sutra_ref: Some(
+                    "Sāṃkhya (pariṇāma-vāda — sequential transformation doctrine)".to_string()
+                ),
+                hint: Some(
+                    "Pariṇāma chain ke har stage ka input type pehle ke stage ke \
+                     output type se mel khawe.".to_string()
+                ),
+            },
+            TypeCheckError::ParinamaShunya => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D081".to_string(),
+                sanskrit_title: "परिणामशून्यता".to_string(),
+                roman_title: "Parinama Shunyata".to_string(),
+                message: "`pariṇāma []` — shunya dhatu-chain ka upayog \
+                          kar rahe ho jahan concrete type apekshit hai. \
+                          Pariṇāma-vāda: shunya transformations se koi phalam nahi.".to_string(),
+                sutra_ref: Some(
+                    "Sāṃkhya (pariṇāma-vāda — non-empty transformation sequence)".to_string()
+                ),
+                hint: Some(
+                    "Pariṇāma mein kam se kam ek dhatu likho: `x pariṇāma [f]`.".to_string()
+                ),
+            },
+            TypeCheckError::ParinamaDoshaVaisamya { error_a, error_b } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D082".to_string(),
+                sanskrit_title: "परिणामदोषवैषम्य".to_string(),
+                roman_title: "Parinama Dosha Vaisamya".to_string(),
+                message: format!(
+                    "Pariṇāma chain mein do ya adhik fallible dhatus ke \
+                     error types asangat hain: {:?} vs {:?}. \
+                     Devvani koi automatic coercion nahi karta.",
+                    error_a, error_b
+                ),
+                sutra_ref: Some(
+                    "Sāṃkhya (pariṇāma-vāda — uniform error-type propagation)".to_string()
+                ),
+                hint: Some(
+                    "Chain ke sab fallible dhatus ko ek saman error type \
+                     ke saath define karo ya Phalam types align karo.".to_string()
+                ),
+            },
         }
     }
 
@@ -1184,5 +1237,45 @@ mod tests {
         assert!(diag.sanskrit_title.contains("धाराविन्यासासंगति"));
         assert!(diag.message.contains("Duta"));
         assert!(diag.sutra_ref.unwrap().contains("Nyaya Sutra"));
+    }
+
+    #[test]
+    fn test_from_type_error_parinama_asangati_d080() {
+        let err = TypeCheckError::ParinamaAsangati {
+            stage: 1,
+            expected: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+            found: devvani_typesystem::DevvaniType::Subject("Dashaamsha".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D080");
+        assert!(diag.display().contains("Parinama Asangati"));
+        assert!(diag.sanskrit_title.contains("परिणामासंगति"));
+        assert!(diag.message.contains("stage 1"));
+        assert!(diag.sutra_ref.unwrap().contains("pariṇāma-vāda"));
+    }
+
+    #[test]
+    fn test_from_type_error_parinama_shunya_d081() {
+        let err = TypeCheckError::ParinamaShunya;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D081");
+        assert!(diag.display().contains("Parinama Shunyata"));
+        assert!(diag.sanskrit_title.contains("परिणामशून्यता"));
+        assert!(diag.message.contains("pariṇāma []"));
+        assert!(diag.sutra_ref.unwrap().contains("pariṇāma-vāda"));
+    }
+
+    #[test]
+    fn test_from_type_error_parinama_dosha_vaisamya_d082() {
+        let err = TypeCheckError::ParinamaDoshaVaisamya {
+            error_a: devvani_typesystem::DevvaniType::Vaak,
+            error_b: devvani_typesystem::DevvaniType::Subject("Dashaamsha".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D082");
+        assert!(diag.display().contains("Parinama Dosha Vaisamya"));
+        assert!(diag.sanskrit_title.contains("परिणामदोषवैषम्य"));
+        assert!(diag.message.contains("error types asangat hain"));
+        assert!(diag.sutra_ref.unwrap().contains("pariṇāma-vāda"));
     }
 }

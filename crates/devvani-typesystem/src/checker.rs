@@ -1033,25 +1033,54 @@ pub struct TypeChecker {
                     return DevvaniType::Unknown;
                 }
                 let mut current_type = self.check(mulyam);
+                let mut fallible_error: Option<DevvaniType> = None;
                 for (stage_idx, dhatu_name) in dhatus.iter().enumerate() {
                     if let Some(params) = self.function_params.get(dhatu_name) {
-                        if let Some(param) = params.first() {
-                            let expected_input = self.resolve_type_name(&param.type_name)
-                                .unwrap_or_else(|| DevvaniType::Parameter(param.name.clone()));
-                            if current_type != DevvaniType::Unknown
-                                && expected_input != DevvaniType::Unknown
-                                && !Self::types_compatible(&current_type, &expected_input)
-                            {
-                                self.errors.push(TypeCheckError::ParinamaAsangati {
-                                    stage: stage_idx,
-                                    expected: expected_input.clone(),
-                                    found: current_type.clone(),
-                                });
+                        if params.len() != 1 {
+                            self.errors.push(TypeCheckError::ParinamaAsangati {
+                                stage: stage_idx,
+                                expected: DevvaniType::Unknown,
+                                found: current_type.clone(),
+                            });
+                            current_type = DevvaniType::Unknown;
+                            continue;
+                        }
+                        let param = &params[0];
+                        let expected_input = self.resolve_type_name(&param.type_name)
+                            .unwrap_or_else(|| DevvaniType::Parameter(param.name.clone()));
+                        if current_type != DevvaniType::Unknown
+                            && expected_input != DevvaniType::Unknown
+                            && !Self::types_compatible(&current_type, &expected_input)
+                        {
+                            self.errors.push(TypeCheckError::ParinamaAsangati {
+                                stage: stage_idx,
+                                expected: expected_input.clone(),
+                                found: current_type.clone(),
+                            });
+                        }
+                        if let Some(declared_return) = self.function_return_types.get(dhatu_name) {
+                            match declared_return {
+                                DevvaniType::Phalam(success, error) => {
+                                    if let Some(prev_error) = fallible_error {
+                                        if prev_error != *error.as_ref() {
+                                            self.errors.push(
+                                                TypeCheckError::ParinamaDoshaVaisamya {
+                                                    error_a: prev_error,
+                                                    error_b: error.as_ref().clone(),
+                                                },
+                                            );
+                                            return DevvaniType::Unknown;
+                                        }
+                                    }
+                                    fallible_error = Some(error.as_ref().clone());
+                                    current_type = success.as_ref().clone();
+                                }
+                                _ => {
+                                    current_type = declared_return.clone();
+                                }
                             }
-                            current_type = self.function_return_types
-                                .get(dhatu_name)
-                                .cloned()
-                                .unwrap_or_else(|| expected_input);
+                        } else {
+                            current_type = expected_input;
                         }
                     } else {
                         self.errors.push(TypeCheckError::ParinamaAsangati {
@@ -1061,7 +1090,11 @@ pub struct TypeChecker {
                         });
                     }
                 }
-                current_type
+                if let Some(error_ty) = fallible_error {
+                    DevvaniType::Phalam(Box::new(current_type), Box::new(error_ty))
+                } else {
+                    current_type
+                }
             }
 
             ASTNode::DhatuDef {
@@ -4803,6 +4836,264 @@ type_name: "sankhya".to_string(),
         } else {
             panic!("grahaka not found in symbol table");
         }
+    }
+
+    fn parinama_dhatu(
+        name: &str,
+        params: Vec<(&str, &str)>,
+        return_type: Option<ASTNode>,
+    ) -> ASTNode {
+        ASTNode::DhatuDef {
+            name: name.to_string(),
+            generic_params: vec![],
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params: params
+                .into_iter()
+                .map(|(n, t)| KarakaParam {
+                    name: n.to_string(),
+                    role: devvani_ast::KarakaRole::Karma,
+                    vibhakti: devvani_ast::Vibhakti::Dvitiya,
+                    is_borrowed: false,
+                    is_mutable_borrow: false,
+                    type_name: t.to_string(),
+                    span: span(),
+                })
+                .collect(),
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: return_type.map(Box::new),
+            body: vec![],
+            span: span(),
+        }
+    }
+
+    // Pariṇāma (Pipeline) type system tests
+
+    #[test]
+    fn test_parinama_three_dhatu_happy_path() {
+        let mut checker = TypeChecker::new();
+        let _ = checker.check(&parinama_dhatu(
+            "d1",
+            vec![("x", "purnaank")],
+            Some(ASTNode::PurnaankLiteral { value: 0, span: span() }),
+        ));
+        let _ = checker.check(&parinama_dhatu(
+            "d2",
+            vec![("x", "purnaank")],
+            Some(ASTNode::DashaamshaLiteral { value: 0.0, span: span() }),
+        ));
+        let _ = checker.check(&parinama_dhatu(
+            "d3",
+            vec![("x", "dashaamsha")],
+            Some(ASTNode::VaakLiteral {
+                value: "".to_string(),
+                span: span(),
+            }),
+        ));
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec!["d1".to_string(), "d2".to_string(), "d3".to_string()],
+            span: span(),
+        };
+        let ty = checker.check(&parinama);
+        assert_eq!(ty, DevvaniType::Subject("Vaak".to_string()));
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    #[test]
+    fn test_parinama_single_dhatu_happy_path() {
+        let mut checker = TypeChecker::new();
+        let _ = checker.check(&parinama_dhatu(
+            "to_int",
+            vec![("x", "purnaank")],
+            Some(ASTNode::PurnaankLiteral { value: 0, span: span() }),
+        ));
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec!["to_int".to_string()],
+            span: span(),
+        };
+        let ty = checker.check(&parinama);
+        assert_eq!(ty, DevvaniType::Subject("Purnaank".to_string()));
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    #[test]
+    fn test_parinama_type_mismatch_between_stages_d080() {
+        let mut checker = TypeChecker::new();
+        let _ = checker.check(&parinama_dhatu(
+            "d1",
+            vec![("x", "purnaank")],
+            Some(ASTNode::PurnaankLiteral { value: 0, span: span() }),
+        ));
+        let _ = checker.check(&parinama_dhatu(
+            "d2",
+            vec![("x", "dashaamsha")],
+            Some(ASTNode::DashaamshaLiteral { value: 0.0, span: span() }),
+        ));
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec!["d1".to_string(), "d2".to_string()],
+            span: span(),
+        };
+        let _ty = checker.check(&parinama);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ParinamaAsangati { stage: 1, .. })),
+            "expected ParinamaAsangati at stage 1, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_parinama_mulyam_type_mismatch_d080() {
+        let mut checker = TypeChecker::new();
+        let _ = checker.check(&parinama_dhatu(
+            "to_int",
+            vec![("x", "dashaamsha")],
+            Some(ASTNode::DashaamshaLiteral { value: 0.0, span: span() }),
+        ));
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec!["to_int".to_string()],
+            span: span(),
+        };
+        let _ty = checker.check(&parinama);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ParinamaAsangati { stage: 0, .. })),
+            "expected ParinamaAsangati at stage 0, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_parinama_arity_error_d080() {
+        let mut checker = TypeChecker::new();
+        let _ = checker.check(&parinama_dhatu(
+            "zero_arg",
+            vec![],
+            Some(ASTNode::PurnaankLiteral { value: 0, span: span() }),
+        ));
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec!["zero_arg".to_string()],
+            span: span(),
+        };
+        let _ty = checker.check(&parinama);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ParinamaAsangati { .. })),
+            "expected ParinamaAsangati arity error, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_parinama_empty_chain_d081() {
+        let mut checker = TypeChecker::new();
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec![],
+            span: span(),
+        };
+        let ty = checker.check(&parinama);
+        assert_eq!(ty, DevvaniType::Unknown);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ParinamaShunya)),
+            "expected ParinamaShunya, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_parinama_fallible_propagation_mid_chain() {
+        let mut checker = TypeChecker::new();
+        let _ = checker.check(&parinama_dhatu(
+            "fallible",
+            vec![("x", "purnaank")],
+            Some(ASTNode::PhalamType {
+                success_type: "sankhya".to_string(),
+                error_type: "vaak".to_string(),
+                span: span(),
+            }),
+        ));
+        let _ = checker.check(&parinama_dhatu(
+            "to_float",
+            vec![("x", "purnaank")],
+            Some(ASTNode::DashaamshaLiteral { value: 0.0, span: span() }),
+        ));
+        let _ = checker.check(&parinama_dhatu(
+            "to_vaak",
+            vec![("x", "dashaamsha")],
+            Some(ASTNode::VaakLiteral {
+                value: "".to_string(),
+                span: span(),
+            }),
+        ));
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec!["fallible".to_string(), "to_float".to_string(), "to_vaak".to_string()],
+            span: span(),
+        };
+        let ty = checker.check(&parinama);
+        assert_eq!(
+            ty,
+            DevvaniType::Phalam(
+                Box::new(DevvaniType::Subject("Vaak".to_string())),
+                Box::new(DevvaniType::Vaak)
+            )
+        );
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+    }
+
+    #[test]
+    fn test_parinama_fallible_conflict_d082() {
+        let mut checker = TypeChecker::new();
+        let _ = checker.check(&parinama_dhatu(
+            "fallible_a",
+            vec![("x", "purnaank")],
+            Some(ASTNode::PhalamType {
+                success_type: "sankhya".to_string(),
+                error_type: "vaak".to_string(),
+                span: span(),
+            }),
+        ));
+        let _ = checker.check(&parinama_dhatu(
+            "fallible_b",
+            vec![("x", "purnaank")],
+            Some(ASTNode::PhalamType {
+                success_type: "dashaamsha".to_string(),
+                error_type: "dashaamsha".to_string(),
+                span: span(),
+            }),
+        ));
+        let parinama = ASTNode::ParinamaNode {
+            mulyam: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            dhatus: vec!["fallible_a".to_string(), "fallible_b".to_string()],
+            span: span(),
+        };
+        let _ty = checker.check(&parinama);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ParinamaDoshaVaisamya { .. })),
+            "expected ParinamaDoshaVaisamya, got: {:?}",
+            checker.errors
+        );
     }
 
     #[test]

@@ -661,27 +661,101 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                     "Pariṇāma mein kam se kam ek dhatu likho: `x pariṇāma [f]`.".to_string()
                 ),
             },
-            TypeCheckError::ParinamaDoshaVaisamya { error_a, error_b } => Diagnostic {
-                severity: Severity::Dosha,
-                code: "D082".to_string(),
-                sanskrit_title: "परिणामदोषवैषम्य".to_string(),
-                roman_title: "Parinama Dosha Vaisamya".to_string(),
-                message: format!(
-                    "Pariṇāma chain mein do ya adhik fallible dhatus ke \
-                     error types asangat hain: {:?} vs {:?}. \
-                     Devvani koi automatic coercion nahi karta.",
-                    error_a, error_b
-                ),
-                sutra_ref: Some(
-                    "Sāṃkhya (pariṇāma-vāda — uniform error-type propagation)".to_string()
-                ),
-                hint: Some(
-                    "Chain ke sab fallible dhatus ko ek saman error type \
-                     ke saath define karo ya Phalam types align karo.".to_string()
-                ),
-            },
-        }
-    }
+             TypeCheckError::ParinamaDoshaVaisamya { error_a, error_b } => Diagnostic {
+                 severity: Severity::Dosha,
+                 code: "D082".to_string(),
+                 sanskrit_title: "परिणामदोषवैषम्य".to_string(),
+                 roman_title: "Parinama Dosha Vaisamya".to_string(),
+                 message: format!(
+                     "Pariṇāma chain mein do ya adhik fallible dhatus ke \
+                      error types asangat hain: {:?} vs {:?}. \
+                      Devvani koi automatic coercion nahi karta.",
+                     error_a, error_b
+                 ),
+                 sutra_ref: Some(
+                     "Sāṃkhya (pariṇāma-vāda — uniform error-type propagation)".to_string()
+                 ),
+                 hint: Some(
+                     "Chain ke sab fallible dhatus ko ek saman error type \
+                      ke saath define karo ya Phalam types align karo.".to_string()
+                 ),
+             },
+             TypeCheckError::NigamanaNotBool { found } => Diagnostic {
+                 severity: Severity::Dosha,
+                 code: "D086".to_string(),
+                 sanskrit_title: "निगमनाभिन्नप्रकार".to_string(),
+                 roman_title: "Nigamana Abhinna Prakaar".to_string(),
+                 message: format!(
+                     "Nigamana (assert-true) ka argument Satyasatya (Bool) \
+                      hona chahiye, par {:?} praapt hua. Nyāya vyākhyāna: \
+                      nigamana ka siddhānta kevala satya ya asatya ho sakta hai.",
+                     found
+                 ),
+                 sutra_ref: Some(
+                     "Nyāya Sūtra (Nigamana — five-membered syllogism conclusion)".to_string()
+                 ),
+                 hint: Some(
+                     "Nigamana ka argument Bool expression do.".to_string()
+                 ),
+             },
+             TypeCheckError::SadrishyaNigamanaMismatchedTypes { left, right } => Diagnostic {
+                 severity: Severity::Dosha,
+                 code: "D087".to_string(),
+                 sanskrit_title: "सादृश्यनिगमनवैषम्य".to_string(),
+                 roman_title: "Sadrishya Nigamana Vaisamya".to_string(),
+                 message: format!(
+                     "Sadrishya-nigamana (assert-equal) ke donon arguments \
+                      ki prakara saman honi chahiye. Left: {:?}, right: {:?}. \
+                      Nyāya vyākhyāna: sadrishya (similarity) ke liye donon \
+                      vastuen saman prakaar ki honi chahiye.",
+                     left, right
+                 ),
+                 sutra_ref: Some(
+                     "Nyāya Sūtra (Sadrishya — similarity doctrine)".to_string()
+                 ),
+                 hint: Some(
+                     "Dono arguments ko ek saman type ke banayo.".to_string()
+                 ),
+             },
+             TypeCheckError::SadrishyaNigamanaNotEqualityComparable { ty } => Diagnostic {
+                 severity: Severity::Dosha,
+                 code: "D088".to_string(),
+                 sanskrit_title: "सादृश्यनिगमनासमर्थ".to_string(),
+                 roman_title: "Sadrishya Nigamana Asamartha".to_string(),
+                 message: format!(
+                     "Sadrishya-nigamana (assert-equal) ke argument ka \
+                      type {:?} tulya (equality) comparison ke liye samartha \
+                      nahi hai. Nyāya vyākhyāna: samanya jati mein tulya \
+                      hetu upayog nahi hota.",
+                     ty
+                 ),
+                 sutra_ref: Some(
+                     "Nyāya Sūtra (Tulya — equality comparison doctrine)".to_string()
+                 ),
+                 hint: Some(
+                     "Eq/PartialEq implement karne wale type ka upayog karo.".to_string()
+                 ),
+             },
+             TypeCheckError::ParikshaaBodyNotUnit => Diagnostic {
+                 severity: Severity::Dosha,
+                 code: "D089".to_string(),
+                 sanskrit_title: "परीक्षाशरीरवैषम्य".to_string(),
+                 roman_title: "Parikshaa Sharira Vaisamya".to_string(),
+                 message: "Parikshaa (test) ka shareera (body) shunya-prakaar \
+                           (unit/void) return karna chahiye, par koi mulya \
+                           (value) produce kar raha hai. Nyāya vyākhyāna: \
+                           parikshaa ka phalam kevala siddha (established) ya \
+                           asiddha (unestablished) hota hai, na ki koi dravya.".to_string(),
+                 sutra_ref: Some(
+                     "Nyāya Sūtra (Parikshaa — examination doctrine)".to_string()
+                 ),
+                 hint: Some(
+                     "Parikshaa body ke ant mein vadati ya return-type expression \
+                      na likho; assertions nigamana/sadrishya-nigamana se karo.".to_string()
+                 ),
+             },
+         }
+     }
 
     pub fn from_parse_error(err: &ParseError) -> Diagnostic {
         match err {
@@ -1397,6 +1471,60 @@ mod tests {
         assert!(diag.display().contains("Parikshaa Vighatan"));
         assert!(diag.sanskrit_title.contains("परीक्षाविघटन"));
         assert!(diag.message.contains("missing name"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
+    }
+
+    // --- PARIṬṢĀ (TESTING) TYPE DIAGNOSTICS ---
+
+    #[test]
+    fn test_from_type_error_nigamana_not_bool_d086() {
+        let err = TypeCheckError::NigamanaNotBool {
+            found: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D086");
+        assert!(diag.display().contains("Nigamana Abhinna Prakaar"));
+        assert!(diag.sanskrit_title.contains("निगमनाभिन्नप्रकार"));
+        assert!(diag.message.contains("Bool"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
+    }
+
+    #[test]
+    fn test_from_type_error_sadrishya_nigamana_mismatched_types_d087() {
+        let err = TypeCheckError::SadrishyaNigamanaMismatchedTypes {
+            left: devvani_typesystem::DevvaniType::Subject("Purnaank".to_string()),
+            right: devvani_typesystem::DevvaniType::Vaak,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D087");
+        assert!(diag.display().contains("Sadrishya Nigamana Vaisamya"));
+        assert!(diag.sanskrit_title.contains("सादृश्यनिगमनवैषम्य"));
+        assert!(diag.message.contains("Purnaank"));
+        assert!(diag.message.contains("Vaak"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
+    }
+
+    #[test]
+    fn test_from_type_error_sadrishya_nigamana_not_equality_comparable_d088() {
+        let err = TypeCheckError::SadrishyaNigamanaNotEqualityComparable {
+            ty: devvani_typesystem::DevvaniType::Unknown,
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D088");
+        assert!(diag.display().contains("Sadrishya Nigamana Asamartha"));
+        assert!(diag.sanskrit_title.contains("सादृश्यनिगमनासमर्थ"));
+        assert!(diag.message.contains("Unknown"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
+    }
+
+    #[test]
+    fn test_from_type_error_parikshaa_body_not_unit_d089() {
+        let err = TypeCheckError::ParikshaaBodyNotUnit;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D089");
+        assert!(diag.display().contains("Parikshaa Sharira Vaisamya"));
+        assert!(diag.sanskrit_title.contains("परीक्षाशरीरवैषम्य"));
+        assert!(diag.message.contains("unit"));
         assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
     }
 }

@@ -129,6 +129,21 @@ pub enum TypeCheckError {
         error_a: DevvaniType,
         error_b: DevvaniType,
     },
+    /// D086 — निगमनाभिन्नप्रकार (NigamanaAbhinnaPrakaar): nigamana's expression does not type-check to Boolean
+    NigamanaNotBool {
+        found: DevvaniType,
+    },
+    /// D087 — सादृश्यनिगमनवैषम्य (SadrishyaNigamanaVaisamya): sadrishya-nigamana / asadrishya-nigamana operands have mismatched types
+    SadrishyaNigamanaMismatchedTypes {
+        left: DevvaniType,
+        right: DevvaniType,
+    },
+    /// D088 — सादृश्यनिगमनासमartha (SadrishyaNigamanaAsamartha): operand type does not support equality comparison
+    SadrishyaNigamanaNotEqualityComparable {
+        ty: DevvaniType,
+    },
+    /// D089 — परीक्षाशरीरावैषम्य (ParikshaaShariraVaisamya): parikshaa body does not type-check to unit/void
+    ParikshaaBodyNotUnit,
 }
 
 impl fmt::Display for TypeCheckError {
@@ -334,15 +349,27 @@ impl fmt::Display for TypeCheckError {
                  write!(f, "Parinama-shunya: empty dhatu chain")
              }
              TypeCheckError::ParinamaDoshaVaisamya { error_a, error_b } => {
-                 write!(
-                     f,
-                     "Parinama-dosha-vaisamya: incompatible error types {:?} vs {:?}",
-                     error_a, error_b
-                 )
-             }
-         }
-     }
- }
+                  write!(
+                      f,
+                      "Parinama-dosha-vaisamya: incompatible error types {:?} vs {:?}",
+                      error_a, error_b
+                  )
+              }
+              TypeCheckError::NigamanaNotBool { found } => {
+                  write!(f, "Nigamana-not-bool: expression must be Bool, found {:?}", found)
+              }
+              TypeCheckError::SadrishyaNigamanaMismatchedTypes { left, right } => {
+                  write!(f, "Sadrishya-nigamana-mismatched-types: left {:?} != right {:?}", left, right)
+              }
+              TypeCheckError::SadrishyaNigamanaNotEqualityComparable { ty } => {
+                  write!(f, "Sadrishya-nigamana-not-equality-comparable: type {:?} does not support equality comparison", ty)
+              }
+              TypeCheckError::ParikshaaBodyNotUnit => {
+                  write!(f, "Parikshaa-body-not-unit: parikshaa body must return unit/void")
+              }
+          }
+      }
+  }
 
 /// Recursively walk a node's children, invoking `f` on each direct child.
 fn each_child(node: &ASTNode, f: &mut dyn FnMut(&ASTNode)) {
@@ -454,11 +481,23 @@ ASTNode::VinyasaNode { target, index, .. } => {
                f(message);
            }
            ASTNode::DutaGrahanNode { receiver, .. } => f(receiver),
-           ASTNode::ManasNode { target, body, .. } => {
-               f(target);
-               body.iter().for_each(|n| f(n));
-           }
-            _ => {}
+            ASTNode::ManasNode { target, body, .. } => {
+                f(target);
+                body.iter().for_each(|n| f(n));
+            }
+            ASTNode::ParikshaaNode { body, .. } => {
+                body.iter().for_each(|n| f(n));
+            }
+            ASTNode::NigamanaNode { expr, .. } => f(expr),
+            ASTNode::SadrishyaNigamanaNode { left, right, .. } => {
+                f(left);
+                f(right);
+            }
+            ASTNode::AsadrishyaNigamanaNode { left, right, .. } => {
+                f(left);
+                f(right);
+            }
+             _ => {}
     }
 }
 
@@ -1933,10 +1972,52 @@ ASTNode::SamprapatiNode { expr, .. } => {
                          });
                          DevvaniType::Unknown
                      }
-                 }
-             }
+                  }
+              }
 
-              _ => DevvaniType::Unknown,
+              ASTNode::ParikshaaNode { name: _, body, is_tarka: _, span: _ } => {
+                  self.push_ownership_state();
+                  let mut last_type = DevvaniType::Unknown;
+                  for stmt in body {
+                      last_type = self.check(stmt);
+                  }
+                  self.pop_ownership_state();
+                  if !matches!(last_type, DevvaniType::Unknown) {
+                      self.errors.push(TypeCheckError::ParikshaaBodyNotUnit);
+                  }
+                  DevvaniType::Unknown
+              }
+
+              ASTNode::NigamanaNode { expr, .. } => {
+                  let expr_type = self.check(expr);
+                  if !matches!(expr_type, DevvaniType::Subject(ref s) if s == "Bool") {
+                      self.errors.push(TypeCheckError::NigamanaNotBool {
+                          found: expr_type,
+                      });
+                  }
+                  DevvaniType::Subject("Bool".to_string())
+              }
+
+              ASTNode::SadrishyaNigamanaNode { left, right, .. }
+              | ASTNode::AsadrishyaNigamanaNode { left, right, .. } => {
+                  let left_type = self.check(left);
+                  let right_type = self.check(right);
+
+                  if matches!(left_type, DevvaniType::Unknown) || matches!(right_type, DevvaniType::Unknown) {
+                      self.errors.push(TypeCheckError::SadrishyaNigamanaNotEqualityComparable {
+                          ty: if matches!(left_type, DevvaniType::Unknown) { left_type } else { right_type },
+                      });
+                  } else if !Self::types_compatible(&left_type, &right_type) {
+                      self.errors.push(TypeCheckError::SadrishyaNigamanaMismatchedTypes {
+                          left: left_type,
+                          right: right_type,
+                      });
+                  }
+
+                  DevvaniType::Subject("Bool".to_string())
+              }
+
+               _ => DevvaniType::Unknown,
           };
           self.node_type_map.insert(node as *const ASTNode, ty.clone());
           ty
@@ -5113,6 +5194,282 @@ type_name: "sankhya".to_string(),
                 .iter()
                 .any(|e| matches!(e, TypeCheckError::DharaVinyasaAsangati { .. })),
             "expected DharaVinyasaAsangati D079 for non-Duta multi-name binding, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // ===== Parīkṣā (Testing) TypeSystem Tests =====
+
+    #[test]
+    fn test_valid_parikshaa_block_unit_body_type_checks() {
+        let mut checker = TypeChecker::new();
+        let parikshaa = ASTNode::ParikshaaNode {
+            name: "foo".to_string(),
+            body: vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "hello".to_string(),
+                    span: span(),
+                }),
+            }],
+            is_tarka: false,
+            span: span(),
+        };
+        let errors = checker.check_program(&parikshaa);
+        assert!(
+            !errors.iter().any(|e| matches!(e, TypeCheckError::ParikshaaBodyNotUnit)),
+            "expected no ParikshaaBodyNotUnit for unit body, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn test_valid_tarka_parikshaa_block_type_checks_and_preserves_flag() {
+        let mut checker = TypeChecker::new();
+        let parikshaa = ASTNode::ParikshaaNode {
+            name: "tarka_test".to_string(),
+            body: vec![ASTNode::VadatiNode {
+                mulya: Box::new(ASTNode::VaakLiteral {
+                    value: "tarka".to_string(),
+                    span: span(),
+                }),
+            }],
+            is_tarka: true,
+            span: span(),
+        };
+        let ty = checker.check(&parikshaa);
+        assert_eq!(ty, DevvaniType::Unknown);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::ParikshaaBodyNotUnit)),
+            "expected no ParikshaaBodyNotUnit for tarka parikshaa, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_nigamana_bool_expr_passes() {
+        let mut checker = TypeChecker::new();
+        let nigamana = ASTNode::NigamanaNode {
+            expr: Box::new(ASTNode::SamaNode {
+                vama: Box::new(ASTNode::PurnaankLiteral { value: 1, span: span() }),
+                dakshina: Box::new(ASTNode::PurnaankLiteral { value: 1, span: span() }),
+            }),
+            span: span(),
+        };
+        let ty = checker.check(&nigamana);
+        assert_eq!(ty, DevvaniType::Subject("Bool".to_string()));
+        assert!(
+            checker.errors.is_empty(),
+            "expected no errors for nigamana with Bool expr, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_nigamana_non_bool_expr_triggers_d086() {
+        let mut checker = TypeChecker::new();
+        let nigamana = ASTNode::NigamanaNode {
+            expr: Box::new(ASTNode::PurnaankLiteral { value: 42, span: span() }),
+            span: span(),
+        };
+        let _ty = checker.check(&nigamana);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::NigamanaNotBool { .. })),
+            "expected NigamanaNotBool D086, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_sadrishya_nigamana_matching_types_passes() {
+        let mut checker = TypeChecker::new();
+        let assertion = ASTNode::SadrishyaNigamanaNode {
+            left: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            right: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            span: span(),
+        };
+        let ty = checker.check(&assertion);
+        assert_eq!(ty, DevvaniType::Subject("Bool".to_string()));
+        assert!(
+            checker.errors.is_empty(),
+            "expected no errors for matching types, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_sadrishya_nigamana_mismatched_types_triggers_d087() {
+        let mut checker = TypeChecker::new();
+        let assertion = ASTNode::SadrishyaNigamanaNode {
+            left: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            right: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&assertion);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SadrishyaNigamanaMismatchedTypes { .. })),
+            "expected SadrishyaNigamanaMismatchedTypes D087, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_sadrishya_nigamana_unknown_type_triggers_d088() {
+        let mut checker = TypeChecker::new();
+        // First declare and move a non-Copy variable so that subsequent use yields Unknown
+        checker.check(&ASTNode::AstiNode {
+            naama: "x".to_string(),
+            mulya: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }),
+        });
+        checker.check(&ASTNode::AstiNode {
+            naama: "y".to_string(),
+            mulya: Box::new(ASTNode::Nama {
+                base: "x".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+        });
+        let assertion = ASTNode::SadrishyaNigamanaNode {
+            left: Box::new(ASTNode::Nama {
+                base: "x".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            right: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            span: span(),
+        };
+        let _ty = checker.check(&assertion);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SadrishyaNigamanaNotEqualityComparable { .. })),
+            "expected SadrishyaNigamanaNotEqualityComparable D088, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_asadrishya_nigamana_matching_types_passes() {
+        let mut checker = TypeChecker::new();
+        let assertion = ASTNode::AsadrishyaNigamanaNode {
+            left: Box::new(ASTNode::VaakLiteral {
+                value: "a".to_string(),
+                span: span(),
+            }),
+            right: Box::new(ASTNode::VaakLiteral {
+                value: "b".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let ty = checker.check(&assertion);
+        assert_eq!(ty, DevvaniType::Subject("Bool".to_string()));
+        assert!(
+            checker.errors.is_empty(),
+            "expected no errors for matching types, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_asadrishya_nigamana_mismatched_types_triggers_d087() {
+        let mut checker = TypeChecker::new();
+        let assertion = ASTNode::AsadrishyaNigamanaNode {
+            left: Box::new(ASTNode::PurnaankLiteral { value: 1, span: span() }),
+            right: Box::new(ASTNode::VaakLiteral {
+                value: "x".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&assertion);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SadrishyaNigamanaMismatchedTypes { .. })),
+            "expected SadrishyaNigamanaMismatchedTypes D087 for asadrishya, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_asadrishya_nigamana_unknown_type_triggers_d088() {
+        let mut checker = TypeChecker::new();
+        checker.check(&ASTNode::AstiNode {
+            naama: "a".to_string(),
+            mulya: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }),
+        });
+        checker.check(&ASTNode::AstiNode {
+            naama: "b".to_string(),
+            mulya: Box::new(ASTNode::Nama {
+                base: "a".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+        });
+        let assertion = ASTNode::AsadrishyaNigamanaNode {
+            left: Box::new(ASTNode::Nama {
+                base: "a".to_string(),
+                vibhakti: devvani_ast::Vibhakti::Prathama,
+                linga: Linga::Pullinga,
+                vacana: Vacana::Eka,
+                span: span(),
+            }),
+            right: Box::new(ASTNode::VaakLiteral {
+                value: "y".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        };
+        let _ty = checker.check(&assertion);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::SadrishyaNigamanaNotEqualityComparable { .. })),
+            "expected SadrishyaNigamanaNotEqualityComparable D088 for asadrishya, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_parikshaa_body_producing_value_triggers_d089() {
+        let mut checker = TypeChecker::new();
+        let parikshaa = ASTNode::ParikshaaNode {
+            name: "bad_test".to_string(),
+            body: vec![ASTNode::PurnaankLiteral { value: 42, span: span() }],
+            is_tarka: false,
+            span: span(),
+        };
+        let _ty = checker.check(&parikshaa);
+        assert!(
+            checker
+                .errors
+                .iter()
+                .any(|e| matches!(e, TypeCheckError::ParikshaaBodyNotUnit)),
+            "expected ParikshaaBodyNotUnit D089, got: {:?}",
             checker.errors
         );
     }

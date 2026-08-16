@@ -1112,6 +1112,41 @@ impl Codegen {
                     self.rust_output.push_str(&expr);
                 }
             }
+            ASTNode::ParikshaaNode { name, body, is_tarka, .. } => {
+                if *is_tarka {
+                    self.rust_output.push_str("#[test]\n#[should_panic]\n");
+                } else {
+                    self.rust_output.push_str("#[test]\n");
+                }
+                self.rust_output.push_str(&format!(
+                    "{}fn {}() {{\n",
+                    self.indent_str(),
+                    sanitize_rust_ident(name)
+                ));
+                self.indent += 1;
+                self.emit_body(body)?;
+                self.indent -= 1;
+                self.rust_output.push_str(&format!("{}}}\n", self.indent_str()));
+            }
+            ASTNode::NigamanaNode { expr, .. } => {
+                self.rust_output.push_str(&format!("{}assert!(", self.indent_str()));
+                self.emit(expr)?;
+                self.rust_output.push_str(");\n");
+            }
+            ASTNode::SadrishyaNigamanaNode { left, right, .. } => {
+                self.rust_output.push_str(&format!("{}assert_eq!(", self.indent_str()));
+                self.emit(left)?;
+                self.rust_output.push_str(", ");
+                self.emit(right)?;
+                self.rust_output.push_str(");\n");
+            }
+            ASTNode::AsadrishyaNigamanaNode { left, right, .. } => {
+                self.rust_output.push_str(&format!("{}assert_ne!(", self.indent_str()));
+                self.emit(left)?;
+                self.rust_output.push_str(", ");
+                self.emit(right)?;
+                self.rust_output.push_str(");\n");
+            }
             _ => {
                 let msg = format!("Unhandled node: {:?}", node);
                 self.instructions.push(Instruction::Comment(msg.clone()));
@@ -4480,5 +4515,157 @@ use devvani_ast::{ASTNode, AngaField, Gana, KarakaParam, Linga as AstLinga, Laka
         };
         assert!(codegen.emit(&parinama).is_ok());
         assert_eq!(codegen.rust_source().trim(), "fa(5)");
+    }
+
+    #[test]
+    fn test_parikshaa_plain_emits_test_without_should_panic() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::ParikshaaNode {
+            name: "my-test".to_string(),
+            body: vec![ASTNode::NigamanaNode {
+                expr: Box::new(ASTNode::SamaNode {
+                    vama: Box::new(ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: dummy_span(),
+                    }),
+                    dakshina: Box::new(ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: dummy_span(),
+                    }),
+                }),
+                span: dummy_span(),
+            }],
+            is_tarka: false,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("#[test]"), "expected #[test] in:\n{}", output);
+        assert!(
+            !output.contains("#[should_panic]"),
+            "did not expect #[should_panic] in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("fn my_test()"),
+            "expected fn my_test in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_parikshaa_tarka_emits_should_panic() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::ParikshaaNode {
+            name: "tarka-test".to_string(),
+            body: vec![ASTNode::NigamanaNode {
+                expr: Box::new(ASTNode::SamaNode {
+                    vama: Box::new(ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: dummy_span(),
+                    }),
+                    dakshina: Box::new(ASTNode::PurnaankLiteral {
+                        value: 1,
+                        span: dummy_span(),
+                    }),
+                }),
+                span: dummy_span(),
+            }],
+            is_tarka: true,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("#[test]"), "expected #[test] in:\n{}", output);
+        assert!(
+            output.contains("#[should_panic]"),
+            "expected #[should_panic] in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("fn tarka_test()"),
+            "expected fn tarka_test in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_nigamana_emits_assert() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::NigamanaNode {
+            expr: Box::new(ASTNode::SamaNode {
+                vama: Box::new(ASTNode::PurnaankLiteral {
+                    value: 1,
+                    span: dummy_span(),
+                }),
+                dakshina: Box::new(ASTNode::PurnaankLiteral {
+                    value: 1,
+                    span: dummy_span(),
+                }),
+            }),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "assert!(1 == 1);");
+    }
+
+    #[test]
+    fn test_sadrishya_nigamana_emits_assert_eq() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::SadrishyaNigamanaNode {
+            left: Box::new(ASTNode::Nama {
+                base: "x".to_string(),
+                vibhakti: Vibhakti::Prathama,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                span: dummy_span(),
+            }),
+            right: Box::new(ASTNode::PurnaankLiteral {
+                value: 5,
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "assert_eq!(x, 5);");
+    }
+
+    #[test]
+    fn test_asadrishya_nigamana_emits_assert_ne() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::AsadrishyaNigamanaNode {
+            left: Box::new(ASTNode::Nama {
+                base: "y".to_string(),
+                vibhakti: Vibhakti::Prathama,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                span: dummy_span(),
+            }),
+            right: Box::new(ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: dummy_span(),
+            }),
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        assert_eq!(codegen.rust_source().trim(), "assert_ne!(y, \"hello\");");
+    }
+
+    #[test]
+    fn test_parikshaa_hyphenated_name_sanitized() {
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        let node = ASTNode::ParikshaaNode {
+            name: "my-hyphenated-test".to_string(),
+            body: vec![],
+            is_tarka: false,
+            span: dummy_span(),
+        };
+        assert!(codegen.emit(&node).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("fn my_hyphenated_test()"),
+            "expected sanitized fn name in:\n{}",
+            output
+        );
     }
 }

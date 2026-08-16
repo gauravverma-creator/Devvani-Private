@@ -288,59 +288,96 @@ fn assert_compiles(name: &str, generated_code: &str) {
     );
 }
 
-#[test]
-fn test_parinama_e2e_nonfallible_compiles() {
-    let source =
-        "inc-dhatu n karoti । n yoga 1 iti ।\n\
-         double-dhatu n karoti । n yoga 2 iti ।\n\
-         \n\
-         dhara result = 5 pariṇāma [inc-dhatu, double-dhatu] ।\n";
-    let _ = fs::write("examples/parinama_nonfallible.dvn", source);
-    let result = Compiler::new("examples/parinama_nonfallible.dvn").compile();
-    assert!(result.is_ok(), "compile failed: {:?}", result.err());
-    let code = result.unwrap();
+fn assert_test_result(name: &str, generated_code: &str, expect_pass: bool) {
+    let tmp_dir = tempfile::TempDir::new().expect("failed to create temp dir");
+    let tmp_path = tmp_dir.path().join("parikshaa_verify.rs");
+    let out_path = tmp_dir.path().join("parikshaa_verify_out");
+
+    fs::write(&tmp_path, generated_code)
+        .expect("failed to write temp file");
+
+    let compile_status = Command::new("rustc")
+        .arg("--edition")
+        .arg("2021")
+        .arg("--test")
+        .arg(&tmp_path)
+        .arg("-o")
+        .arg(&out_path)
+        .output()
+        .expect("failed to run rustc");
+
+    let compile_stderr = String::from_utf8_lossy(&compile_status.stderr);
     assert!(
-        code.contains("double_dhatu(inc_dhatu(5))"),
-        "expected nested parinama calls in generated code:\n{}",
-        code
+        compile_status.status.success(),
+        "rustc --test failed for {}:\n{}",
+        name,
+        compile_stderr
     );
-    assert_compiles("nonfallible parinama", &code);
+
+    let run_status = Command::new(&out_path)
+        .output()
+        .expect("failed to run test binary");
+
+    let stdout = String::from_utf8_lossy(&run_status.stdout);
+    let stderr = String::from_utf8_lossy(&run_status.stderr);
+
+    if expect_pass {
+        assert!(
+            run_status.status.success(),
+            "test FAILED for {} (expected PASS):\nstdout: {}\nstderr: {}",
+            name, stdout, stderr
+        );
+    } else {
+        assert!(
+            !run_status.status.success(),
+            "test PASSED for {} (expected FAIL):\nstdout: {}\nstderr: {}",
+            name, stdout, stderr
+        );
+    }
 }
 
 #[test]
-fn test_parinama_e2e_fallible_compiles() {
-    let source =
-        "fail-dhatu n phalam sankhya vaak karoti । arogya 5 । iti ।\n\
-         \n\
-         dhara result = 5 pariṇāma [fail-dhatu] ।\n";
-    let _ = fs::write("examples/parinama_fallible.dvn", source);
-    let result = Compiler::new("examples/parinama_fallible.dvn").compile();
+fn test_parikshaa_e2e_non_tarka_passes() {
+    let source = "parikshaa my-test {\n    nigamana 1 sama 1 ।\n    \"done\" vadati ।\n}\n";
+    let _ = fs::write("examples/parikshaa_pass.dvn", source);
+    let result = Compiler::new("examples/parikshaa_pass.dvn").compile();
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
     let code = result.unwrap();
-    assert!(
-        code.contains("fail_dhatu(5)"),
-        "expected single fallible parinama call in generated code:\n{}",
-        code
-    );
-    assert_compiles("fallible parinama", &code);
+    assert!(code.contains("#[test]"));
+    assert!(!code.contains("#[should_panic]"));
+    assert_test_result("non-tarka passing parikshaa", &code, true);
 }
 
 #[test]
-fn test_parinama_e2e_mixed_fallible_compiles() {
-    let source =
-        "fail-dhatu n phalam sankhya vaak karoti । arogya 5 । iti ।\n\
-         double-dhatu n karoti । n yoga 2 iti ।\n\
-         \n\
-         dhara result = 5 pariṇāma [fail-dhatu, double-dhatu] ।\n";
-    let _ = fs::write("examples/parinama_mixed.dvn", source);
-    let result = Compiler::new("examples/parinama_mixed.dvn").compile();
+fn test_parikshaa_e2e_non_tarka_fails() {
+    let source = "parikshaa my-failing-test {\n    nigamana 1 sama 2 ।\n    \"done\" vadati ।\n}\n";
+    let _ = fs::write("examples/parikshaa_fail.dvn", source);
+    let result = Compiler::new("examples/parikshaa_fail.dvn").compile();
     assert!(result.is_ok(), "compile failed: {:?}", result.err());
     let code = result.unwrap();
-    assert!(
-        code.contains("fail_dhatu(5).and_then(|v0| Ok(double_dhatu(v0)))"),
-        "expected mixed fallible parinama chain in generated code:\n{}",
-        code
-    );
-    assert_compiles("mixed fallible parinama", &code);
+    assert!(code.contains("#[test]"));
+    assert!(!code.contains("#[should_panic]"));
+    assert_test_result("non-tarka failing parikshaa", &code, false);
 }
 
+#[test]
+fn test_parikshaa_e2e_tarka_passes() {
+    let source = "tarka parikshaa failing-assert {\n    nigamana 1 sama 2 ।\n    \"done\" vadati ।\n}\n";
+    let _ = fs::write("examples/parikshaa_tarka_pass.dvn", source);
+    let result = Compiler::new("examples/parikshaa_tarka_pass.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(code.contains("#[should_panic]"));
+    assert_test_result("tarka passing parikshaa", &code, true);
+}
+
+#[test]
+fn test_parikshaa_e2e_tarka_fails() {
+    let source = "tarka parikshaa passing-assert {\n    nigamana 1 sama 1 ।\n    \"done\" vadati ।\n}\n";
+    let _ = fs::write("examples/parikshaa_tarka_fail.dvn", source);
+    let result = Compiler::new("examples/parikshaa_tarka_fail.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(code.contains("#[should_panic]"));
+    assert_test_result("tarka failing parikshaa", &code, false);
+}

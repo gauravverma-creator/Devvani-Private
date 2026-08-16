@@ -1,5 +1,6 @@
 use crate::CompilerError;
 use devvani_codegen::CodegenError;
+use devvani_parser::ParseError;
 use devvani_typesystem::TypeCheckError;
 
 // Severity levels
@@ -682,6 +683,79 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
         }
     }
 
+    pub fn from_parse_error(err: &ParseError) -> Diagnostic {
+        match err {
+            ParseError::AssertionArgCount { keyword, expected, found, .. } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D083".to_string(),
+                sanskrit_title: "अङ्ग-अप्राप्ति".to_string(),
+                roman_title: "Anga Apraapti".to_string(),
+                message: format!(
+                    "Assertion '{}' ko exactly {} argument(s) chahiye, \
+                     par {} mile. Nyāya vyākhyāna: nigamana \
+                     (conclusion) ka siddhānta apraāpta (incomplete) hai.",
+                    keyword, expected, found
+                ),
+                sutra_ref: Some(
+                    "Nyāya Sūtra (Nigamana — five-membered syllogism conclusion)".to_string()
+                ),
+                hint: Some(format!(
+                    "'{}' ko sirf {} argument do.",
+                    keyword, expected
+                )),
+            },
+            ParseError::TarkaWithoutParikshaa { .. } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D084".to_string(),
+                sanskrit_title: "तर्कविहिता".to_string(),
+                roman_title: "Tarka Vihita".to_string(),
+                message: "tarka (hypothetical modifier) sirf parikshaa (test) ke \
+                         saath hi upyog hota hai. Tarka binā parikshaa ke \
+                         svatantra nahi hai. Nyāya vyākhyāna: tarka = \
+                         hypothetical reasoning, which requires a paksha \
+                         (subject) to which it is applied."
+                    .to_string(),
+                sutra_ref: Some(
+                    "Nyāya Sūtra (Tarka — hypothetical reasoning doctrine)".to_string()
+                ),
+                hint: Some(
+                    "tarka ko parikshaa ke aage lagao: `tarka parikshaa <name> { ... }`."
+                        .to_string(),
+                ),
+            },
+            ParseError::MalformedParikshaa { reason, .. } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D085".to_string(),
+                sanskrit_title: "परीक्षाविघटन".to_string(),
+                roman_title: "Parikshaa Vighatan".to_string(),
+                message: format!(
+                    "Parikshaa (test) malformed hai: {}. \
+                     Nyāya vyākhyāna: parikshaa ka sampuṭa (closure) \
+                     aur nāma donon avyavahit (essential) hain.",
+                    reason
+                ),
+                sutra_ref: Some(
+                    "Nyāya Sūtra (Parikshaa — five-membered syllogism examination)".to_string()
+                ),
+                hint: Some(
+                    "Sahi syntax me parikshaa likho: `parikshaa <name> { ... }`."
+                        .to_string(),
+                ),
+            },
+            _ => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D009".to_string(),
+                sanskrit_title: "वाक्य-संरचना-दोष".to_string(),
+                roman_title: "Vakya Sanrachna Dosha".to_string(),
+                message: format!("SOV krama galat hai: {}", err),
+                sutra_ref: Some("2.1.1".to_string()),
+                hint: Some(
+                    "Devvani SOV order follow karo: Kartā Karma Kriyā.".to_string(),
+                ),
+            },
+        }
+    }
+
     pub fn from_codegen_error(err: &CodegenError) -> Diagnostic {
         match err {
             CodegenError::UnsupportedNode(n) => Diagnostic {
@@ -1277,5 +1351,52 @@ mod tests {
         assert!(diag.sanskrit_title.contains("परिणामदोषवैषम्य"));
         assert!(diag.message.contains("error types asangat hain"));
         assert!(diag.sutra_ref.unwrap().contains("pariṇāma-vāda"));
+    }
+
+    // --- PARIṬṢĀ (TESTING) DIAGNOSTICS ---
+
+    #[test]
+    fn test_from_parse_error_assertion_arg_count_d083() {
+        let err = ParseError::AssertionArgCount {
+            keyword: "nigamana".to_string(),
+            expected: 1,
+            found: 3,
+            span: devvani_lexer::token::Span { line: 1, col: 1, len: 1 },
+        };
+        let diag = DiagnosticEngine::from_parse_error(&err);
+        assert_eq!(diag.code, "D083");
+        assert!(diag.display().contains("Anga Apraapti"));
+        assert!(diag.sanskrit_title.contains("अङ्ग-अप्राप्ति"));
+        assert!(diag.message.contains("nigamana"));
+        assert!(diag.message.contains("1"));
+        assert!(diag.message.contains("3"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
+    }
+
+    #[test]
+    fn test_from_parse_error_tarka_without_parikshaa_d084() {
+        let err = ParseError::TarkaWithoutParikshaa {
+            span: devvani_lexer::token::Span { line: 1, col: 1, len: 1 },
+        };
+        let diag = DiagnosticEngine::from_parse_error(&err);
+        assert_eq!(diag.code, "D084");
+        assert!(diag.display().contains("Tarka Vihita"));
+        assert!(diag.sanskrit_title.contains("तर्कविहिता"));
+        assert!(diag.message.contains("tarka"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
+    }
+
+    #[test]
+    fn test_from_parse_error_malformed_parikshaa_d085() {
+        let err = ParseError::MalformedParikshaa {
+            reason: "missing name".to_string(),
+            span: devvani_lexer::token::Span { line: 1, col: 1, len: 1 },
+        };
+        let diag = DiagnosticEngine::from_parse_error(&err);
+        assert_eq!(diag.code, "D085");
+        assert!(diag.display().contains("Parikshaa Vighatan"));
+        assert!(diag.sanskrit_title.contains("परीक्षाविघटन"));
+        assert!(diag.message.contains("missing name"));
+        assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
     }
 }

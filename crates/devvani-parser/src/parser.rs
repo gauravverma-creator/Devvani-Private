@@ -63,6 +63,20 @@ TokenKind::Sāmānya => self.parse_sāmānya_prefix(),
              TokenKind::Dharā => self.parse_dhara(),
              TokenKind::Samyoga => self.parse_samyoga(),
              TokenKind::Manas => self.parse_manas(),
+             TokenKind::Parikshaa => self.parse_parikshaa(false),
+             TokenKind::Tarka => {
+                 if self.check_ahead(1, &TokenKind::Parikshaa) {
+                     self.advance();
+                     self.parse_parikshaa(true)
+                 } else {
+                     Err(ParseError::TarkaWithoutParikshaa {
+                         span: self.peek().span,
+                     })
+                 }
+             }
+             TokenKind::Nigamana => self.parse_nigamana_statement(),
+             TokenKind::SadrishyaNigamana => self.parse_sadrishya_nigamana_statement(),
+             TokenKind::AsadrishyaNigamana => self.parse_asadrishya_nigamana_statement(),
              TokenKind::LBracket => {
                  if self.check_ahead_is(1, &|k| matches!(k, TokenKind::Naama(_))) {
                      self.parse_dhara()
@@ -1024,10 +1038,34 @@ fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
          })
      }
 
-      fn parse_manas(&mut self) -> Result<ASTNode, ParseError> {
+       fn parse_manas(&mut self) -> Result<ASTNode, ParseError> {
+           let start_span = self.peek().span;
+           self.expect(TokenKind::Manas)?;
+           let target = self.parse_arithmetic()?;
+           self.expect(TokenKind::LBrace)?;
+
+           let mut body = Vec::new();
+           while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+               body.push(self.parse_vakya()?);
+           }
+           self.expect(TokenKind::RBrace)?;
+
+           Ok(ASTNode::ManasNode {
+               target: Box::new(target),
+               body,
+               span: start_span,
+           })
+       }
+
+      fn parse_parikshaa(&mut self, is_tarka: bool) -> Result<ASTNode, ParseError> {
           let start_span = self.peek().span;
-          self.expect(TokenKind::Manas)?;
-          let target = self.parse_arithmetic()?;
+          self.expect(TokenKind::Parikshaa)?;
+          let name_tok = self.expect_identifier()?;
+          let name = if let TokenKind::Naama(n) = name_tok.kind {
+              n
+          } else {
+              unreachable!()
+          };
           self.expect(TokenKind::LBrace)?;
 
           let mut body = Vec::new();
@@ -1035,10 +1073,91 @@ fn parse_pankti_literal(&mut self, span: Span) -> Result<ASTNode, ParseError> {
               body.push(self.parse_vakya()?);
           }
           self.expect(TokenKind::RBrace)?;
+          if self.check(&TokenKind::Danda) {
+              self.advance();
+          }
 
-          Ok(ASTNode::ManasNode {
-              target: Box::new(target),
+          Ok(ASTNode::ParikshaaNode {
+              name,
               body,
+              is_tarka,
+              span: start_span,
+          })
+      }
+
+      fn parse_nigamana_statement(&mut self) -> Result<ASTNode, ParseError> {
+          let start_span = self.peek().span;
+          self.expect(TokenKind::Nigamana)?;
+
+          let mut args = Vec::new();
+          while !self.check(&TokenKind::Danda) && !self.is_at_end() {
+              args.push(self.parse_arithmetic()?);
+          }
+          self.expect(TokenKind::Danda)?;
+
+          if args.len() != 1 {
+              return Err(ParseError::AssertionArgCount {
+                  keyword: "nigamana".to_string(),
+                  expected: 1,
+                  found: args.len(),
+                  span: start_span,
+              });
+          }
+
+          Ok(ASTNode::NigamanaNode {
+              expr: Box::new(args.into_iter().next().unwrap()),
+              span: start_span,
+          })
+      }
+
+      fn parse_sadrishya_nigamana_statement(&mut self) -> Result<ASTNode, ParseError> {
+          let start_span = self.peek().span;
+          self.expect(TokenKind::SadrishyaNigamana)?;
+
+          let mut args = Vec::new();
+          while !self.check(&TokenKind::Danda) && !self.is_at_end() {
+              args.push(self.parse_arithmetic()?);
+          }
+          self.expect(TokenKind::Danda)?;
+
+          if args.len() != 2 {
+              return Err(ParseError::AssertionArgCount {
+                  keyword: "sadrishya-nigamana".to_string(),
+                  expected: 2,
+                  found: args.len(),
+                  span: start_span,
+              });
+          }
+
+          Ok(ASTNode::SadrishyaNigamanaNode {
+              left: Box::new(args[0].clone()),
+              right: Box::new(args[1].clone()),
+              span: start_span,
+          })
+      }
+
+      fn parse_asadrishya_nigamana_statement(&mut self) -> Result<ASTNode, ParseError> {
+          let start_span = self.peek().span;
+          self.expect(TokenKind::AsadrishyaNigamana)?;
+
+          let mut args = Vec::new();
+          while !self.check(&TokenKind::Danda) && !self.is_at_end() {
+              args.push(self.parse_arithmetic()?);
+          }
+          self.expect(TokenKind::Danda)?;
+
+          if args.len() != 2 {
+              return Err(ParseError::AssertionArgCount {
+                  keyword: "asadrishya-nigamana".to_string(),
+                  expected: 2,
+                  found: args.len(),
+                  span: start_span,
+              });
+          }
+
+          Ok(ASTNode::AsadrishyaNigamanaNode {
+              left: Box::new(args[0].clone()),
+              right: Box::new(args[1].clone()),
               span: start_span,
           })
       }
@@ -2859,13 +2978,249 @@ mod parinama_tests {
                     ASTNode::DharaNode { mulya, .. } => match mulya.as_ref() {
                         ASTNode::ParinamaNode { dhatus, .. } => {
                             assert_eq!(dhatus, &vec!["f".to_string(), "g".to_string()]);
-                        }
-                        other => panic!("expected ParinamaNode in mulya, got {:?}", other),
-                    },
-                    other => panic!("expected DharaNode, got {:?}", other),
+                         }
+                         other => panic!("expected ParinamaNode in mulya, got {:?}", other),
+                     },
+                     other => panic!("expected DharaNode, got {:?}", other),
+                 }
+             }
+             other => panic!("expected KaryakramNode, got {:?}", other),
+         }
+     }
+}
+
+// --- PARIṬṢĀ (TESTING) PARSER TESTS ---
+
+#[cfg(test)]
+mod parikshaa_tests {
+    use super::*;
+
+    fn span() -> Span {
+        Span { line: 1, col: 1, len: 1 }
+    }
+
+    fn nm(s: &str) -> Token {
+        Token { kind: TokenKind::Naama(s.to_string()), span: span() }
+    }
+
+    fn kw(kind: TokenKind) -> Token {
+        Token { kind, span: span() }
+    }
+
+    fn parse_tokens(tokens: Vec<Token>) -> Result<ASTNode, ParseError> {
+        let mut parser = Parser::new(tokens);
+        parser.parse()
+    }
+
+    // parikshaa test_name { nigamana x sama y। } parses correctly
+    #[test]
+    fn test_parse_plain_parikshaa_block() {
+        let tokens = vec![
+            kw(TokenKind::Parikshaa),
+            nm("test_true"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Nigamana),
+            nm("x"),
+            kw(TokenKind::Sama),
+            nm("y"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse plain parikshaa block");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::ParikshaaNode { name, body, is_tarka, .. } => {
+                        assert_eq!(name, "test_true");
+                        assert!(!is_tarka);
+                        assert_eq!(body.len(), 1);
+                    }
+                    other => panic!("expected ParikshaaNode, got {:?}", other),
                 }
             }
             other => panic!("expected KaryakramNode, got {:?}", other),
         }
+    }
+
+    // tarka parikshaa test_name { ... } parses correctly with is_tarka=true
+    #[test]
+    fn test_parse_tarka_parikshaa_block() {
+        let tokens = vec![
+            kw(TokenKind::Tarka),
+            kw(TokenKind::Parikshaa),
+            nm("should_panic"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Nigamana),
+            nm("x"),
+            kw(TokenKind::Sama),
+            nm("y"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse tarka parikshaa block");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::ParikshaaNode { name, body, is_tarka, .. } => {
+                        assert_eq!(name, "should_panic");
+                        assert!(is_tarka);
+                        assert_eq!(body.len(), 1);
+                    }
+                    other => panic!("expected ParikshaaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // nigamana x sama y। parses as NigamanaNode
+    #[test]
+    fn test_parse_nigamana_statement() {
+        let tokens = vec![
+            kw(TokenKind::Nigamana),
+            nm("x"),
+            kw(TokenKind::Sama),
+            nm("y"),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse nigamana statement");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::NigamanaNode { .. } => {}
+                    other => panic!("expected NigamanaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // sadrishya-nigamana x y। parses as SadrishyaNigamanaNode
+    #[test]
+    fn test_parse_sadrishya_nigamana_statement() {
+        let tokens = vec![
+            kw(TokenKind::SadrishyaNigamana),
+            nm("x"),
+            nm("y"),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse sadrishya-nigamana statement");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::SadrishyaNigamanaNode { .. } => {}
+                    other => panic!("expected SadrishyaNigamanaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // asadrishya-nigamana x y। parses as AsadrishyaNigamanaNode
+    #[test]
+    fn test_parse_asadrishya_nigamana_statement() {
+        let tokens = vec![
+            kw(TokenKind::AsadrishyaNigamana),
+            nm("x"),
+            nm("y"),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse asadrishya-nigamana statement");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::AsadrishyaNigamanaNode { .. } => {}
+                    other => panic!("expected AsadrishyaNigamanaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // nigamana with 0 args errors (D083)
+    #[test]
+    fn test_parse_nigamana_wrong_arg_count_d083() {
+        let tokens = vec![
+            kw(TokenKind::Nigamana),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "nigamana with 0 args should error");
+    }
+
+    // sadrishya-nigamana with 1 arg errors (D083)
+    #[test]
+    fn test_parse_sadrishya_nigamana_wrong_arg_count_d083() {
+        let tokens = vec![
+            kw(TokenKind::SadrishyaNigamana),
+            nm("x"),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "sadrishya-nigamana with 1 arg should error");
+    }
+
+    // asadrishya-nigamana with 3 args errors (D083)
+    #[test]
+    fn test_parse_asadrishya_nigamana_wrong_arg_count_d083() {
+        let tokens = vec![
+            kw(TokenKind::AsadrishyaNigamana),
+            nm("x"),
+            nm("y"),
+            nm("z"),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "asadrishya-nigamana with 3 args should error");
+    }
+
+    // tarka without parikshaa errors (D084)
+    #[test]
+    fn test_parse_tarka_without_parikshaa_d084() {
+        let tokens = vec![
+            kw(TokenKind::Tarka),
+            nm("foo"),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "tarka without parikshaa should error");
+    }
+
+    // parikshaa without name errors (D085)
+    #[test]
+    fn test_parse_parikshaa_missing_name_d085() {
+        let tokens = vec![
+            kw(TokenKind::Parikshaa),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "parikshaa without name should error");
+    }
+
+    // parikshaa without braces errors (D085)
+    #[test]
+    fn test_parse_parikshaa_missing_braces_d085() {
+        let tokens = vec![
+            kw(TokenKind::Parikshaa),
+            nm("test"),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "parikshaa without braces should error");
     }
 }

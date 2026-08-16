@@ -49,4 +49,18 @@ pub enum ParseError {
 
     #[error("ParseError: {0}")]
     Generic(String),
+
+    #[error("ParseError: Assertion '{keyword}' expects exactly {expected} argument(s), but found {found}")]
+    AssertionArgCount {
+        keyword: String,
+        expected: usize,
+        found: usize,
+        span: Span,
+    },
+
+    #[error("ParseError: tarka modifier can only be used with parikshaa")]
+    TarkaWithoutParikshaa { span: Span },
+
+    #[error("ParseError: Malformed parikshaa: {reason}")]
+    MalformedParikshaa { reason: String, span: Span },
 }

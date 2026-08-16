@@ -40,6 +40,10 @@ pub trait ASTVisitor {
     fn visit_duta_grahan(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_manas(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_parinama(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_parikshaa(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_nigamana(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_sadrishya_nigamana(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_asadrishya_nigamana(&mut self, node: &ASTNode) -> VisitResult;
 
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
@@ -50,45 +54,49 @@ pub trait ASTVisitor {
              ASTNode::PhalamType { .. } => self.visit_phalam_type(node),
              ASTNode::ArogyaNode { .. } => self.visit_arogya(node),
              ASTNode::DoshaNode { .. } => self.visit_dosha(node),
-ASTNode::NidanaNode { .. } => self.visit_nidana(node),
-              ASTNode::SamprapatiNode { .. } => self.visit_samprapti(node),
-              ASTNode::SandarbhaNode { .. } => self.visit_sandarbha(node),
-              ASTNode::SamavayaNode { .. } => self.visit_samavaya(node),
-            ASTNode::KriyaCall { .. } => self.visit_kriya_call(node),
-            ASTNode::Nama { .. } => self.visit_nama(node),
-            ASTNode::AstiNode { .. } => self.visit_asti(node),
-            ASTNode::BhavatiNode { .. } => self.visit_bhavati(node),
-            ASTNode::DharaNode { .. } => self.visit_dhara(node),
-            ASTNode::YogaNode { .. }
-            | ASTNode::ViyogaNode { .. }
-            | ASTNode::GunaNode { .. }
-            | ASTNode::BhagaNode { .. } => self.visit_arithmetic(node),
-            ASTNode::SamaNode { .. }
-            | ASTNode::AsamaNode { .. }
-            | ASTNode::NyuunaNode { .. }
-            | ASTNode::AdhikaNode { .. } => self.visit_comparison(node),
-            ASTNode::VadatiNode { .. } | ASTNode::PathatiNode { .. } => self.visit_io(node),
-            ASTNode::YadiNode { .. } => self.visit_yadi(node),
-            ASTNode::YavatNode { .. } => self.visit_yavat(node),
-            ASTNode::PunahNode { .. } => self.visit_punah(node),
-            ASTNode::PurnaankLiteral { .. }
-            | ASTNode::DashaamshaLiteral { .. }
-            | ASTNode::VaakLiteral { .. } => self.visit_literal(node),
-            ASTNode::Samasa { .. } => self.visit_samasa(node),
-            ASTNode::KritChain { .. } => self.visit_krit_chain(node),
-            ASTNode::AvartanaNode { .. } => self.visit_avatarana(node),
-ASTNode::PanktiNode { .. } => self.visit_pankti(node),
-             ASTNode::AvaliNode { .. } => self.visit_avali(node),
-             ASTNode::VinyasaNode { .. } => self.visit_vinyasa(node),
-             ASTNode::KramashahNode { .. } => self.visit_kramasah(node),
-             ASTNode::SamyogaNode { .. } => self.visit_samyoga(node),
-             ASTNode::PraptiNode { .. } => self.visit_prapti(node),
-             ASTNode::DutaBanaaNode { .. } => self.visit_duta_banaa(node),
-             ASTNode::DutaBhejNode { .. } => self.visit_duta_bhej(node),
-              ASTNode::DutaGrahanNode { .. } => self.visit_duta_grahan(node),
-              ASTNode::ManasNode { .. } => self.visit_manas(node),
-              ASTNode::ParinamaNode { .. } => self.visit_parinama(node),
-              _ => Ok(()),
+ ASTNode::NidanaNode { .. } => self.visit_nidana(node),
+               ASTNode::SamprapatiNode { .. } => self.visit_samprapti(node),
+               ASTNode::SandarbhaNode { .. } => self.visit_sandarbha(node),
+               ASTNode::SamavayaNode { .. } => self.visit_samavaya(node),
+             ASTNode::KriyaCall { .. } => self.visit_kriya_call(node),
+             ASTNode::Nama { .. } => self.visit_nama(node),
+             ASTNode::AstiNode { .. } => self.visit_asti(node),
+             ASTNode::BhavatiNode { .. } => self.visit_bhavati(node),
+             ASTNode::DharaNode { .. } => self.visit_dhara(node),
+             ASTNode::YogaNode { .. }
+             | ASTNode::ViyogaNode { .. }
+             | ASTNode::GunaNode { .. }
+             | ASTNode::BhagaNode { .. } => self.visit_arithmetic(node),
+             ASTNode::SamaNode { .. }
+             | ASTNode::AsamaNode { .. }
+             | ASTNode::NyuunaNode { .. }
+             | ASTNode::AdhikaNode { .. } => self.visit_comparison(node),
+             ASTNode::VadatiNode { .. } | ASTNode::PathatiNode { .. } => self.visit_io(node),
+             ASTNode::YadiNode { .. } => self.visit_yadi(node),
+             ASTNode::YavatNode { .. } => self.visit_yavat(node),
+             ASTNode::PunahNode { .. } => self.visit_punah(node),
+             ASTNode::PurnaankLiteral { .. }
+             | ASTNode::DashaamshaLiteral { .. }
+             | ASTNode::VaakLiteral { .. } => self.visit_literal(node),
+             ASTNode::Samasa { .. } => self.visit_samasa(node),
+             ASTNode::KritChain { .. } => self.visit_krit_chain(node),
+             ASTNode::AvartanaNode { .. } => self.visit_avatarana(node),
+ ASTNode::PanktiNode { .. } => self.visit_pankti(node),
+              ASTNode::AvaliNode { .. } => self.visit_avali(node),
+              ASTNode::VinyasaNode { .. } => self.visit_vinyasa(node),
+              ASTNode::KramashahNode { .. } => self.visit_kramasah(node),
+              ASTNode::SamyogaNode { .. } => self.visit_samyoga(node),
+              ASTNode::PraptiNode { .. } => self.visit_prapti(node),
+              ASTNode::DutaBanaaNode { .. } => self.visit_duta_banaa(node),
+              ASTNode::DutaBhejNode { .. } => self.visit_duta_bhej(node),
+               ASTNode::DutaGrahanNode { .. } => self.visit_duta_grahan(node),
+               ASTNode::ManasNode { .. } => self.visit_manas(node),
+               ASTNode::ParinamaNode { .. } => self.visit_parinama(node),
+               ASTNode::ParikshaaNode { .. } => self.visit_parikshaa(node),
+               ASTNode::NigamanaNode { .. } => self.visit_nigamana(node),
+               ASTNode::SadrishyaNigamanaNode { .. } => self.visit_sadrishya_nigamana(node),
+               ASTNode::AsadrishyaNigamanaNode { .. } => self.visit_asadrishya_nigamana(node),
+               _ => Ok(()),
         }
     }
 }
@@ -457,6 +465,60 @@ fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
             self.print_indent();
             println!("Parinama [{}]", dhatus.join(", "));
         }
+        Ok(())
+    }
+
+    fn visit_parikshaa(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::ParikshaaNode { name, is_tarka, .. } = node {
+            self.print_indent();
+            if *is_tarka {
+                println!("Parikshaa [tarka:{}]", name);
+            } else {
+                println!("Parikshaa [{}]", name);
+            }
+            self.indent += 1;
+            if let ASTNode::ParikshaaNode { body, .. } = node {
+                for stmt in body {
+                    self.visit(stmt)?;
+                }
+            }
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_nigamana(&mut self, node: &ASTNode) -> VisitResult {
+        self.print_indent();
+        println!("Nigamana");
+        self.indent += 1;
+        if let ASTNode::NigamanaNode { expr, .. } = node {
+            self.visit(expr)?;
+        }
+        self.indent -= 1;
+        Ok(())
+    }
+
+    fn visit_sadrishya_nigamana(&mut self, node: &ASTNode) -> VisitResult {
+        self.print_indent();
+        println!("SadrishyaNigamana");
+        self.indent += 1;
+        if let ASTNode::SadrishyaNigamanaNode { left, right, .. } = node {
+            self.visit(left)?;
+            self.visit(right)?;
+        }
+        self.indent -= 1;
+        Ok(())
+    }
+
+    fn visit_asadrishya_nigamana(&mut self, node: &ASTNode) -> VisitResult {
+        self.print_indent();
+        println!("AsadrishyaNigamana");
+        self.indent += 1;
+        if let ASTNode::AsadrishyaNigamanaNode { left, right, .. } = node {
+            self.visit(left)?;
+            self.visit(right)?;
+        }
+        self.indent -= 1;
         Ok(())
     }
 }

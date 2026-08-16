@@ -403,12 +403,40 @@ PanktiNode {
           body: Vec<ASTNode>,
           span: Span,
       },
-      /// ParinamaNode — pipeline/postfix-transform expression.
-      /// Syntax: <expr> pariṇāma [ <ident> (, <ident>)* ]
-      /// Value flows left-to-right through each dhatu in `dhatus`.
-      ParinamaNode {
-          mulyam: Box<ASTNode>,
-          dhatus: Vec<String>,
-          span: Span,
-      },
-  }
+       /// ParinamaNode — pipeline/postfix-transform expression.
+       /// Syntax: <expr> pariṇāma [ <ident> (, <ident>)* ]
+       /// Value flows left-to-right through each dhatu in `dhatus`.
+       ParinamaNode {
+           mulyam: Box<ASTNode>,
+           dhatus: Vec<String>,
+           span: Span,
+       },
+       /// ParikshaaNode — test declaration block.
+       /// Syntax: [tarka] parikshaa <name> { <statements> }
+       ParikshaaNode {
+           name: String,
+           body: Vec<ASTNode>,
+           is_tarka: bool,
+           span: Span,
+       },
+       /// NigamanaNode — assert-true statement.
+       /// Syntax: nigamana <expr> ।
+       NigamanaNode {
+           expr: Box<ASTNode>,
+           span: Span,
+       },
+       /// SadrishyaNigamanaNode — assert-equal statement.
+       /// Syntax: sadrishya-nigamana <expr1> <expr2> ।
+       SadrishyaNigamanaNode {
+           left: Box<ASTNode>,
+           right: Box<ASTNode>,
+           span: Span,
+       },
+       /// AsadrishyaNigamanaNode — assert-not-equal statement.
+       /// Syntax: asadrishya-nigamana <expr1> <expr2> ।
+       AsadrishyaNigamanaNode {
+           left: Box<ASTNode>,
+           right: Box<ASTNode>,
+           span: Span,
+       },
+   }

@@ -291,10 +291,17 @@ impl<'a> Lexer<'a> {
              "karo" | "Karo" => TokenKind::Karo,
               "manas" | "Manas" => TokenKind::Manas,
 
-              // --- PIPELINE (PARIṆĀMA) KEYWORDS ---
-              "pariṇāma" | "Pariṇāma" | "parinama" | "Parinama" => TokenKind::Parinama,
+               // --- PIPELINE (PARIṆĀMA) KEYWORDS ---
+               "pariṇāma" | "Pariṇāma" | "parinama" | "Parinama" => TokenKind::Parinama,
 
-               _ => TokenKind::Naama(id),
+               // --- PARIṬṢĀ (TESTING) KEYWORDS ---
+               "parikshaa" | "Parikshaa" => TokenKind::Parikshaa,
+               "nigamana" | "Nigamana" => TokenKind::Nigamana,
+               "sadrishya-nigamana" | "Sadrishya-nigamana" => TokenKind::SadrishyaNigamana,
+               "asadrishya-nigamana" | "Asadrishya-nigamana" => TokenKind::AsadrishyaNigamana,
+               "tarka" | "Tarka" => TokenKind::Tarka,
+
+                _ => TokenKind::Naama(id),
          };
         Ok(Token {
             kind,
@@ -944,5 +951,111 @@ mod tests {
         let mut lexer = Lexer::new("Pariṇāma");
         let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
         assert_eq!(tokens[0].kind, TokenKind::Parinama);
+    }
+
+    // --- PARIṬṢĀ (TESTING) KEYWORD TESTS ---
+
+    #[test]
+    fn test_parikshaa_keyword() {
+        let mut lexer = Lexer::new("parikshaa");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Parikshaa);
+    }
+
+    #[test]
+    fn test_Parikshaa_keyword() {
+        let mut lexer = Lexer::new("Parikshaa");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Parikshaa);
+    }
+
+    #[test]
+    fn test_nigamana_keyword() {
+        let mut lexer = Lexer::new("nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Nigamana);
+    }
+
+    #[test]
+    fn test_Nigamana_keyword() {
+        let mut lexer = Lexer::new("Nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Nigamana);
+    }
+
+    #[test]
+    fn test_sadrishya_nigamana_keyword() {
+        let mut lexer = Lexer::new("sadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SadrishyaNigamana);
+    }
+
+    #[test]
+    fn test_Sadrishya_nigamana_keyword() {
+        let mut lexer = Lexer::new("Sadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SadrishyaNigamana);
+    }
+
+    #[test]
+    fn test_sadrishya_nigamana_not_split() {
+        let mut lexer = Lexer::new("sadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].kind, TokenKind::SadrishyaNigamana);
+        assert_eq!(tokens[1].kind, TokenKind::Samaapti);
+    }
+
+    #[test]
+    fn test_sadrishya_nigamana_not_identifier_minus() {
+        let mut lexer = Lexer::new("sadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::SadrishyaNigamana));
+        assert!(!matches!(tokens[0].kind, TokenKind::Naama(_)));
+    }
+
+    #[test]
+    fn test_asadrishya_nigamana_keyword() {
+        let mut lexer = Lexer::new("asadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::AsadrishyaNigamana);
+    }
+
+    #[test]
+    fn test_Asadrishya_nigamana_keyword() {
+        let mut lexer = Lexer::new("Asadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::AsadrishyaNigamana);
+    }
+
+    #[test]
+    fn test_asadrishya_nigamana_not_split() {
+        let mut lexer = Lexer::new("asadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].kind, TokenKind::AsadrishyaNigamana);
+        assert_eq!(tokens[1].kind, TokenKind::Samaapti);
+    }
+
+    #[test]
+    fn test_asadrishya_nigamana_not_identifier_minus() {
+        let mut lexer = Lexer::new("asadrishya-nigamana");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::AsadrishyaNigamana));
+        assert!(!matches!(tokens[0].kind, TokenKind::Naama(_)));
+    }
+
+    #[test]
+    fn test_tarka_keyword() {
+        let mut lexer = Lexer::new("tarka");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Tarka);
+    }
+
+    #[test]
+    fn test_Tarka_keyword() {
+        let mut lexer = Lexer::new("Tarka");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Tarka);
     }
 }

@@ -432,11 +432,87 @@ PanktiNode {
            right: Box<ASTNode>,
            span: Span,
        },
-       /// AsadrishyaNigamanaNode — assert-not-equal statement.
-       /// Syntax: asadrishya-nigamana <expr1> <expr2> ।
-       AsadrishyaNigamanaNode {
-           left: Box<ASTNode>,
-           right: Box<ASTNode>,
-           span: Span,
-       },
-   }
+        /// AsadrishyaNigamanaNode — assert-not-equal statement.
+        /// Syntax: asadrishya-nigamana <expr1> <expr2> ।
+        AsadrishyaNigamanaNode {
+            left: Box<ASTNode>,
+            right: Box<ASTNode>,
+            span: Span,
+        },
+
+        // --- DOCUMENTATION (ĀRṢA-VYĀKHYĀ) ---
+        // VrittiNode, BhashyaNode, TippaniNode appear as standalone preceding
+        // statements in the containing block (KaryakramNode.shareera) immediately
+        // before the item they document.  The parser is responsible for ensuring
+        // proper adjacency.  This avoids adding required fields to DhatuDef /
+        // DravyaDef which would break downstream crates (codegen, typesystem, llvm).
+        VrittiNode {
+            text: String,
+            span: Span,
+        },
+        BhashyaNode {
+            text: String,
+            span: Span,
+        },
+        TippaniNode {
+            text: String,
+            param_name: String,
+            span: Span,
+        },
+    }
+
+    fn dummy_span() -> Span {
+        Span { line: 1, col: 1, len: 1 }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn test_vritti_node_construction() {
+            let node = ASTNode::VrittiNode {
+                text: "short doc".to_string(),
+                span: Span { line: 1, col: 1, len: 9 },
+            };
+            match node {
+                ASTNode::VrittiNode { text, span } => {
+                    assert_eq!(text, "short doc");
+                    assert_eq!(span.line, 1);
+                }
+                _ => panic!("expected VrittiNode"),
+            }
+        }
+
+        #[test]
+        fn test_bhashya_node_construction() {
+            let node = ASTNode::BhashyaNode {
+                text: "module docs".to_string(),
+                span: Span { line: 1, col: 1, len: 12 },
+            };
+            match node {
+                ASTNode::BhashyaNode { text, span } => {
+                    assert_eq!(text, "module docs");
+                    assert_eq!(span.col, 1);
+                }
+                _ => panic!("expected BhashyaNode"),
+            }
+        }
+
+        #[test]
+        fn test_tippani_node_construction() {
+            let node = ASTNode::TippaniNode {
+                text: "note on x".to_string(),
+                param_name: "x".to_string(),
+                span: Span { line: 2, col: 5, len: 9 },
+            };
+            match node {
+                ASTNode::TippaniNode { text, param_name, span } => {
+                    assert_eq!(text, "note on x");
+                    assert_eq!(param_name, "x");
+                    assert_eq!(span.line, 2);
+                }
+                _ => panic!("expected TippaniNode"),
+            }
+        }
+    }

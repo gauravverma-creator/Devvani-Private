@@ -63,4 +63,7 @@ pub enum ParseError {
 
     #[error("ParseError: Malformed parikshaa: {reason}")]
     MalformedParikshaa { reason: String, span: Span },
+
+    #[error("ParseError: bhashya can only appear at the top of a file, before any other declaration")]
+    BhashyaNotAtTop { span: Span },
 }

@@ -174,12 +174,16 @@ pub enum TokenKind {
       Visarga,  // ḥ character standalone
       Anusvara, // ṃ character standalone
 
-      // --- META ---
-      NavaPankti, // Newline
-      Aavakaasha, // Whitespace
-      Tippani,    // Comment
-      Samaapti,   // EOF
-      Unknown(char),
+       // --- DOCUMENTATION (ĀRṢA-VYĀKHYĀ) ---
+       Vritti,    // item-level short doc comment keyword
+       Bhashya,   // file-level detailed doc comment keyword
+       Tippani,   // targeted note keyword (also reused from META as comment marker)
+
+       // --- META ---
+       NavaPankti, // Newline
+       Aavakaasha, // Whitespace
+       Samaapti,   // EOF
+       Unknown(char),
        LBracket, // [
        RBracket, // ]
        LBrace,   // { — block delimiter (samyoga, manas bodies)

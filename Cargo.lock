@@ -249,7 +249,11 @@ name = "devvani-codegen"
 version = "0.1.0"
 dependencies = [
  "devvani-ast",
+ "devvani-compiler",
+ "devvani-lexer",
+ "devvani-parser",
  "devvani-typesystem",
+ "tempfile",
 ]
 
 [[package]]

@@ -816,6 +816,44 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                         .to_string(),
                 ),
             },
+            ParseError::DuplicateMrittika { span: _ } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D093".to_string(),
+                sanskrit_title: "द्विमृत्तिकादोषः".to_string(),
+                roman_title: "Dvi-Mrittika Dosha".to_string(),
+                message: "Ek file mein kevala ek mrittika block hi \
+                          upyog ho sakta hai. Duplicate mrittika block \
+                          nahi chahiye."
+                    .to_string(),
+                sutra_ref: Some(
+                    "Chandogya Upanishad 6.1.4 (Vacharambhana — one clay, one name)".to_string()
+                ),
+                hint: Some(
+                    "Doosri mrittika block hatao ya uske naam ko \
+                      pehle ke block mein jod do."
+                        .to_string(),
+                ),
+            },
+            ParseError::MissingNaamadheya { span: _ } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D094".to_string(),
+                sanskrit_title: "नामधेयाभावः".to_string(),
+                roman_title: "Naamadheya Abhava".to_string(),
+                message: "Mrittika block ka pehla entry naamadheya \
+                          hona chahiye — koi non-empty version string \
+                          nahi mila. Vacharambhana doctrine: mrittika \
+                          (clay/identity) ke bina naamadheya (name/version) \
+                          sthanapanna nahi ho sakta."
+                    .to_string(),
+                sutra_ref: Some(
+                    "Chandogya Upanishad 6.1.4 (Vacharambhana — name depends on substance)".to_string()
+                ),
+                hint: Some(
+                    "Mrittika block ke andar pehli line me \
+                      `naamadheya \"<version>\" ;` likho."
+                        .to_string(),
+                ),
+            },
             _ => Diagnostic {
                 severity: Severity::Dosha,
                 code: "D009".to_string(),

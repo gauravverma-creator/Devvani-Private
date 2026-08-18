@@ -301,12 +301,19 @@ impl<'a> Lexer<'a> {
                "asadrishya-nigamana" | "Asadrishya-nigamana" => TokenKind::AsadrishyaNigamana,
                 "tarka" | "Tarka" => TokenKind::Tarka,
 
-                // --- DOCUMENTATION (ĀRṢA-VYĀKHYĀ) KEYWORDS ---
-                "vritti" | "Vritti" => TokenKind::Vritti,
-                "bhashya" | "Bhashya" => TokenKind::Bhashya,
-                "tippani" | "Tippani" => TokenKind::Tippani,
+                 // --- DOCUMENTATION (ĀRṢA-VYĀKHYĀ) KEYWORDS ---
+                 "vritti" | "Vritti" => TokenKind::Vritti,
+                 "bhashya" | "Bhashya" => TokenKind::Bhashya,
+                 "tippani" | "Tippani" => TokenKind::Tippani,
 
-                 _ => TokenKind::Naama(id),
+                 // --- VERSIONING (VIKARA) KEYWORDS ---
+                 "mrittika" | "Mrittika" => TokenKind::Mrittika,
+                 "naamadheya" | "Naamadheya" => TokenKind::Naamadheya,
+                 "sukshma-vikara" | "Sukshma-vikara" => TokenKind::SukshmaVikara,
+                 "sthula-vikara" | "Sthula-vikara" => TokenKind::SthulaVikara,
+                 "satya-bheda" | "Satya-bheda" => TokenKind::SatyaBheda,
+
+                  _ => TokenKind::Naama(id),
          };
         Ok(Token {
             kind,
@@ -1135,5 +1142,88 @@ mod tests {
         assert_eq!(tokens[2].kind, TokenKind::Para);
         assert_eq!(tokens[3].kind, TokenKind::Naama("naam".to_string()));
         assert_eq!(tokens[4].kind, TokenKind::Danda);
+    }
+
+    // --- VERSIONING (VIKARA) KEYWORD TESTS ---
+
+    #[test]
+    fn test_mrittika_keyword() {
+        let mut lexer = Lexer::new("mrittika");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Mrittika);
+    }
+
+    #[test]
+    fn test_Mrittika_keyword() {
+        let mut lexer = Lexer::new("Mrittika");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Mrittika);
+    }
+
+    #[test]
+    fn test_naamadheya_keyword() {
+        let mut lexer = Lexer::new("naamadheya");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naamadheya);
+    }
+
+    #[test]
+    fn test_Naamadheya_keyword() {
+        let mut lexer = Lexer::new("Naamadheya");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Naamadheya);
+    }
+
+    #[test]
+    fn test_sukshma_vikara_keyword() {
+        let mut lexer = Lexer::new("sukshma-vikara");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SukshmaVikara);
+    }
+
+    #[test]
+    fn test_Sukshma_vikara_keyword() {
+        let mut lexer = Lexer::new("Sukshma-vikara");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SukshmaVikara);
+    }
+
+    #[test]
+    fn test_sthula_vikara_keyword() {
+        let mut lexer = Lexer::new("sthula-vikara");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SthulaVikara);
+    }
+
+    #[test]
+    fn test_Sthula_vikara_keyword() {
+        let mut lexer = Lexer::new("Sthula-vikara");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SthulaVikara);
+    }
+
+    #[test]
+    fn test_satya_bheda_keyword() {
+        let mut lexer = Lexer::new("satya-bheda");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SatyaBheda);
+    }
+
+    #[test]
+    fn test_Satya_bheda_keyword() {
+        let mut lexer = Lexer::new("Satya-bheda");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::SatyaBheda);
+    }
+
+    #[test]
+    fn test_versioning_keywords_not_substrings() {
+        let mut lexer = Lexer::new("mrittikah naamadheyah sukshmah stulah satyah");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        for tok in tokens {
+            if tok.kind != TokenKind::Samaapti {
+                assert!(matches!(tok.kind, TokenKind::Naama(_)), "expected identifier, got {:?}", tok.kind);
+            }
+        }
     }
 }

@@ -45,6 +45,8 @@ pub trait ASTVisitor {
     fn visit_sadrishya_nigamana(&mut self, node: &ASTNode) -> VisitResult;
     fn visit_asadrishya_nigamana(&mut self, node: &ASTNode) -> VisitResult;
 
+    fn visit_mrittika(&mut self, node: &ASTNode) -> VisitResult;
+
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
             ASTNode::KaryakramNode { shareera, .. } => self.visit_karyakram(shareera),
@@ -94,9 +96,10 @@ pub trait ASTVisitor {
                ASTNode::ParinamaNode { .. } => self.visit_parinama(node),
                ASTNode::ParikshaaNode { .. } => self.visit_parikshaa(node),
                ASTNode::NigamanaNode { .. } => self.visit_nigamana(node),
-               ASTNode::SadrishyaNigamanaNode { .. } => self.visit_sadrishya_nigamana(node),
-               ASTNode::AsadrishyaNigamanaNode { .. } => self.visit_asadrishya_nigamana(node),
-               _ => Ok(()),
+                ASTNode::SadrishyaNigamanaNode { .. } => self.visit_sadrishya_nigamana(node),
+                ASTNode::AsadrishyaNigamanaNode { .. } => self.visit_asadrishya_nigamana(node),
+                ASTNode::MrittikaNode { .. } => self.visit_mrittika(node),
+                _ => Ok(()),
         }
     }
 }
@@ -511,14 +514,22 @@ fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
     }
 
     fn visit_asadrishya_nigamana(&mut self, node: &ASTNode) -> VisitResult {
-        self.print_indent();
-        println!("AsadrishyaNigamana");
-        self.indent += 1;
         if let ASTNode::AsadrishyaNigamanaNode { left, right, .. } = node {
+            self.print_indent();
+            println!("AsadrishyaNigamana");
+            self.indent += 1;
             self.visit(left)?;
             self.visit(right)?;
+            self.indent -= 1;
         }
-        self.indent -= 1;
+        Ok(())
+    }
+
+    fn visit_mrittika(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::MrittikaNode { package_name, vikaras, .. } = node {
+            self.print_indent();
+            println!("Mrittika [{}] {} vikaras", package_name, vikaras.len());
+        }
         Ok(())
     }
 }

@@ -440,28 +440,60 @@ PanktiNode {
             span: Span,
         },
 
-        // --- DOCUMENTATION (ĀRṢA-VYĀKHYĀ) ---
-        // VrittiNode, BhashyaNode, TippaniNode appear as standalone preceding
-        // statements in the containing block (KaryakramNode.shareera) immediately
-        // before the item they document.  The parser is responsible for ensuring
-        // proper adjacency.  This avoids adding required fields to DhatuDef /
-        // DravyaDef which would break downstream crates (codegen, typesystem, llvm).
-        VrittiNode {
-            text: String,
-            span: Span,
-        },
-        BhashyaNode {
-            text: String,
-            span: Span,
-        },
-        TippaniNode {
-            text: String,
-            param_name: String,
-            span: Span,
-        },
-    }
+         // --- DOCUMENTATION (ĀRṢA-VYĀKHYĀ) ---
+         // VrittiNode, BhashyaNode, TippaniNode appear as standalone preceding
+         // statements in the containing block (KaryakramNode.shareera) immediately
+         // before the item they document.  The parser is responsible for ensuring
+         // proper adjacency.  This avoids adding required fields to DhatuDef /
+         // DravyaDef which would break downstream crates (codegen, typesystem, llvm).
+         VrittiNode {
+             text: String,
+             span: Span,
+         },
+         BhashyaNode {
+             text: String,
+             span: Span,
+         },
+         TippaniNode {
+             text: String,
+             param_name: String,
+             span: Span,
+         },
 
-    fn dummy_span() -> Span {
+         // --- VERSIONING (VIKARA) ---
+         // MrittikaNode declares package identity and version info.
+         // Appears as a top-level item in KaryakramNode.shareera.
+         MrittikaNode {
+             package_name: String,
+             naamadheya: NaamadheyaNode,
+             vikaras: Vec<VikaraEntry>,
+             span: Span,
+         },
+     }
+
+     // --- VERSIONING (VIKARA) SUPPORT TYPES ---
+
+     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+     pub struct NaamadheyaNode {
+         pub version_string: String,
+         pub span: Span,
+     }
+
+     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+     pub enum VikaraKind {
+         Sukshma,   // patch-level, internal-only change
+         Sthula,    // minor-level, backward-compatible addition
+         SatyaBheda // breaking change
+     }
+
+     #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+     pub struct VikaraEntry {
+         pub kind: VikaraKind,
+         pub description: String,
+         pub span: Span,
+     }
+
+     fn dummy_span() -> Span {
         Span { line: 1, col: 1, len: 1 }
     }
 

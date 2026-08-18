@@ -3,6 +3,6 @@ pub mod visitor;
 
 pub use devvani_lexer::token::Span;
 pub use node::{
-    ASTNode, AngaField, Gana, KarakaParam, KarakaRole, Lakara, Linga, SamasaType, Upasarga, UpasargaDirective,
-    UpasargaNode, Vacana, Vibhakti,
+    ASTNode, AngaField, Gana, KarakaParam, KarakaRole, Lakara, Linga, NaamadheyaNode, SamasaType, Upasarga,
+    UpasargaDirective, UpasargaNode, Vacana, Vibhakti, VikaraEntry, VikaraKind,
 };

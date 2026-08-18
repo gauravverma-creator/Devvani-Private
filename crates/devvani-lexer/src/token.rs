@@ -179,10 +179,19 @@ pub enum TokenKind {
        Bhashya,   // file-level detailed doc comment keyword
        Tippani,   // targeted note keyword (also reused from META as comment marker)
 
-       // --- META ---
-       NavaPankti, // Newline
-       Aavakaasha, // Whitespace
-       Samaapti,   // EOF
+            // --- META (repurposed for Versioning) ---
+            Mrittika,   // package identity / version block keyword (reused from NavaPankti)
+            Naamadheya, // version string keyword (reused from Aavakaasha)
+
+            // --- VERSIONING (VIKARA) ---
+            SukshmaVikara, // patch-level internal change
+            SthulaVikara,  // minor-level backward-compatible addition
+            SatyaBheda,    // breaking change
+
+            // --- META ---
+            NavaPankti, // Newline
+            Aavakaasha, // Whitespace
+            Samaapti,   // EOF
        Unknown(char),
        LBracket, // [
        RBracket, // ]

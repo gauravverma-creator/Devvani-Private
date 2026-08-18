@@ -66,4 +66,10 @@ pub enum ParseError {
 
     #[error("ParseError: bhashya can only appear at the top of a file, before any other declaration")]
     BhashyaNotAtTop { span: Span },
+
+    #[error("ParseError: only one mrittika block is allowed per file")]
+    DuplicateMrittika { span: Span },
+
+    #[error("ParseError: mrittika block requires a non-empty naamadheya version string as its first entry")]
+    MissingNaamadheya { span: Span },
 }

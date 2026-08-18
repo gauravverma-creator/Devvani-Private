@@ -10,6 +10,7 @@ pub struct Parser {
     pub symbols: SymbolTable,
     current_dhatu_name: Vec<String>,
     bhashya_allowed: bool,
+    mrittika_seen: bool,
 }
 
 impl Parser {
@@ -20,11 +21,13 @@ impl Parser {
             symbols: SymbolTable::new(),
             current_dhatu_name: Vec::new(),
             bhashya_allowed: true,
+            mrittika_seen: false,
         }
     }
 
     pub fn parse(&mut self) -> Result<ASTNode, ParseError> {
         self.bhashya_allowed = true;
+        self.mrittika_seen = false;
         let mut shareera = Vec::new();
         while !self.is_at_end() {
             shareera.push(self.parse_vakya()?);
@@ -55,6 +58,7 @@ impl Parser {
         }
 
         match tok.kind {
+            TokenKind::Mrittika => self.parse_mrittika(),
             TokenKind::Arambhah => self.parse_karyakram(),
             TokenKind::Yadi => self.parse_yadi(),
             TokenKind::Yavat => self.parse_yavat(),
@@ -197,6 +201,87 @@ impl Parser {
         }
         self.expect(TokenKind::Samaptih)?;
         Ok(ASTNode::KaryakramNode { shareera })
+    }
+
+    fn parse_mrittika(&mut self) -> Result<ASTNode, ParseError> {
+        let start_span = self.peek().span;
+        self.advance(); // consume Mrittika
+
+        if self.mrittika_seen {
+            return Err(ParseError::DuplicateMrittika { span: start_span });
+        }
+        self.mrittika_seen = true;
+
+        let name_tok = self.expect_string()?;
+        self.expect(TokenKind::LBrace)?;
+
+        let naamadheya = self.parse_naamadheya()?;
+
+        let mut vikaras = Vec::new();
+        while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+            let vikara = self.parse_vikara_entry()?;
+            vikaras.push(vikara);
+        }
+        self.expect(TokenKind::RBrace)?;
+        if self.check(&TokenKind::Danda) {
+            self.advance();
+        }
+
+        Ok(ASTNode::MrittikaNode {
+            package_name: name_tok,
+            naamadheya,
+            vikaras,
+            span: start_span,
+        })
+    }
+
+    fn parse_naamadheya(&mut self) -> Result<NaamadheyaNode, ParseError> {
+        let start_span = self.peek().span;
+        if !self.check(&TokenKind::Naamadheya) {
+            return Err(ParseError::MissingNaamadheya { span: start_span });
+        }
+        self.advance(); // consume Naamadheya
+        let version_string = self.expect_string()?;
+        if version_string.is_empty() {
+            return Err(ParseError::MissingNaamadheya { span: start_span });
+        }
+        self.expect(TokenKind::Danda)?;
+        Ok(NaamadheyaNode {
+            version_string,
+            span: start_span,
+        })
+    }
+
+    fn parse_vikara_entry(&mut self) -> Result<VikaraEntry, ParseError> {
+        let start_span = self.peek().span;
+        let kind = match self.peek().kind {
+            TokenKind::SukshmaVikara => {
+                self.advance();
+                VikaraKind::Sukshma
+            }
+            TokenKind::SthulaVikara => {
+                self.advance();
+                VikaraKind::Sthula
+            }
+            TokenKind::SatyaBheda => {
+                self.advance();
+                VikaraKind::SatyaBheda
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken {
+                    expected: "sukshma-vikara, sthula-vikara, or satya-bheda".to_string(),
+                    found: self.peek().kind.clone(),
+                    span: self.peek().span,
+                });
+            }
+        };
+        let description = self.expect_string()?;
+        self.expect(TokenKind::Danda)?;
+        Ok(VikaraEntry {
+            kind,
+            description,
+            span: start_span,
+        })
     }
 
 fn parse_dhatu_def(&mut self, generic_params: Vec<String>) -> Result<ASTNode, ParseError> {
@@ -3464,5 +3549,192 @@ mod doc_tests {
             }
             _ => panic!("expected KaryakramNode"),
         }
+    }
+}
+
+// --- VERSIONING (VIKARA) PARSER TESTS ---
+
+#[cfg(test)]
+mod mrittika_tests {
+    use super::*;
+
+    fn span() -> Span {
+        Span { line: 1, col: 1, len: 1 }
+    }
+
+    fn nm(s: &str) -> Token {
+        Token { kind: TokenKind::Naama(s.to_string()), span: span() }
+    }
+
+    fn kw(kind: TokenKind) -> Token {
+        Token { kind, span: span() }
+    }
+
+    fn string_literal(s: &str) -> Token {
+        Token { kind: TokenKind::VaakLiteral(s.to_string()), span: span() }
+    }
+
+    fn parse_tokens(tokens: Vec<Token>) -> Result<ASTNode, ParseError> {
+        let mut parser = Parser::new(tokens);
+        parser.parse()
+    }
+
+    // Minimal valid mrittika block (just naamadheya, no vikara entries)
+    #[test]
+    fn test_parse_minimal_mrittika_block() {
+        let tokens = vec![
+            kw(TokenKind::Mrittika),
+            string_literal("my-package"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Naamadheya),
+            string_literal("1.0.0"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse minimal mrittika block");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::MrittikaNode { package_name, naamadheya, vikaras, .. } => {
+                        assert_eq!(package_name, "my-package");
+                        assert_eq!(naamadheya.version_string, "1.0.0");
+                        assert!(vikaras.is_empty());
+                    }
+                    other => panic!("expected MrittikaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Mrittika block with multiple vikara entries of different kinds in mixed order
+    #[test]
+    fn test_parse_mrittika_with_mixed_vikaras() {
+        let tokens = vec![
+            kw(TokenKind::Mrittika),
+            string_literal("my-package"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Naamadheya),
+            string_literal("2.0.0"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::SukshmaVikara),
+            string_literal("fixed typo"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::SatyaBheda),
+            string_literal("removed deprecated API"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::SthulaVikara),
+            string_literal("added new helper fn"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::SukshmaVikara),
+            string_literal("more fixes"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse mrittika with mixed vikaras");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::MrittikaNode { vikaras, .. } => {
+                        assert_eq!(vikaras.len(), 4);
+                        assert!(matches!(vikaras[0].kind, VikaraKind::Sukshma));
+                        assert_eq!(vikaras[0].description, "fixed typo");
+                        assert!(matches!(vikaras[1].kind, VikaraKind::SatyaBheda));
+                        assert_eq!(vikaras[1].description, "removed deprecated API");
+                        assert!(matches!(vikaras[2].kind, VikaraKind::Sthula));
+                        assert_eq!(vikaras[2].description, "added new helper fn");
+                        assert!(matches!(vikaras[3].kind, VikaraKind::Sukshma));
+                        assert_eq!(vikaras[3].description, "more fixes");
+                    }
+                    other => panic!("expected MrittikaNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    // Missing naamadheya -> D094 emitted
+    #[test]
+    fn test_parse_mrittika_missing_naamadheya_d094() {
+        let tokens = vec![
+            kw(TokenKind::Mrittika),
+            string_literal("my-package"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::SukshmaVikara),
+            string_literal("some change"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "mrittika without naamadheya should error with D094");
+    }
+
+    // Empty-string naamadheya -> D094 emitted
+    #[test]
+    fn test_parse_mrittika_empty_naamadheya_d094() {
+        let tokens = vec![
+            kw(TokenKind::Mrittika),
+            string_literal("my-package"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Naamadheya),
+            string_literal(""),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "naamadheya with empty string should error with D094");
+    }
+
+    // Two mrittika blocks in one file -> D093 emitted on the second
+    #[test]
+    fn test_parse_two_mrittika_blocks_d093() {
+        let tokens = vec![
+            kw(TokenKind::Mrittika),
+            string_literal("pkg-a"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Naamadheya),
+            string_literal("1.0.0"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Mrittika),
+            string_literal("pkg-b"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::Naamadheya),
+            string_literal("2.0.0"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "second mrittika block should error with D093");
+    }
+
+    // naamadheya after vikara-entry instead of first -> should fail to parse
+    #[test]
+    fn test_parse_naamadheya_after_vikara_fails() {
+        let tokens = vec![
+            kw(TokenKind::Mrittika),
+            string_literal("my-package"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::SukshmaVikara),
+            string_literal("some change"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Naamadheya),
+            string_literal("1.0.0"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "naamadheya after vikara should produce a parse error");
     }
 }

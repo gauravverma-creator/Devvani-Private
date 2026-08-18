@@ -16,3 +16,8 @@ inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", feat
 llvm-sys = { version = "140.1", features = ["force-dynamic"] }
 serde_json = "1.0"
 clap = { version = "4.0", features = ["derive"] }
+tempfile = "3"
+
+[dev-dependencies]
+assert_cmd = "2"
+tempfile = "3"

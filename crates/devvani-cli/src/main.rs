@@ -1,5 +1,6 @@
 use clap::{Parser as ClapParser, Subcommand, ValueEnum};
 use devvani_compiler::diagnostics::DiagnosticEngine;
+use devvani_compiler::Compiler;
 use devvani_lexer::{Lexer, SandhiMode};
 use devvani_llvm::codegen::IrEmitter;
 use devvani_llvm::target::DevvaniTarget;
@@ -8,7 +9,8 @@ use devvani_typesystem::checker::TypeChecker;
 use inkwell::context::Context;
 use inkwell::targets::FileType;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use tempfile::TempDir;
 
 #[derive(ClapParser)]
 #[command(name = "devvani")]
@@ -55,6 +57,32 @@ enum Commands {
     Install { package: String },
     /// List loaded modules and registry info
     Modules,
+    /// Generate HTML documentation for a Devvani file
+    Doc {
+        file: String,
+        #[arg(short, long)]
+        output: Option<String>,
+    },
+}
+
+fn sanitize_crate_name(name: &str) -> String {
+    name.chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
+        .collect()
+}
+
+fn write_cargo_project(dir: &Path, crate_name: &str, rust_code: &str) -> std::io::Result<()> {
+    let src_dir = dir.join("src");
+    fs::create_dir_all(&src_dir)?;
+    fs::write(
+        dir.join("Cargo.toml"),
+        format!(
+            "[package]\nname = \"{}\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n[lib]\npath = \"src/lib.rs\"\n",
+            crate_name
+        ),
+    )?;
+    fs::write(src_dir.join("lib.rs"), rust_code)?;
+    Ok(())
 }
 
 fn main() {
@@ -298,6 +326,68 @@ fn main() {
                 .collect();
 
             println!("{}", DiagnosticEngine::report(&diagnostics));
+        }
+        Commands::Doc { file, output } => {
+            let compiler = Compiler::new(file);
+            let rust_code = match compiler.compile() {
+                Ok(code) => code,
+                Err(e) => {
+                    eprintln!("Compilation error: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            let crate_name = sanitize_crate_name(
+                Path::new(file)
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("devvani_doc"),
+            );
+
+            let project_dir = if let Some(output_dir) = output {
+                let path = PathBuf::from(output_dir);
+                if let Err(e) = write_cargo_project(&path, &crate_name, &rust_code) {
+                    eprintln!("Failed to write Cargo project: {}", e);
+                    std::process::exit(1);
+                }
+                path
+            } else {
+                let tmp_dir = match TempDir::new() {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("Failed to create temp directory: {}", e);
+                        std::process::exit(1);
+                    }
+                };
+                let path = tmp_dir.path().to_path_buf();
+                if let Err(e) = write_cargo_project(&path, &crate_name, &rust_code) {
+                    eprintln!("Failed to write Cargo project: {}", e);
+                    std::process::exit(1);
+                }
+                tmp_dir.keep()
+            };
+
+            let cargo_output = match std::process::Command::new("cargo")
+                .arg("doc")
+                .arg("--no-deps")
+                .current_dir(&project_dir)
+                .output()
+            {
+                Ok(o) => o,
+                Err(e) => {
+                    eprintln!("Failed to run cargo doc: {}", e);
+                    std::process::exit(1);
+                }
+            };
+
+            if !cargo_output.status.success() {
+                let stderr = String::from_utf8_lossy(&cargo_output.stderr);
+                eprintln!("cargo doc failed:\n{}", stderr);
+                std::process::exit(1);
+            }
+
+            let doc_path = project_dir.join("target").join("doc").join(&crate_name).join("index.html");
+            println!("{}", doc_path.display());
         }
     }
 }

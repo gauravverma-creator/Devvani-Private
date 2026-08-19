@@ -1,5 +1,5 @@
 use crate::{lakara::*, linga::*, symbol::*, type_env::TypeEnv, vacana::*, vibhakti::*};
-use devvani_ast::node::KarakaParam;
+use devvani_ast::node::{KarakaParam, NaamadheyaNode, VikaraEntry, VikaraKind};
 use devvani_ast::ASTNode;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
@@ -144,6 +144,12 @@ pub enum TypeCheckError {
     },
     /// D089 — परीक्षाशरीरावैषम्य (ParikshaaShariraVaisamya): parikshaa body does not type-check to unit/void
     ParikshaaBodyNotUnit,
+    /// D090 — अवैधनामधेयरूप (InvalidNaamadheyaFormat): naamadheya string is not a valid MAJOR.MINOR.PATCH shape
+    InvalidNaamadheyaFormat(String),
+    /// D095 — अवैधपैकेजनाम (InvalidPackageName): package name in mrittika block is not a valid identifier
+    InvalidPackageName,
+    /// D096 — सत्यभेदमहत्तरबुंद (SatyaBhedaRequiresMajorBump): satya-bheda declared while MAJOR >= 1 without a major-version bump
+    SatyaBhedaRequiresMajorBump,
 }
 
 impl fmt::Display for TypeCheckError {
@@ -364,10 +370,19 @@ impl fmt::Display for TypeCheckError {
               TypeCheckError::SadrishyaNigamanaNotEqualityComparable { ty } => {
                   write!(f, "Sadrishya-nigamana-not-equality-comparable: type {:?} does not support equality comparison", ty)
               }
-              TypeCheckError::ParikshaaBodyNotUnit => {
-                  write!(f, "Parikshaa-body-not-unit: parikshaa body must return unit/void")
-              }
-          }
+               TypeCheckError::ParikshaaBodyNotUnit => {
+                   write!(f, "Parikshaa-body-not-unit: parikshaa body must return unit/void")
+               }
+               TypeCheckError::InvalidNaamadheyaFormat(msg) => {
+                   write!(f, "Invalid-naamadheya-format: {}", msg)
+               }
+               TypeCheckError::InvalidPackageName => {
+                   write!(f, "Invalid-package-name: package name must be a non-empty ASCII identifier starting with a letter, containing only letters, digits, and hyphens, with no consecutive or trailing hyphens")
+               }
+               TypeCheckError::SatyaBhedaRequiresMajorBump => {
+                   write!(f, "Satya-bheda-requires-major-bump: a breaking change (satya-bheda) at MAJOR >= 1 requires the naamadheya to reflect a major-version increment")
+               }
+           }
       }
   }
 
@@ -2014,10 +2029,15 @@ ASTNode::SamprapatiNode { expr, .. } => {
                       });
                   }
 
-                  DevvaniType::Subject("Bool".to_string())
-              }
+                   DevvaniType::Subject("Bool".to_string())
+               }
 
-               _ => DevvaniType::Unknown,
+               ASTNode::MrittikaNode { package_name, naamadheya, vikaras, .. } => {
+                   self.check_mrittika(package_name, naamadheya, vikaras);
+                   DevvaniType::Unknown
+               }
+
+                _ => DevvaniType::Unknown,
           };
           self.node_type_map.insert(node as *const ASTNode, ty.clone());
           ty
@@ -2080,6 +2100,148 @@ ASTNode::SamprapatiNode { expr, .. } => {
                 .cloned()
                 .into_iter()
                 .collect(),
+        }
+    }
+
+    /// Semantic validation for a `mrittika` (package manifest) block.
+    ///
+    /// CHECK 1 — D090: naamadheya must be a valid MAJOR.MINOR.PATCH string
+    ///   (optionally with a pre-release suffix after a hyphen).
+    /// CHECK 2 — D095: package_name must be a valid package identifier.
+    /// CHECK 3 — D096: if satya-bheda entries are present and naamadheya is valid,
+    ///   MAJOR must be 0 (pre-1.0) — otherwise a breaking change at MAJOR >= 1
+    ///   requires a major-version bump.
+    fn check_mrittika(
+        &mut self,
+        package_name: &str,
+        naamadheya: &NaamadheyaNode,
+        vikaras: &[VikaraEntry],
+    ) {
+        let naamadheya_valid = self.validate_naamadheya(naamadheya);
+        self.validate_package_name(package_name);
+
+        if naamadheya_valid {
+            let has_satya_bheda = vikaras
+                .iter()
+                .any(|v| matches!(v.kind, VikaraKind::SatyaBheda));
+            if has_satya_bheda {
+                self.validate_satya_bheda_major_bump(&naamadheya.version_string);
+            }
+        }
+    }
+
+    fn validate_naamadheya(&mut self, naamadheya: &NaamadheyaNode) -> bool {
+        let raw = naamadheya.version_string.clone();
+        let trimmed = raw.trim();
+
+        if trimmed.is_empty() {
+            self.errors.push(TypeCheckError::InvalidNaamadheyaFormat(
+                "naamadheya must be a non-empty MAJOR.MINOR.PATCH string (e.g. \"1.0.0\")".to_string(),
+            ));
+            return false;
+        }
+
+        if trimmed != raw {
+            self.errors.push(TypeCheckError::InvalidNaamadheyaFormat(
+                "naamadheya must not contain leading or trailing whitespace".to_string(),
+            ));
+            return false;
+        }
+
+        let pre_release = trimmed.split_once('-');
+        let core = pre_release.map(|(c, _)| c).unwrap_or(trimmed);
+        let parts: Vec<&str> = core.split('.').collect();
+
+        if parts.len() != 3 {
+            self.errors.push(TypeCheckError::InvalidNaamadheyaFormat(
+                format!("naamadheya must have exactly three dot-separated numeric components (MAJOR.MINOR.PATCH), found {} components in \"{}\"", parts.len(), trimmed),
+            ));
+            return false;
+        }
+
+        for part in &parts {
+            if part.is_empty() {
+                self.errors.push(TypeCheckError::InvalidNaamadheyaFormat(
+                    format!("naamadheya component must not be empty in \"{}\"", trimmed),
+                ));
+                return false;
+            }
+            if !part.chars().all(|c| c.is_ascii_digit()) {
+                self.errors.push(TypeCheckError::InvalidNaamadheyaFormat(
+                    format!("naamadheya component \"{}\" must contain only ASCII digits in \"{}\"", part, trimmed),
+                ));
+                return false;
+            }
+            if part.len() > 1 && part.starts_with('0') {
+                self.errors.push(TypeCheckError::InvalidNaamadheyaFormat(
+                    format!("naamadheya component \"{}\" must not have leading zeros in \"{}\"", part, trimmed),
+                ));
+                return false;
+            }
+        }
+
+        if let Some((_, pre)) = pre_release {
+            if pre.is_empty() || pre.trim().is_empty() {
+                self.errors.push(TypeCheckError::InvalidNaamadheyaFormat(
+                    format!("naamadheya pre-release suffix after hyphen must not be empty in \"{}\"", trimmed),
+                ));
+                return false;
+            }
+        }
+
+        true
+    }
+
+    fn validate_package_name(&mut self, package_name: &str) {
+        let trimmed = package_name.trim();
+
+        if trimmed.is_empty() {
+            self.errors.push(TypeCheckError::InvalidPackageName);
+            return;
+        }
+
+        if trimmed != package_name {
+            self.errors.push(TypeCheckError::InvalidPackageName);
+            return;
+        }
+
+        let chars: Vec<char> = trimmed.chars().collect();
+        if !chars[0].is_ascii_alphabetic() {
+            self.errors.push(TypeCheckError::InvalidPackageName);
+            return;
+        }
+
+        for (_i, c) in chars.iter().enumerate() {
+            if !c.is_ascii_alphanumeric() && *c != '-' {
+                self.errors.push(TypeCheckError::InvalidPackageName);
+                return;
+            }
+        }
+
+        if trimmed.ends_with('-') {
+            self.errors.push(TypeCheckError::InvalidPackageName);
+            return;
+        }
+
+        if trimmed.contains("--") {
+            self.errors.push(TypeCheckError::InvalidPackageName);
+            return;
+        }
+    }
+
+    fn validate_satya_bheda_major_bump(&mut self, version_string: &str) {
+        let trimmed = version_string.trim();
+        let core = trimmed.split_once('-').map(|(c, _)| c).unwrap_or(trimmed);
+        let parts: Vec<&str> = core.split('.').collect();
+
+        if parts.is_empty() {
+            return;
+        }
+
+        if let Ok(major) = parts[0].parse::<u64>() {
+            if major >= 1 {
+                self.errors.push(TypeCheckError::SatyaBhedaRequiresMajorBump);
+            }
         }
     }
 
@@ -5470,6 +5632,388 @@ type_name: "sankhya".to_string(),
                 .iter()
                 .any(|e| matches!(e, TypeCheckError::ParikshaaBodyNotUnit)),
             "expected ParikshaaBodyNotUnit D089, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // ===== Versioning (Mrittika / Vikara) Semantic Validation Tests =====
+
+    fn mrittika_node(
+        package_name: &str,
+        version_string: &str,
+        vikaras: Vec<VikaraEntry>,
+    ) -> ASTNode {
+        ASTNode::MrittikaNode {
+            package_name: package_name.to_string(),
+            naamadheya: NaamadheyaNode {
+                version_string: version_string.to_string(),
+                span: span(),
+            },
+            vikaras,
+            span: span(),
+        }
+    }
+
+    fn vikara_entry(kind: VikaraKind, description: &str) -> VikaraEntry {
+        VikaraEntry {
+            kind,
+            description: description.to_string(),
+            span: span(),
+        }
+    }
+
+    // --- D090: InvalidNaamadheyaFormat ---
+
+    #[test]
+    fn test_naamadheya_valid_1_0_0() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected no D090 for valid \"1.0.0\", got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_valid_0_1_0() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "0.1.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.is_empty(),
+            "expected no errors for valid \"0.1.0\", got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_valid_0_0_1() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "0.0.1", vec![]);
+        checker.check(&mrittika);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_naamadheya_valid_10_20_30() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "10.20.30", vec![]);
+        checker.check(&mrittika);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_naamadheya_valid_with_prerelease_alpha() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "1.0.0-alpha", vec![]);
+        checker.check(&mrittika);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_naamadheya_valid_with_prerelease_beta_dot_1() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "2.0.0-beta.1", vec![]);
+        checker.check(&mrittika);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_too_few_components_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "1.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for \"1.0\", got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_too_many_components_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "1.0.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for \"1.0.0.0\", got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_leading_zero_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "1.00.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for leading zero, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_non_numeric_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "a.b.c", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for \"a.b.c\", got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_empty_prerelease_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "1.0.0-", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for empty pre-release, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_empty_string_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for empty string, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_leading_whitespace_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", " 1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for leading whitespace, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_naamadheya_invalid_trailing_whitespace_d090() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-pkg", "1.0.0 ", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))),
+            "expected D090 for trailing whitespace, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // --- D095: InvalidPackageName ---
+
+    #[test]
+    fn test_package_name_valid_devvani_core() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("devvani-core", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidPackageName)),
+            "expected no D095 for \"devvani-core\", got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_package_name_valid_my_package() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my-package", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_package_name_valid_single_letter() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("a", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_package_name_valid_with_digits() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("package123", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(checker.errors.is_empty());
+    }
+
+    #[test]
+    fn test_package_name_invalid_empty_d095() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidPackageName)),
+            "expected D095 for empty name, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_package_name_invalid_whitespace_only_d095() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("   ", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidPackageName)),
+            "expected D095 for whitespace-only name, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_package_name_invalid_starts_with_hyphen_d095() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("-package", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidPackageName)),
+            "expected D095 for name starting with hyphen, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_package_name_invalid_trailing_hyphen_d095() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("package-", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidPackageName)),
+            "expected D095 for trailing hyphen, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_package_name_invalid_consecutive_hyphens_d095() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("my--package", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidPackageName)),
+            "expected D095 for consecutive hyphens, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_package_name_invalid_starts_with_digit_d095() {
+        let mut checker = TypeChecker::new();
+        let mrittika = mrittika_node("123package", "1.0.0", vec![]);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::InvalidPackageName)),
+            "expected D095 for name starting with digit, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // --- D096: SatyaBhedaRequiresMajorBump ---
+
+    #[test]
+    fn test_satya_bheda_major_zero_passes_silently() {
+        let mut checker = TypeChecker::new();
+        let vikaras = vec![
+            vikara_entry(VikaraKind::Sukshma, "internal fix"),
+            vikara_entry(VikaraKind::SatyaBheda, "breaking API change"),
+        ];
+        let mrittika = mrittika_node("my-pkg", "0.5.0", vikaras);
+        checker.check(&mrittika);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::SatyaBhedaRequiresMajorBump)),
+            "D096 should not fire for MAJOR=0, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_satya_bheda_major_one_fires_d096() {
+        let mut checker = TypeChecker::new();
+        let vikaras = vec![
+            vikara_entry(VikaraKind::Sthula, "new feature"),
+            vikara_entry(VikaraKind::SatyaBheda, "removed old API"),
+        ];
+        let mrittika = mrittika_node("my-pkg", "1.0.0", vikaras);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::SatyaBhedaRequiresMajorBump)),
+            "expected D096 for MAJOR=1 with satya-bheda, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_satya_bheda_major_two_fires_d096() {
+        let mut checker = TypeChecker::new();
+        let vikaras = vec![vikara_entry(VikaraKind::SatyaBheda, "breaking change")];
+        let mrittika = mrittika_node("my-pkg", "2.3.1", vikaras);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::SatyaBhedaRequiresMajorBump)),
+            "expected D096 for MAJOR=2 with satya-bheda, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_satya_bheda_malformed_naamadheya_only_d090_no_d096() {
+        let mut checker = TypeChecker::new();
+        let vikaras = vec![vikara_entry(VikaraKind::SatyaBheda, "breaking change")];
+        let mrittika = mrittika_node("my-pkg", "not-a-version", vikaras);
+        checker.check(&mrittika);
+        let d090_count = checker.errors.iter().filter(|e| matches!(e, TypeCheckError::InvalidNaamadheyaFormat(_))).count();
+        let d096_count = checker.errors.iter().filter(|e| matches!(e, TypeCheckError::SatyaBhedaRequiresMajorBump)).count();
+        assert!(d090_count >= 1, "expected at least one D090, got: {:?}", checker.errors);
+        assert_eq!(d096_count, 0, "D096 must not fire when naamadheya is malformed, got: {:?}", checker.errors);
+    }
+
+    #[test]
+    fn test_no_satya_bheda_never_fires_d096() {
+        let mut checker = TypeChecker::new();
+        let vikaras = vec![
+            vikara_entry(VikaraKind::Sukshma, "patch"),
+            vikara_entry(VikaraKind::Sthula, "minor"),
+        ];
+        let mrittika = mrittika_node("my-pkg", "1.0.0", vikaras);
+        checker.check(&mrittika);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::SatyaBhedaRequiresMajorBump)),
+            "D096 must not fire without satya-bheda, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_valid_mrittika_block_zero_diagnostics() {
+        let mut checker = TypeChecker::new();
+        let vikaras = vec![
+            vikara_entry(VikaraKind::Sukshma, "typo fix"),
+            vikara_entry(VikaraKind::Sthula, "added new endpoint"),
+            vikara_entry(VikaraKind::SatyaBheda, "removed deprecated endpoint"),
+        ];
+        let mrittika = mrittika_node("devvani-core", "0.5.0", vikaras);
+        checker.check(&mrittika);
+        assert!(
+            checker.errors.is_empty(),
+            "expected zero diagnostics for valid mrittika block, got: {:?}",
             checker.errors
         );
     }

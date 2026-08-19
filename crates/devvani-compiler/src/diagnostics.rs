@@ -736,25 +736,83 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                      "Eq/PartialEq implement karne wale type ka upayog karo.".to_string()
                  ),
              },
-             TypeCheckError::ParikshaaBodyNotUnit => Diagnostic {
-                 severity: Severity::Dosha,
-                 code: "D089".to_string(),
-                 sanskrit_title: "परीक्षाशरीरवैषम्य".to_string(),
-                 roman_title: "Parikshaa Sharira Vaisamya".to_string(),
-                 message: "Parikshaa (test) ka shareera (body) shunya-prakaar \
-                           (unit/void) return karna chahiye, par koi mulya \
-                           (value) produce kar raha hai. Nyāya vyākhyāna: \
-                           parikshaa ka phalam kevala siddha (established) ya \
-                           asiddha (unestablished) hota hai, na ki koi dravya.".to_string(),
-                 sutra_ref: Some(
-                     "Nyāya Sūtra (Parikshaa — examination doctrine)".to_string()
-                 ),
-                 hint: Some(
-                     "Parikshaa body ke ant mein vadati ya return-type expression \
-                      na likho; assertions nigamana/sadrishya-nigamana se karo.".to_string()
-                 ),
-             },
-         }
+              TypeCheckError::ParikshaaBodyNotUnit => Diagnostic {
+                  severity: Severity::Dosha,
+                  code: "D089".to_string(),
+                  sanskrit_title: "परीक्षाशरीरवैषम्य".to_string(),
+                  roman_title: "Parikshaa Sharira Vaisamya".to_string(),
+                  message: "Parikshaa (test) ka shareera (body) shunya-prakaar \
+                            (unit/void) return karna chahiye, par koi mulya \
+                            (value) produce kar raha hai. Nyāya vyākhyāna: \
+                            parikshaa ka phalam kevala siddha (established) ya \
+                            asiddha (unestablished) hota hai, na ki koi dravya.".to_string(),
+                  sutra_ref: Some(
+                      "Nyāya Sūtra (Parikshaa — examination doctrine)".to_string()
+                  ),
+                  hint: Some(
+                      "Parikshaa body ke ant mein vadati ya return-type expression \
+                       na likho; assertions nigamana/sadrishya-nigamana se karo.".to_string()
+                  ),
+              },
+              TypeCheckError::InvalidNaamadheyaFormat(msg) => Diagnostic {
+                  severity: Severity::Dosha,
+                  code: "D090".to_string(),
+                  sanskrit_title: "अवैधनामधेयरूप".to_string(),
+                  roman_title: "Invalid Naamadheya Format".to_string(),
+                  message: msg.clone(),
+                  sutra_ref: Some(
+                      "Chandogya Upanishad 6.1.4 (Vacharambhana — version-label must have a well-formed shape)".to_string()
+                  ),
+                  hint: Some(
+                      "naamadheya ko MAJOR.MINOR.PATCH format mein likho, e.g. \"1.0.0\" ya \"0.1.0\". \
+                       Aoptional pre-release hyphen-segment bhi add kar sakte ho, e.g. \"1.0.0-alpha\"."
+                          .to_string()
+                  ),
+              },
+              TypeCheckError::InvalidPackageName => Diagnostic {
+                  severity: Severity::Dosha,
+                  code: "D095".to_string(),
+                  sanskrit_title: "अवैधपैकेजनाम".to_string(),
+                  roman_title: "Invalid Package Name".to_string(),
+                  message: "Mrittika block ka package name valid ASCII identifier \
+                            nahi hai. Sirf letters (a-z, A-Z), digits (0-9), aur \
+                            hyphens (-) allowed hain; name letter se start hona \
+                            chahiye; consecutive hyphens ya trailing hyphen nahi \
+                            chahiye; leading/trailing whitespace nahi chahiye."
+                      .to_string(),
+                  sutra_ref: Some(
+                      "Chandogya Upanishad 6.1.4 (Vacharambhana — substance/identity must have a well-formed name)".to_string()
+                  ),
+                  hint: Some(
+                      "Package name mein sirf letters, digits, aur single hyphens use karo. \
+                       Example: \"devvani-core\", \"my-package\", \"a\"."
+                          .to_string()
+                  ),
+              },
+              TypeCheckError::SatyaBhedaRequiresMajorBump => Diagnostic {
+                  severity: Severity::Dosha,
+                  code: "D096".to_string(),
+                  sanskrit_title: "सत्यभेदमहत्तरबुंद".to_string(),
+                  roman_title: "Satya Bheda Requires Major Bump".to_string(),
+                  message: "Satya-bheda (breaking change) declare kar rahe ho \
+                            jab MAJOR version >= 1 par ho. Ek breaking change \
+                            ka naamadheya mein major-version increment reflect \
+                            karna chahiye. Kyunki yeh single-file check hai \
+                            (kinhin prior version ki tulna nahi kar sakte), \
+                            yahaan MAJOR >= 1 par satya-bheda add karne ka \
+                            matlab hai ki naamadheya itself naye major-version \
+                            ka pratik hone chahiye."
+                      .to_string(),
+                  sutra_ref: Some(
+                      "Chandogya Upanishad 6.1.4 (Vacharambhana — breaking change requires a new name/version for the substance)".to_string()
+                  ),
+                  hint: Some(
+                      "Naamadheya ka MAJOR component bump karo (e.g. \"2.0.0\" ya \"1.0.0\") \
+                       jab satya-bheda add karo."
+                          .to_string(),
+                  ),
+              },
+          }
      }
 
     pub fn from_parse_error(err: &ParseError) -> Diagnostic {
@@ -1564,5 +1622,40 @@ mod tests {
         assert!(diag.sanskrit_title.contains("परीक्षाशरीरवैषम्य"));
         assert!(diag.message.contains("unit"));
         assert!(diag.sutra_ref.unwrap().contains("Nyāya Sūtra"));
+    }
+
+    #[test]
+    fn test_from_type_error_invalid_naamadheya_format_d090() {
+        let err = TypeCheckError::InvalidNaamadheyaFormat(
+            "naamadheya must have exactly three dot-separated numeric components (MAJOR.MINOR.PATCH)".to_string(),
+        );
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D090");
+        assert!(diag.display().contains("Invalid Naamadheya Format"));
+        assert!(diag.sanskrit_title.contains("अवैधनामधेयरूप"));
+        assert!(diag.message.contains("MAJOR.MINOR.PATCH"));
+        assert!(diag.sutra_ref.unwrap().contains("Vacharambhana"));
+    }
+
+    #[test]
+    fn test_from_type_error_invalid_package_name_d095() {
+        let err = TypeCheckError::InvalidPackageName;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D095");
+        assert!(diag.display().contains("Invalid Package Name"));
+        assert!(diag.sanskrit_title.contains("अवैधपैकेजनाम"));
+        assert!(diag.message.contains("ASCII identifier"));
+        assert!(diag.sutra_ref.unwrap().contains("Vacharambhana"));
+    }
+
+    #[test]
+    fn test_from_type_error_satya_bheda_requires_major_bump_d096() {
+        let err = TypeCheckError::SatyaBhedaRequiresMajorBump;
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D096");
+        assert!(diag.display().contains("Satya Bheda Requires Major Bump"));
+        assert!(diag.sanskrit_title.contains("सत्यभेदमहत्तरबुंद"));
+        assert!(diag.message.contains("MAJOR"));
+        assert!(diag.sutra_ref.unwrap().contains("Vacharambhana"));
     }
 }

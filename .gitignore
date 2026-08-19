@@ -23,3 +23,4 @@ namaste
 namaste.ll
 namaste.o
 namaste_test.o
+*.rlib

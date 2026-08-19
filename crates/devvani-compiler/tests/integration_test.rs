@@ -381,3 +381,132 @@ fn test_parikshaa_e2e_tarka_fails() {
     assert!(code.contains("#[should_panic]"));
     assert_test_result("tarka failing parikshaa", &code, false);
 }
+
+// ===== Versioning (Mrittika / Vikara) E2E Tests =====
+
+fn mrittika_source() -> &'static str {
+    "bhashya \"A versioned library\"।\n\
+     mrittika \"versioned-lib\" {\n\
+         naamadheya \"0.2.0\"।\n\
+         satya-bheda \"removed deprecated API\"।\n\
+         sukshma-vikara \"fixed a bug\"।\n\
+         sthula-vikara \"added new feature\"।\n\
+     }\n\
+     dhātu increment n karoti । n yoga 1 iti ।\n"
+}
+
+#[test]
+fn test_mrittika_e2e_metadata_block() {
+    let _ = fs::write("examples/mrittika_e2e.dvn", mrittika_source());
+    let result = Compiler::new("examples/mrittika_e2e.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+
+    assert!(
+        code.contains("//! # Devvani Package Metadata (मृत्तिका)"),
+        "expected metadata header in:\n{}",
+        code
+    );
+    assert!(
+        code.contains("//! - Package: versioned-lib"),
+        "expected package name in:\n{}",
+        code
+    );
+    assert!(
+        code.contains("//! - Version (नामधेय): 0.2.0"),
+        "expected version string in:\n{}",
+        code
+    );
+    assert!(
+        code.contains("//! - [SATYA-BHEDA] removed deprecated API"),
+        "expected satya-bheda entry in:\n{}",
+        code
+    );
+    assert!(
+        code.contains("//! - [SUKSHMA] fixed a bug"),
+        "expected sukshma entry in:\n{}",
+        code
+    );
+    assert!(
+        code.contains("//! - [STHULA] added new feature"),
+        "expected sthula entry in:\n{}",
+        code
+    );
+
+    // Bhashya must appear before the metadata block
+    let bhashya_pos = code.find("//! A versioned library").unwrap();
+    let metadata_pos = code.find("//! # Devvani Package Metadata").unwrap();
+    assert!(
+        bhashya_pos < metadata_pos,
+        "Bhashya must appear before metadata block"
+    );
+
+    // Vikara entries must preserve source order (satya-bheda, sukshma, sthula)
+    let sb = code
+        .find("//! - [SATYA-BHEDA] removed deprecated API")
+        .unwrap();
+    let sm = code.find("//! - [SUKSHMA] fixed a bug").unwrap();
+    let st = code
+        .find("//! - [STHULA] added new feature")
+        .unwrap();
+    assert!(
+        sb < sm && sm < st,
+        "vikara entries must preserve source order in:\n{}",
+        code
+    );
+}
+
+#[test]
+fn test_mrittika_e2e_rustc_compiles_as_bin() {
+    let _ = fs::write("examples/mrittika_rustc.dvn", mrittika_source());
+    let result = Compiler::new("examples/mrittika_rustc.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert_compiles("mrittika_e2e_bin", &code);
+}
+
+#[test]
+fn test_mrittika_e2e_rustc_compiles_as_lib() {
+    let _ = fs::write("examples/mrittika_lib.dvn", mrittika_source());
+    let result = Compiler::new("examples/mrittika_lib.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+
+    let tmp_dir = TempDir::new().expect("failed to create temp dir");
+    let rust_path = tmp_dir.path().join("mrittika_lib_verify.rs");
+    fs::write(&rust_path, &code).expect("failed to write temp rust file");
+
+    let status = Command::new("rustc")
+        .arg("--edition")
+        .arg("2021")
+        .arg("--crate-type")
+        .arg("lib")
+        .arg("--crate-name")
+        .arg("mrittika_lib_verify")
+        .arg(&rust_path)
+        .output()
+        .expect("failed to run rustc");
+
+    let stderr = String::from_utf8_lossy(&status.stderr);
+    assert!(
+        status.status.success(),
+        "rustc --crate-type lib failed for mrittika e2e:\n{}",
+        stderr
+    );
+}
+
+#[test]
+fn test_mrittika_no_block_emits_no_metadata() {
+    let _ = fs::write(
+        "examples/no_mrittika.dvn",
+        "dhātu myfunc n karoti । n yoga 1 iti ।\n",
+    );
+    let result = Compiler::new("examples/no_mrittika.dvn").compile();
+    assert!(result.is_ok(), "compile failed: {:?}", result.err());
+    let code = result.unwrap();
+    assert!(
+        !code.contains("//! # Devvani Package Metadata"),
+        "no metadata should be emitted without a mrittika block:\n{}",
+        code
+    );
+}

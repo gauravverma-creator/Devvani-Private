@@ -1,6 +1,4 @@
-use devvani_ast::ASTNode;
-use devvani_ast::KarakaParam;
-use devvani_ast::KarakaRole;
+use devvani_ast::{ASTNode, KarakaParam, KarakaRole, NaamadheyaNode, VikaraEntry, VikaraKind};
 use devvani_typesystem::{
     lakara_from_str, lakara_to_scope,
     vaak::{MoveChecker, VaakOwnership},
@@ -221,6 +219,17 @@ impl Codegen {
                         self.emit_doc_lines("//!", text);
                     } else {
                         break;
+                    }
+                }
+                for stmt in shareera {
+                    if let ASTNode::MrittikaNode {
+                        package_name,
+                        naamadheya,
+                        vikaras,
+                        ..
+                    } = stmt
+                    {
+                        self.emit_mrittika_metadata(package_name, naamadheya, vikaras);
                     }
                 }
                 self.emit_body(shareera)?;
@@ -1312,6 +1321,35 @@ impl Codegen {
         }
     }
 
+    fn emit_mrittika_metadata(
+        &mut self,
+        package_name: &str,
+        naamadheya: &NaamadheyaNode,
+        vikaras: &[VikaraEntry],
+    ) {
+        let mut block = String::new();
+        block.push_str("# Devvani Package Metadata (मृत्तिका)\n");
+        block.push_str(&format!("- Package: {}\n", package_name));
+        block.push_str(&format!(
+            "- Version (नामधेय): {}\n",
+            naamadheya.version_string
+        ));
+        if !vikaras.is_empty() {
+            block.push('\n');
+            block.push_str("## Vikara History (विकार-इतिहास)\n");
+            for vikara in vikaras {
+                let tag = match vikara.kind {
+                    VikaraKind::Sukshma => "SUKSHMA",
+                    VikaraKind::Sthula => "STHULA",
+                    VikaraKind::SatyaBheda => "SATYA-BHEDA",
+                };
+                block.push_str(&format!("- [{}] {}\n", tag, vikara.description));
+            }
+        }
+        let block = block.trim_end_matches('\n');
+        self.emit_doc_lines("//!", block);
+    }
+
     fn flush_doc_comments(&mut self) {
         let vrittis: Vec<_> = self.pending_vritti.drain(..).collect();
         let tippanis: Vec<_> = self.pending_tippani.drain(..).collect();
@@ -1353,6 +1391,9 @@ impl Codegen {
                     i += 1;
                 }
                 ASTNode::BhashyaNode { .. } => {
+                    i += 1;
+                }
+                ASTNode::MrittikaNode { .. } => {
                     i += 1;
                 }
                 _ => {
@@ -2178,8 +2219,8 @@ impl Codegen {
 mod tests {
     use super::*;
     use devvani_ast::{
-        ASTNode, AngaField, Gana, KarakaParam, Lakara as AstLakara, Linga as AstLinga, Span,
-        Vacana as AstVacana, Vibhakti,
+        ASTNode, AngaField, Gana, KarakaParam, Lakara as AstLakara, Linga as AstLinga,
+        NaamadheyaNode, Span, Vacana as AstVacana, Vibhakti, VikaraEntry, VikaraKind,
     };
     use devvani_compiler::Compiler;
 
@@ -5299,6 +5340,313 @@ mod tests {
         assert!(
             status.status.success(),
             "rustc failed for doc e2e:\n{}",
+            stderr
+        );
+    }
+
+    // ===== Versioning (Mrittika / Vikara) Codegen Tests =====
+
+    fn mrittika_node(package_name: &str, version: &str, vikaras: Vec<VikaraEntry>) -> ASTNode {
+        ASTNode::MrittikaNode {
+            package_name: package_name.to_string(),
+            naamadheya: NaamadheyaNode {
+                version_string: version.to_string(),
+                span: dummy_span(),
+            },
+            vikaras,
+            span: dummy_span(),
+        }
+    }
+
+    fn vikara_entry(kind: VikaraKind, desc: &str) -> VikaraEntry {
+        VikaraEntry {
+            kind,
+            description: desc.to_string(),
+            span: dummy_span(),
+        }
+    }
+
+    fn dummy_dhatu(name: &str) -> ASTNode {
+        ASTNode::DhatuDef {
+            name: name.to_string(),
+            generic_params: vec![],
+            lakara: devvani_ast::Lakara::Lat,
+            gana: devvani_ast::Gana::Bhvadi,
+            linga: AstLinga::Pullinga,
+            vacana: AstVacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: None,
+            body: vec![],
+            span: dummy_span(),
+        }
+    }
+
+    #[test]
+    fn test_mrittika_zero_vikaras_emits_no_history_section() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![mrittika_node("my_pkg", "1.2.0", vec![])],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("//! # Devvani Package Metadata (मृत्तिका)"),
+            "expected metadata header in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("//! - Package: my_pkg"),
+            "expected package line in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("//! - Version (नामधेय): 1.2.0"),
+            "expected version line in:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("## Vikara History"),
+            "Vikara History section should be absent when there are zero vikaras:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_mrittika_only_sukshma_emits_correct_tags() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![mrittika_node(
+                "my_pkg",
+                "0.1.0",
+                vec![
+                    vikara_entry(VikaraKind::Sukshma, "fixed typo"),
+                    vikara_entry(VikaraKind::Sukshma, "more fixes"),
+                ],
+            )],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("//! - [SUKSHMA] fixed typo"),
+            "expected SUKSHMA tag for first entry in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("//! - [SUKSHMA] more fixes"),
+            "expected SUKSHMA tag for second entry in:\n{}",
+            output
+        );
+        let pos1 = output.find("//! - [SUKSHMA] fixed typo").unwrap();
+        let pos2 = output.find("//! - [SUKSHMA] more fixes").unwrap();
+        assert!(pos1 < pos2, "vikara entries must preserve source order");
+    }
+
+    #[test]
+    fn test_mrittika_mixed_order_preserves_source_order() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![mrittika_node(
+                "my_pkg",
+                "0.2.0",
+                vec![
+                    vikara_entry(VikaraKind::SatyaBheda, "breaking change"),
+                    vikara_entry(VikaraKind::Sukshma, "internal fix"),
+                    vikara_entry(VikaraKind::Sthula, "new feature"),
+                ],
+            )],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        let breaking_pos = output
+            .find("//! - [SATYA-BHEDA] breaking change")
+            .unwrap();
+        let fix_pos = output.find("//! - [SUKSHMA] internal fix").unwrap();
+        let feat_pos = output.find("//! - [STHULA] new feature").unwrap();
+        assert!(
+            breaking_pos < fix_pos && fix_pos < feat_pos,
+            "vikara entries must appear in source order, not grouped by kind:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("//! - [SUKSHMA] internal fix\n//! - [SUKSHMA] more"),
+            "entries must not be regrouped by kind"
+        );
+    }
+
+    #[test]
+    fn test_no_mrittika_emits_no_metadata() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![dummy_dhatu("foo")],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            !output.contains("//! # Devvani Package Metadata"),
+            "no metadata should be emitted when mrittika is absent:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_mrittika_after_bhashya_metadata_after_bhashya() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![
+                ASTNode::BhashyaNode {
+                    text: "Library for math operations".to_string(),
+                    span: dummy_span(),
+                },
+                mrittika_node("my_pkg", "1.0.0", vec![]),
+                dummy_dhatu("foo"),
+            ],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        let bhashya_pos = output.find("//! Library for math operations").unwrap();
+        let metadata_pos = output
+            .find("//! # Devvani Package Metadata")
+            .unwrap();
+        let fn_pos = output.find("pub fn foo").unwrap();
+        assert!(
+            bhashya_pos < metadata_pos,
+            "metadata block must appear immediately after Bhashya"
+        );
+        assert!(
+            metadata_pos < fn_pos,
+            "metadata block must appear before function definitions"
+        );
+    }
+
+    #[test]
+    fn test_mrittika_description_with_newline_split_into_doc_lines() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![mrittika_node(
+                "my_pkg",
+                "1.0.0",
+                vec![vikara_entry(VikaraKind::Sukshma, "line one\nline two")],
+            )],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("//! - [SUKSHMA] line one"),
+            "first line of multi-line description must get //! prefix"
+        );
+        assert!(
+            output.contains("//! line two"),
+            "second line of multi-line description must get //! prefix"
+        );
+        assert!(
+            !output.contains("//! - [SUKSHMA] line one\nline two"),
+            "each line of a multi-line description must have its own //! prefix"
+        );
+    }
+
+    #[test]
+    fn test_mrittika_e2e_generated_rust_compiles() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let source =
+            "bhashya \"A versioned library\"।\n\
+             mrittika \"versioned-lib\" {\n\
+                 naamadheya \"0.2.0\"।\n\
+                 satya-bheda \"removed deprecated API\"।\n\
+                 sukshma-vikara \"fixed a bug\"।\n\
+                 sthula-vikara \"added new feature\"।\n\
+             }\n\
+             dhātu increment n karoti । n yoga 1 iti ।\n";
+
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
+        let src_path = tmp_dir.path().join("test_mrittika_e2e.dvn");
+        std::fs::write(&src_path, source).expect("failed to write devvani source");
+
+        let rust_code = Compiler::new(&src_path)
+            .compile()
+            .expect("compilation failed");
+
+        assert!(
+            rust_code.contains("//! # Devvani Package Metadata (मृत्तिका)"),
+            "expected metadata header in generated code:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("//! - Package: versioned-lib"),
+            "expected package name in:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("//! - Version (नामधेय): 0.2.0"),
+            "expected version in:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("//! - [SATYA-BHEDA] removed deprecated API"),
+            "expected satya-bheda entry in:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("//! - [SUKSHMA] fixed a bug"),
+            "expected sukshma entry in:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("//! - [STHULA] added new feature"),
+            "expected sthula entry in:\n{}",
+            rust_code
+        );
+        // Verify source order is preserved (not grouped by kind)
+        let sb = rust_code
+            .find("//! - [SATYA-BHEDA] removed deprecated API")
+            .unwrap();
+        let sm = rust_code.find("//! - [SUKSHMA] fixed a bug").unwrap();
+        let st = rust_code
+            .find("//! - [STHULA] added new feature")
+            .unwrap();
+        assert!(
+            sb < sm && sm < st,
+            "vikara entries must preserve source order in:\n{}",
+            rust_code
+        );
+        // Bhashya must appear before the metadata block
+        let bhashya_pos = rust_code
+            .find("//! A versioned library")
+            .unwrap();
+        let metadata_pos = rust_code
+            .find("//! # Devvani Package Metadata")
+            .unwrap();
+        assert!(
+            bhashya_pos < metadata_pos,
+            "Bhashya must appear before metadata block"
+        );
+
+        // Verify the generated Rust compiles with rustc
+        let rust_path = tmp_dir.path().join("test_mrittika_e2e.rs");
+        let out_path = tmp_dir.path().join("test_mrittika_e2e_out");
+        let wrapped = format!("fn main() {{\n{}\n}}", rust_code);
+        std::fs::write(&rust_path, wrapped).expect("failed to write temp rust file");
+
+        let status = Command::new("rustc")
+            .arg("--edition")
+            .arg("2021")
+            .arg("--crate-type")
+            .arg("bin")
+            .arg("--crate-name")
+            .arg("test_mrittika_e2e_verify")
+            .arg(&rust_path)
+            .arg("-o")
+            .arg(&out_path)
+            .output()
+            .expect("failed to run rustc");
+
+        let stderr = String::from_utf8_lossy(&status.stderr);
+        assert!(
+            status.status.success(),
+            "rustc failed for mrittika e2e:\n{}",
             stderr
         );
     }

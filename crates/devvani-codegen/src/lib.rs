@@ -2776,6 +2776,7 @@ mod tests {
                 span: dummy_span(),
             })),
             body: vec![],
+            is_exported: false,
             span: dummy_span(),
         };
         assert!(codegen.emit(&node).is_ok());
@@ -2822,6 +2823,7 @@ mod tests {
                 span: dummy_span(),
             })),
             body: vec![],
+            is_exported: false,
             span: dummy_span(),
         };
         assert!(codegen.emit(&node).is_ok());
@@ -3067,6 +3069,7 @@ mod tests {
                     span: dummy_span(),
                 },
             ],
+            is_exported: false,
             span: dummy_span(),
         };
         assert!(codegen.emit(&dhatu).is_ok());
@@ -3137,6 +3140,7 @@ mod tests {
             return_karaka: None,
             return_type: None,
             upasargas: vec![],
+            is_exported: false,
             span: dummy_span(),
         };
         assert!(codegen.emit(&dhatu).is_ok());
@@ -3167,6 +3171,7 @@ mod tests {
             return_karaka: None,
             return_type: None,
             upasargas: vec![],
+            is_exported: false,
             span: dummy_span(),
         };
         assert!(codegen.emit(&dhatu).is_ok());
@@ -3522,6 +3527,7 @@ mod tests {
                         span: dummy_span(),
                     })),
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::KriyaCall {
@@ -3576,6 +3582,7 @@ mod tests {
                         span: dummy_span(),
                     })),
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::KriyaCall {
@@ -3647,6 +3654,7 @@ mod tests {
                         span: dummy_span(),
                     })),
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::KriyaCall {
@@ -3727,6 +3735,7 @@ mod tests {
                         span: dummy_span(),
                     })),
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::KriyaCall {
@@ -3801,6 +3810,7 @@ mod tests {
                         }),
                         span: dummy_span(),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::KriyaCall {
@@ -3865,6 +3875,7 @@ mod tests {
                         span: dummy_span(),
                     })),
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::NirmanaNode {
@@ -4011,6 +4022,7 @@ mod tests {
                     value: 42,
                     span: dummy_span(),
                 }],
+                is_exported: false,
                 span: dummy_span(),
             }],
         };
@@ -4039,6 +4051,7 @@ mod tests {
                 return_karaka: None,
                 return_type: None,
                 body: vec![],
+                is_exported: false,
                 span: dummy_span(),
             }],
         };
@@ -4100,6 +4113,7 @@ mod tests {
                     span: dummy_span(),
                 })),
                 body: vec![],
+                is_exported: false,
                 span: dummy_span(),
             }],
         };
@@ -4158,6 +4172,7 @@ mod tests {
                             span: dummy_span(),
                         },
                     ],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::KriyaCall {
@@ -4472,6 +4487,7 @@ mod tests {
                             span: dummy_span(),
                         }),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::DhatuDef {
@@ -4506,6 +4522,7 @@ mod tests {
                             span: dummy_span(),
                         }),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::DhatuDef {
@@ -4540,6 +4557,7 @@ mod tests {
                             span: dummy_span(),
                         }),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -4598,6 +4616,7 @@ mod tests {
                         span: dummy_span(),
                     }),
                 }],
+                is_exported: false,
                 span: dummy_span(),
             }],
         };
@@ -4653,6 +4672,7 @@ mod tests {
                         }),
                         span: dummy_span(),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::DhatuDef {
@@ -4688,6 +4708,7 @@ mod tests {
                         }),
                         span: dummy_span(),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -4744,6 +4765,7 @@ mod tests {
                         }),
                         span: dummy_span(),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
                 ASTNode::DhatuDef {
@@ -4778,6 +4800,7 @@ mod tests {
                             span: dummy_span(),
                         }),
                     }],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -4836,6 +4859,7 @@ mod tests {
                     }),
                     span: dummy_span(),
                 }],
+                is_exported: false,
                 span: dummy_span(),
             }],
         };
@@ -5035,6 +5059,7 @@ mod tests {
                     return_karaka: None,
                     return_type: None,
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -5105,6 +5130,7 @@ mod tests {
                     return_karaka: None,
                     return_type: None,
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -5159,6 +5185,7 @@ mod tests {
                     return_karaka: None,
                     return_type: None,
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -5202,6 +5229,7 @@ mod tests {
                     return_karaka: None,
                     return_type: None,
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -5281,6 +5309,7 @@ mod tests {
                     return_karaka: None,
                     return_type: None,
                     body: vec![],
+                    is_exported: false,
                     span: dummy_span(),
                 },
             ],
@@ -5379,6 +5408,7 @@ mod tests {
             return_karaka: None,
             return_type: None,
             body: vec![],
+            is_exported: false,
             span: dummy_span(),
         }
     }

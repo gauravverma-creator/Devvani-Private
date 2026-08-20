@@ -86,8 +86,32 @@ impl Parser {
                      })
                  }
              }
-             TokenKind::Nigamana => self.parse_nigamana_statement(),
-             TokenKind::SadrishyaNigamana => self.parse_sadrishya_nigamana_statement(),
+              TokenKind::Aptavakya => {
+                  let aptavakya_span = self.peek().span;
+                  self.advance();
+                  let next_kind = self.peek().kind.clone();
+                  match next_kind {
+                      TokenKind::VaakLiteral(_) => self.parse_aptavakya_block(),
+                      TokenKind::Dhātu => {
+                          self.advance();
+                          let mut node = self.parse_dhatu_def(vec![])?;
+                          if let ASTNode::DhatuDef { is_exported, .. } = &mut node {
+                              *is_exported = true;
+                          }
+                          Ok(node)
+                      }
+                      _ => Err(ParseError::InvalidAptavakyaUsage {
+                          found: next_kind,
+                          span: aptavakya_span,
+                      }),
+                  }
+              }
+               TokenKind::Shraddha => self.parse_shraddha_block(),
+               TokenKind::BahyaDhatu => Err(ParseError::BahyaDhatuOutsideAptavakya {
+                   span: self.peek().span,
+               }),
+              TokenKind::Nigamana => self.parse_nigamana_statement(),
+              TokenKind::SadrishyaNigamana => self.parse_sadrishya_nigamana_statement(),
              TokenKind::AsadrishyaNigamana => self.parse_asadrishya_nigamana_statement(),
              TokenKind::Vritti => self.parse_vritti(),
              TokenKind::Tippani => self.parse_tippani(),
@@ -393,20 +417,21 @@ fn parse_dhatu_def(&mut self, generic_params: Vec<String>) -> Result<ASTNode, Pa
              self.advance();
          }
 
-         Ok(ASTNode::DhatuDef {
-             name,
-             generic_params,
-             gana: Gana::Bhvadi,
-             lakara: Lakara::Lat,
-             linga: Linga::Pullinga,
-             vacana: Vacana::Eka,
-             params,
-             upasargas: vec![],
-              return_karaka: None,
-              return_type,
-              body,
-              span: name_tok.span,
-          })
+          Ok(ASTNode::DhatuDef {
+              name,
+              generic_params,
+              gana: Gana::Bhvadi,
+              lakara: Lakara::Lat,
+              linga: Linga::Pullinga,
+              vacana: Vacana::Eka,
+              params,
+              upasargas: vec![],
+               return_karaka: None,
+               return_type,
+               body,
+               is_exported: false,
+               span: name_tok.span,
+           })
       }
 
      fn parse_dhara(&mut self) -> Result<ASTNode, ParseError> {
@@ -1492,7 +1517,85 @@ ASTNode::SamprapatiNode { span, .. } => *span,
     fn is_at_end(&self) -> bool {
         self.pos >= self.tokens.len() || self.tokens[self.pos].kind == TokenKind::Samaapti
     }
-}
+
+     fn parse_aptavakya_block(&mut self) -> Result<ASTNode, ParseError> {
+         let abi_tok = self.expect_string()?;
+         self.expect(TokenKind::LBrace)?;
+         let mut foreign_fns = Vec::new();
+         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+             foreign_fns.push(self.parse_bahya_dhatu()?);
+         }
+         self.expect(TokenKind::RBrace)?;
+         if self.check(&TokenKind::Danda) {
+             self.advance();
+         }
+         Ok(ASTNode::AptavakyaBlockNode {
+             abi: abi_tok,
+             foreign_fns,
+             span: self.tokens[self.pos.min(1)].span,
+         })
+     }
+
+      fn parse_bahya_dhatu(&mut self) -> Result<ASTNode, ParseError> {
+          let start_span = self.peek().span;
+          self.advance(); // consume BahyaDhatu
+          let name_tok = self.expect_identifier()?;
+          let name = if let TokenKind::Naama(n) = name_tok.kind {
+              n
+          } else {
+              unreachable!()
+          };
+          let mut params = Vec::new();
+          while !self.is_karoti() && !self.check(&TokenKind::Danda) && !self.check(&TokenKind::Phalam) && !self.is_at_end() {
+              let p_tok = self.expect_identifier()?;
+              let p_name = if let TokenKind::Naama(n) = p_tok.kind {
+                  n
+              } else {
+                  unreachable!()
+              };
+              let vibhakti = self.match_vibhakti().unwrap_or(Vibhakti::Prathama);
+              params.push(KarakaParam {
+                  name: p_name,
+                  role: vibhakti_to_karaka(&vibhakti),
+                  vibhakti,
+                  is_borrowed: false,
+                  is_mutable_borrow: false,
+                  type_name: String::new(),
+                  span: p_tok.span,
+              });
+          }
+          let return_type = if self.check(&TokenKind::Phalam) {
+              Some(Box::new(self.parse_phalam_type()?))
+          } else {
+              None
+          };
+          if self.check(&TokenKind::LBrace) {
+              return Err(ParseError::BahyaDhatuMustNotHaveBody { span: start_span });
+          }
+          self.expect(TokenKind::Danda)?;
+          Ok(ASTNode::BahyaDhatuNode {
+              name,
+              params,
+              return_type,
+              span: start_span,
+          })
+      }
+
+     fn parse_shraddha_block(&mut self) -> Result<ASTNode, ParseError> {
+         let start_span = self.peek().span;
+         self.advance(); // consume Shraddha
+         self.expect(TokenKind::LBrace)?;
+         let mut body = Vec::new();
+         while !self.check(&TokenKind::RBrace) && !self.is_at_end() {
+             body.push(self.parse_vakya()?);
+         }
+         self.expect(TokenKind::RBrace)?;
+         Ok(ASTNode::ShraddhaBlockNode {
+             body,
+             span: start_span,
+         })
+     }
+ }
 
 #[cfg(test)]
 mod tests {
@@ -3736,5 +3839,208 @@ mod mrittika_tests {
         ];
         let result = parse_tokens(tokens);
         assert!(result.is_err(), "naamadheya after vikara should produce a parse error");
+    }
+
+    // --- FOREIGN FUNCTION INTEROP (APTavakya) PARSER TESTS ---
+
+    #[test]
+    fn test_parse_aptavakya_block_single_foreign_fn() {
+        let tokens = vec![
+            kw(TokenKind::Aptavakya),
+            string_literal("C"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::BahyaDhatu),
+            nm("puts"),
+            kw(TokenKind::Phalam),
+            nm("Purnaank"),
+            nm("Vaak"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse aptavakya block");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::AptavakyaBlockNode { abi, foreign_fns, .. } => {
+                        assert_eq!(abi, "C");
+                        assert_eq!(foreign_fns.len(), 1);
+                        match &foreign_fns[0] {
+                            ASTNode::BahyaDhatuNode { name, params, return_type, .. } => {
+                                assert_eq!(name, "puts");
+                                assert!(params.is_empty());
+                                assert!(return_type.is_some());
+                            }
+                            other => panic!("expected BahyaDhatuNode, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected AptavakyaBlockNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_aptavakya_block_multiple_foreign_fns() {
+        let tokens = vec![
+            kw(TokenKind::Aptavakya),
+            string_literal("C"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::BahyaDhatu),
+            nm("puts"),
+            kw(TokenKind::Phalam),
+            nm("Purnaank"),
+            nm("Vaak"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::BahyaDhatu),
+            nm("malloc"),
+            nm("size"),
+            kw(TokenKind::Phalam),
+            nm("Vaak"),
+            nm("Purnaank"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse aptavakya block with multiple fns");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::AptavakyaBlockNode { foreign_fns, .. } => {
+                        assert_eq!(foreign_fns.len(), 2);
+                        match &foreign_fns[0] {
+                            ASTNode::BahyaDhatuNode { name, .. } => assert_eq!(name, "puts"),
+                            other => panic!("expected BahyaDhatuNode, got {:?}", other),
+                        }
+                        match &foreign_fns[1] {
+                            ASTNode::BahyaDhatuNode { name, params, .. } => {
+                                assert_eq!(name, "malloc");
+                                assert_eq!(params.len(), 1);
+                                assert_eq!(params[0].name, "size");
+                            }
+                            other => panic!("expected BahyaDhatuNode, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected AptavakyaBlockNode, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_exported_dhatu_declaration() {
+        let tokens = vec![
+            kw(TokenKind::Aptavakya),
+            kw(TokenKind::Dhātu),
+            nm("my-exported-dhatu"),
+            nm("x"),
+            nm("karoti"),
+            kw(TokenKind::Danda),
+            nm("x"),
+            kw(TokenKind::Iti),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse exported dhatu declaration");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DhatuDef { name, is_exported, .. } => {
+                        assert_eq!(name, "my-exported-dhatu");
+                        assert!(*is_exported, "exported dhatu should have is_exported=true");
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_shraddha_block_inside_function() {
+        let tokens = vec![
+            nm("my-dhatu"),
+            nm("x"),
+            nm("karoti"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::Shraddha),
+            kw(TokenKind::LBrace),
+            nm("foo"),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Iti),
+            kw(TokenKind::Danda),
+        ];
+        let ast = parse_tokens(tokens).expect("should parse shraddha block inside function");
+
+        match ast {
+            ASTNode::KaryakramNode { shareera } => {
+                assert_eq!(shareera.len(), 1);
+                match &shareera[0] {
+                    ASTNode::DhatuDef { body, .. } => {
+                        assert_eq!(body.len(), 1);
+                        match &body[0] {
+                            ASTNode::ShraddhaBlockNode { body: shraddha_body, .. } => {
+                                assert_eq!(shraddha_body.len(), 1);
+                            }
+                            other => panic!("expected ShraddhaBlockNode, got {:?}", other),
+                        }
+                    }
+                    other => panic!("expected DhatuDef, got {:?}", other),
+                }
+            }
+            other => panic!("expected KaryakramNode, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_parse_aptavakya_invalid_usage_d097() {
+        let tokens = vec![
+            kw(TokenKind::Aptavakya),
+            nm("foo"),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "aptavakya followed by identifier should error with D097");
+    }
+
+    #[test]
+    fn test_parse_bahya_dhatu_outside_aptavakya_d098() {
+        let tokens = vec![
+            kw(TokenKind::BahyaDhatu),
+            nm("foo"),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::RBracket),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "bahya-dhatu outside aptavakya should error with D098");
+    }
+
+    #[test]
+    fn test_parse_bahya_dhatu_must_not_have_body_d099() {
+        let tokens = vec![
+            kw(TokenKind::Aptavakya),
+            string_literal("C"),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::BahyaDhatu),
+            nm("foo"),
+            kw(TokenKind::LBracket),
+            kw(TokenKind::RBracket),
+            kw(TokenKind::LBrace),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+            kw(TokenKind::RBrace),
+            kw(TokenKind::Danda),
+        ];
+        let result = parse_tokens(tokens);
+        assert!(result.is_err(), "bahya-dhatu with body should error with D099");
     }
 }

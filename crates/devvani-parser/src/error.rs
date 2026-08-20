@@ -72,4 +72,13 @@ pub enum ParseError {
 
     #[error("ParseError: mrittika block requires a non-empty naamadheya version string as its first entry")]
     MissingNaamadheya { span: Span },
+
+    #[error("ParseError: aptavakya must be followed by a string literal (extern block) or dhatu (exported function), found {found:?}")]
+    InvalidAptavakyaUsage { found: TokenKind, span: Span },
+
+    #[error("ParseError: bahya-dhatu is only valid inside an aptavakya \"<abi>\" block")]
+    BahyaDhatuOutsideAptavakya { span: Span },
+
+    #[error("ParseError: bahya-dhatu must not have a body; it is a signature-only declaration")]
+    BahyaDhatuMustNotHaveBody { span: Span },
 }

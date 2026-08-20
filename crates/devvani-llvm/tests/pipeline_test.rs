@@ -31,6 +31,7 @@ shareera: vec![ASTNode::DhatuDef {
                  value: 0,
                  span: dummy_span(),
              }],
+             is_exported: false,
              span: dummy_span(),
          }],
     };
@@ -75,6 +76,7 @@ shareera: vec![ASTNode::DhatuDef {
                     }),
                 },
             ],
+            is_exported: false,
             span: dummy_span(),
         }],
     };

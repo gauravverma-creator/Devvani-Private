@@ -152,6 +152,7 @@ pub enum ASTNode {
         return_karaka: Option<KarakaRole>,
         return_type: Option<Box<ASTNode>>,
         body: Vec<ASTNode>,
+        is_exported: bool,
         span: Span,
     },
     DravyaDef {
@@ -460,16 +461,39 @@ PanktiNode {
              span: Span,
          },
 
-         // --- VERSIONING (VIKARA) ---
-         // MrittikaNode declares package identity and version info.
-         // Appears as a top-level item in KaryakramNode.shareera.
-         MrittikaNode {
-             package_name: String,
-             naamadheya: NaamadheyaNode,
-             vikaras: Vec<VikaraEntry>,
-             span: Span,
-         },
-     }
+          // --- VERSIONING (VIKARA) ---
+          // MrittikaNode declares package identity and version info.
+          // Appears as a top-level item in KaryakramNode.shareera.
+          MrittikaNode {
+              package_name: String,
+              naamadheya: NaamadheyaNode,
+              vikaras: Vec<VikaraEntry>,
+              span: Span,
+          },
+
+          // --- FOREIGN FUNCTION INTEROP (APTavakya) ---
+          // AptavakyaBlockNode — extern block declaring foreign function signatures.
+          // Syntax: aptavakya "<abi>" { bahya-dhatu <name>(<params>) <return_type> ; ... }
+          AptavakyaBlockNode {
+              abi: String,
+              foreign_fns: Vec<ASTNode>,
+              span: Span,
+          },
+          // BahyaDhatuNode — signature-only foreign function declaration.
+          // Only valid inside an aptavakya block.
+          BahyaDhatuNode {
+              name: String,
+              params: Vec<KarakaParam>,
+              return_type: Option<Box<ASTNode>>,
+              span: Span,
+          },
+          // ShraddhaBlockNode — trust block wrapping foreign function calls.
+          // Syntax: shraddha { <statements> }
+          ShraddhaBlockNode {
+              body: Vec<ASTNode>,
+              span: Span,
+          },
+      }
 
      // --- VERSIONING (VIKARA) SUPPORT TYPES ---
 
@@ -545,6 +569,66 @@ PanktiNode {
                     assert_eq!(span.line, 2);
                 }
                 _ => panic!("expected TippaniNode"),
+            }
+        }
+
+        // --- FOREIGN FUNCTION INTEROP (APTavakya) AST TESTS ---
+
+        #[test]
+        fn test_aptavakya_block_node_construction() {
+            let node = ASTNode::AptavakyaBlockNode {
+                abi: "C".to_string(),
+                foreign_fns: vec![ASTNode::BahyaDhatuNode {
+                    name: "puts".to_string(),
+                    params: vec![],
+                    return_type: None,
+                    span: Span { line: 1, col: 1, len: 1 },
+                }],
+                span: Span { line: 1, col: 1, len: 1 },
+            };
+            match node {
+                ASTNode::AptavakyaBlockNode { abi, foreign_fns, .. } => {
+                    assert_eq!(abi, "C");
+                    assert_eq!(foreign_fns.len(), 1);
+                }
+                _ => panic!("expected AptavakyaBlockNode"),
+            }
+        }
+
+        #[test]
+        fn test_bahya_dhatu_node_construction() {
+            let node = ASTNode::BahyaDhatuNode {
+                name: "malloc".to_string(),
+                params: vec![],
+                return_type: None,
+                span: Span { line: 1, col: 1, len: 1 },
+            };
+            match node {
+                ASTNode::BahyaDhatuNode { name, params, .. } => {
+                    assert_eq!(name, "malloc");
+                    assert!(params.is_empty());
+                }
+                _ => panic!("expected BahyaDhatuNode"),
+            }
+        }
+
+        #[test]
+        fn test_shraddha_block_node_construction() {
+            let node = ASTNode::ShraddhaBlockNode {
+                body: vec![ASTNode::Nama {
+                    base: "foo".to_string(),
+                    vibhakti: Vibhakti::Prathama,
+                    linga: Linga::Pullinga,
+                    vacana: Vacana::Eka,
+                    span: Span { line: 1, col: 1, len: 3 },
+                }],
+                span: Span { line: 1, col: 1, len: 1 },
+            };
+            match node {
+                ASTNode::ShraddhaBlockNode { body, .. } => {
+                    assert_eq!(body.len(), 1);
+                }
+                _ => panic!("expected ShraddhaBlockNode"),
             }
         }
     }

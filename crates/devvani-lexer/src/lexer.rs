@@ -306,14 +306,19 @@ impl<'a> Lexer<'a> {
                  "bhashya" | "Bhashya" => TokenKind::Bhashya,
                  "tippani" | "Tippani" => TokenKind::Tippani,
 
-                 // --- VERSIONING (VIKARA) KEYWORDS ---
-                 "mrittika" | "Mrittika" => TokenKind::Mrittika,
-                 "naamadheya" | "Naamadheya" => TokenKind::Naamadheya,
-                 "sukshma-vikara" | "Sukshma-vikara" => TokenKind::SukshmaVikara,
-                 "sthula-vikara" | "Sthula-vikara" => TokenKind::SthulaVikara,
-                 "satya-bheda" | "Satya-bheda" => TokenKind::SatyaBheda,
+                  // --- VERSIONING (VIKARA) KEYWORDS ---
+                  "mrittika" | "Mrittika" => TokenKind::Mrittika,
+                  "naamadheya" | "Naamadheya" => TokenKind::Naamadheya,
+                  "sukshma-vikara" | "Sukshma-vikara" => TokenKind::SukshmaVikara,
+                  "sthula-vikara" | "Sthula-vikara" => TokenKind::SthulaVikara,
+                  "satya-bheda" | "Satya-bheda" => TokenKind::SatyaBheda,
 
-                  _ => TokenKind::Naama(id),
+                  // --- FOREIGN FUNCTION INTEROP (APTavakya) KEYWORDS ---
+                  "aptavakya" | "Aptavakya" => TokenKind::Aptavakya,
+                  "bahya-dhatu" | "Bahya-dhatu" => TokenKind::BahyaDhatu,
+                  "shraddha" | "Shraddha" => TokenKind::Shraddha,
+
+                   _ => TokenKind::Naama(id),
          };
         Ok(Token {
             kind,
@@ -1225,5 +1230,80 @@ mod tests {
                 assert!(matches!(tok.kind, TokenKind::Naama(_)), "expected identifier, got {:?}", tok.kind);
             }
         }
+    }
+
+    // --- FOREIGN FUNCTION INTEROP (APTavakya) KEYWORD TESTS ---
+
+    #[test]
+    fn test_aptavakya_keyword() {
+        let mut lexer = Lexer::new("aptavakya");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Aptavakya);
+    }
+
+    #[test]
+    fn test_Aptavakya_keyword() {
+        let mut lexer = Lexer::new("Aptavakya");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Aptavakya);
+    }
+
+    #[test]
+    fn test_bahya_dhatu_keyword() {
+        let mut lexer = Lexer::new("bahya-dhatu");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::BahyaDhatu);
+    }
+
+    #[test]
+    fn test_BahyaDhatu_keyword() {
+        let mut lexer = Lexer::new("Bahya-dhatu");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::BahyaDhatu);
+    }
+
+    #[test]
+    fn test_bahya_dhatu_not_split() {
+        let mut lexer = Lexer::new("bahya-dhatu");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].kind, TokenKind::BahyaDhatu);
+        assert_eq!(tokens[1].kind, TokenKind::Samaapti);
+    }
+
+    #[test]
+    fn test_bahya_dhatu_not_identifier_minus() {
+        let mut lexer = Lexer::new("bahya-dhatu");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert!(matches!(tokens[0].kind, TokenKind::BahyaDhatu));
+        assert!(!matches!(tokens[0].kind, TokenKind::Naama(_)));
+    }
+
+    #[test]
+    fn test_shraddha_keyword() {
+        let mut lexer = Lexer::new("shraddha");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Shraddha);
+    }
+
+    #[test]
+    fn test_Shraddha_keyword() {
+        let mut lexer = Lexer::new("Shraddha");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Shraddha);
+    }
+
+    #[test]
+    fn test_aptavakya_statement() {
+        let mut lexer = Lexer::new("aptavakya \"C\" { bahya-dhatu foo । } ।");
+        let tokens = lexer.tokenize(SandhiMode::Off).unwrap();
+        assert_eq!(tokens[0].kind, TokenKind::Aptavakya);
+        assert_eq!(tokens[1].kind, TokenKind::VaakLiteral("C".to_string()));
+        assert_eq!(tokens[2].kind, TokenKind::LBrace);
+        assert_eq!(tokens[3].kind, TokenKind::BahyaDhatu);
+        assert_eq!(tokens[4].kind, TokenKind::Naama("foo".to_string()));
+        assert_eq!(tokens[5].kind, TokenKind::Danda);
+        assert_eq!(tokens[6].kind, TokenKind::RBrace);
+        assert_eq!(tokens[7].kind, TokenKind::Danda);
     }
 }

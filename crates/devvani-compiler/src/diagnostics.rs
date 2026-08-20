@@ -789,31 +789,31 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                           .to_string()
                   ),
               },
-              TypeCheckError::SatyaBhedaRequiresMajorBump => Diagnostic {
-                  severity: Severity::Dosha,
-                  code: "D096".to_string(),
-                  sanskrit_title: "सत्यभेदमहत्तरबुंद".to_string(),
-                  roman_title: "Satya Bheda Requires Major Bump".to_string(),
-                  message: "Satya-bheda (breaking change) declare kar rahe ho \
-                            jab MAJOR version >= 1 par ho. Ek breaking change \
-                            ka naamadheya mein major-version increment reflect \
-                            karna chahiye. Kyunki yeh single-file check hai \
-                            (kinhin prior version ki tulna nahi kar sakte), \
-                            yahaan MAJOR >= 1 par satya-bheda add karne ka \
-                            matlab hai ki naamadheya itself naye major-version \
-                            ka pratik hone chahiye."
-                      .to_string(),
-                  sutra_ref: Some(
-                      "Chandogya Upanishad 6.1.4 (Vacharambhana — breaking change requires a new name/version for the substance)".to_string()
-                  ),
-                  hint: Some(
-                      "Naamadheya ka MAJOR component bump karo (e.g. \"2.0.0\" ya \"1.0.0\") \
-                       jab satya-bheda add karo."
-                          .to_string(),
-                  ),
-              },
-          }
-     }
+                TypeCheckError::SatyaBhedaRequiresMajorBump => Diagnostic {
+                    severity: Severity::Dosha,
+                    code: "D096".to_string(),
+                    sanskrit_title: "सत्यभेदमहत्तरबुंद".to_string(),
+                    roman_title: "Satya Bheda Requires Major Bump".to_string(),
+                    message: "Satya-bheda (breaking change) declare kar rahe ho \
+                              jab MAJOR version >= 1 par ho. Ek breaking change \
+                              ka naamadheya mein major-version increment reflect \
+                              karna chahiye. Kyunki yeh single-file check hai \
+                              (kinhin prior version ki tulna nahi kar sakte), \
+                              yahaan MAJOR >= 1 par satya-bheda add karne ka \
+                              matlab hai ki naamadheya itself naye major-version \
+                              ka pratik hone chahiye."
+                        .to_string(),
+                    sutra_ref: Some(
+                        "Chandogya Upanishad 6.1.4 (Vacharambhana — breaking change requires a new name/version for the substance)".to_string()
+                    ),
+                    hint: Some(
+                        "Naamadheya ka MAJOR component bump karo (e.g. \"2.0.0\" ya \"1.0.0\") \
+                         jab satya-bheda add karo."
+                            .to_string(),
+                    ),
+                },
+            }
+       }
 
     pub fn from_parse_error(err: &ParseError) -> Diagnostic {
         match err {
@@ -909,6 +909,70 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                 hint: Some(
                     "Mrittika block ke andar pehli line me \
                       `naamadheya \"<version>\" ;` likho."
+                        .to_string(),
+                ),
+            },
+            ParseError::InvalidAptavakyaUsage { found, .. } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D097".to_string(),
+                sanskrit_title: "अप्तवाक्यविहिता".to_string(),
+                roman_title: "Aptavakya Vihita".to_string(),
+                message: format!(
+                    "aptavakya ka upyog galat hai — iske baad ya toh \
+                     ek string literal (extern block ke liye) ya dhatu \
+                     keyword (exported function ke liye) aana chahiye. \
+                     Found: {:?}. Mimāṃsā vyākhyāna: aptavakya (trusted \
+                     statement) ko uske visheṣa (specific form) ke saath \
+                     hi upyog kiya ja sakta hai.",
+                    found
+                ),
+                sutra_ref: Some(
+                    "Mīmāṃsā Sūtra (aptavakya — trusted-speech doctrine)".to_string()
+                ),
+                hint: Some(
+                    "aptavakya ko sahi syntax mein likho: `aptavakya \"C\" { ... }` \
+                     ya `aptavakya dhatu <naam> { ... }`."
+                        .to_string(),
+                ),
+            },
+            ParseError::BahyaDhatuOutsideAptavakya { .. } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D098".to_string(),
+                sanskrit_title: "बाह्यधातुबहिर्निवेशः".to_string(),
+                roman_title: "Bahya Dhatu Bahirniveshah".to_string(),
+                message: "bahya-dhatu (foreign function signature) sirf \
+                          aptavakya \"<abi>\" block ke andar hi valid hai. \
+                          Yeh block ke bahar nahi likh sakte. Mimāṃsā \
+                          vyākhyāna: bahya (external/foreign) ka visheṣa \
+                          (specific context) avasyaka hai."
+                    .to_string(),
+                sutra_ref: Some(
+                    "Mīmāṃsā Sūtra (bahya-dhatu — foreign-function context doctrine)".to_string()
+                ),
+                hint: Some(
+                    "bahya-dhatu ko aptavakya block ke andar hi likho: \
+                     `aptavakya \"C\" { bahya-dhatu <naam>(...) <type> ; }`."
+                        .to_string(),
+                ),
+            },
+            ParseError::BahyaDhatuMustNotHaveBody { .. } => Diagnostic {
+                severity: Severity::Dosha,
+                code: "D099".to_string(),
+                sanskrit_title: "बाह्यधातुशरीरवर्जनम्".to_string(),
+                roman_title: "Bahya Dhatu Sharira Varjanam".to_string(),
+                message: "bahya-dhatu signature-only declaration hai — \
+                          iske andar body nahi ho sakti. Agar aapne by \
+                          mistake `{` laga diya hai toh usko `;` se \
+                          replace karo. Mimāṃsā vyākhyāna: bahya-dhatu \
+                          ka rupa (form) kevala signature tak hi simit \
+                          hai, implementation nahi."
+                    .to_string(),
+                sutra_ref: Some(
+                    "Mīmāṃsā Sūtra (bahya-dhatu — signature-only declaration doctrine)".to_string()
+                ),
+                hint: Some(
+                    "bahya-dhatu declaration ko `;` se terminate karo: \
+                     `bahya-dhatu <naam>(<params>) <return_type> ;`."
                         .to_string(),
                 ),
             },

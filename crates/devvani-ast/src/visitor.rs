@@ -47,6 +47,10 @@ pub trait ASTVisitor {
 
     fn visit_mrittika(&mut self, node: &ASTNode) -> VisitResult;
 
+    fn visit_aptavakya_block(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_bahya_dhatu(&mut self, node: &ASTNode) -> VisitResult;
+    fn visit_shraddha_block(&mut self, node: &ASTNode) -> VisitResult;
+
     fn visit(&mut self, node: &ASTNode) -> VisitResult {
         match node {
             ASTNode::KaryakramNode { shareera, .. } => self.visit_karyakram(shareera),
@@ -99,6 +103,9 @@ pub trait ASTVisitor {
                 ASTNode::SadrishyaNigamanaNode { .. } => self.visit_sadrishya_nigamana(node),
                 ASTNode::AsadrishyaNigamanaNode { .. } => self.visit_asadrishya_nigamana(node),
                 ASTNode::MrittikaNode { .. } => self.visit_mrittika(node),
+                ASTNode::AptavakyaBlockNode { .. } => self.visit_aptavakya_block(node),
+                ASTNode::BahyaDhatuNode { .. } => self.visit_bahya_dhatu(node),
+                ASTNode::ShraddhaBlockNode { .. } => self.visit_shraddha_block(node),
                 _ => Ok(()),
         }
     }
@@ -529,6 +536,40 @@ fn visit_samprapti(&mut self, node: &ASTNode) -> VisitResult {
         if let ASTNode::MrittikaNode { package_name, vikaras, .. } = node {
             self.print_indent();
             println!("Mrittika [{}] {} vikaras", package_name, vikaras.len());
+        }
+        Ok(())
+    }
+
+    fn visit_aptavakya_block(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::AptavakyaBlockNode { abi, foreign_fns, .. } = node {
+            self.print_indent();
+            println!("AptavakyaBlock [{}] {} foreign fns", abi, foreign_fns.len());
+            self.indent += 1;
+            for fn_node in foreign_fns {
+                self.visit(fn_node)?;
+            }
+            self.indent -= 1;
+        }
+        Ok(())
+    }
+
+    fn visit_bahya_dhatu(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::BahyaDhatuNode { name, params, .. } = node {
+            self.print_indent();
+            println!("BahyaDhatu [{}] {} params", name, params.len());
+        }
+        Ok(())
+    }
+
+    fn visit_shraddha_block(&mut self, node: &ASTNode) -> VisitResult {
+        if let ASTNode::ShraddhaBlockNode { body, .. } = node {
+            self.print_indent();
+            println!("Shraddha");
+            self.indent += 1;
+            for stmt in body {
+                self.visit(stmt)?;
+            }
+            self.indent -= 1;
         }
         Ok(())
     }

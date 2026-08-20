@@ -188,11 +188,16 @@ pub enum TokenKind {
             SthulaVikara,  // minor-level backward-compatible addition
             SatyaBheda,    // breaking change
 
-            // --- META ---
-            NavaPankti, // Newline
-            Aavakaasha, // Whitespace
-            Samaapti,   // EOF
-       Unknown(char),
+             // --- FOREIGN FUNCTION INTEROP (APTavakya) ---
+             Aptavakya,  // aptavakya — extern block / exported dhatu declaration keyword
+             BahyaDhatu, // bahya-dhatu — foreign function signature keyword
+             Shraddha,   // shraddha — trust block wrapping foreign calls
+
+             // --- META ---
+             NavaPankti, // Newline
+             Aavakaasha, // Whitespace
+             Samaapti,   // EOF
+        Unknown(char),
        LBracket, // [
        RBracket, // ]
        LBrace,   // { — block delimiter (samyoga, manas bodies)

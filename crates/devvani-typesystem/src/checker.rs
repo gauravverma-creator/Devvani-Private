@@ -2293,6 +2293,7 @@ fn dhatu_def(name: &str, body: Vec<ASTNode>) -> ASTNode {
              return_karaka: None,
              return_type: None,
              body,
+             is_exported: false,
              span: span(),
          }
      }
@@ -3458,6 +3459,7 @@ ASTNode::DhatuDef {
              return_karaka: None,
              return_type: return_type.map(Box::new),
              body,
+             is_exported: false,
              span: span(),
          }
      }
@@ -3962,6 +3964,7 @@ ASTNode::DhatuDef {
             return_karaka: None,
             return_type: None,
             body: vec![],
+            is_exported: false,
             span: span(),
         };
         let mut checker = TypeChecker::new();
@@ -4025,6 +4028,7 @@ type_name: "sankhya".to_string(),
              return_karaka: None,
              return_type: None,
              body: vec![],
+             is_exported: false,
              span: span(),
          };
          let mut checker = TypeChecker::new();
@@ -4127,6 +4131,7 @@ type_name: "sankhya".to_string(),
             return_karaka: None,
             return_type: return_type.map(Box::new),
             body,
+            is_exported: false,
             span: span(),
         }
     }
@@ -5109,6 +5114,7 @@ type_name: "sankhya".to_string(),
             return_karaka: None,
             return_type: return_type.map(Box::new),
             body: vec![],
+            is_exported: false,
             span: span(),
         }
     }

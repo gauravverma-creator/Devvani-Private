@@ -1,13 +1,10 @@
 use clap::{Parser as ClapParser, Subcommand, ValueEnum};
+use devvani_codegen::{Codegen, CodegenTarget};
 use devvani_compiler::diagnostics::DiagnosticEngine;
 use devvani_compiler::Compiler;
 use devvani_lexer::{Lexer, SandhiMode};
-use devvani_llvm::codegen::IrEmitter;
-use devvani_llvm::target::DevvaniTarget;
 use devvani_parser::Parser;
 use devvani_typesystem::checker::TypeChecker;
-use inkwell::context::Context;
-use inkwell::targets::FileType;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::TempDir;
@@ -224,17 +221,33 @@ fn main() {
                 return;
             }
 
-            // 4. LLVM Codegen
-            let context = Context::create();
-            let module_name = Path::new(file).file_stem().unwrap().to_str().unwrap();
-            let mut emitter = IrEmitter::new(&context, module_name);
-            let ir = match emitter.emit_ir(&ast) {
-                Ok(s) => s,
+            // 4. Codegen (Rust source emission)
+            let mut codegen = Codegen::new(CodegenTarget::RustSource);
+            if let Err(e) = codegen.generate(&ast) {
+                eprintln!("Codegen error: {:?}", e);
+                return;
+            }
+            let rust_code = codegen.rust_source().to_string();
+
+            let tmp_dir = match TempDir::new() {
+                Ok(d) => d,
                 Err(e) => {
-                    eprintln!("Codegen error: {}", e);
-                    return;
+                    eprintln!("Failed to create temp directory: {}", e);
+                    std::process::exit(1);
                 }
             };
+            let tmp_rs_path = tmp_dir.path().join("generated.rs");
+            if let Err(e) = fs::write(&tmp_rs_path, &rust_code) {
+                eprintln!("Failed to write generated Rust source: {}", e);
+                std::process::exit(1);
+            }
+
+            let binary_rs_path = tmp_dir.path().join("generated_binary.rs");
+            let wrapped = format!("fn main() {{\n{}\n}}", rust_code);
+            if let Err(e) = fs::write(&binary_rs_path, &wrapped) {
+                eprintln!("Failed to write wrapped Rust source: {}", e);
+                std::process::exit(1);
+            }
 
             let default_out = Path::new(file).with_extension("");
             let out_base = output
@@ -243,40 +256,42 @@ fn main() {
 
             match emit {
                 EmitTarget::Ir => {
-                    let out_path = format!("{}.ll", out_base);
-                    fs::write(&out_path, ir).expect("Failed to write IR");
-                    println!("✓ IR written to: {}", out_path);
+                    let out_path = format!("{}.rs", out_base);
+                    fs::write(&out_path, rust_code).expect("Failed to write Rust source");
+                    println!("✓ Rust source written to: {}", out_path);
                 }
                 EmitTarget::Obj => {
                     let out_path = format!("{}.o", out_base);
-                    let target = DevvaniTarget::new_native().expect("Failed to init native target");
-                    target
-                        .machine
-                        .write_to_file(&emitter.module, FileType::Object, Path::new(&out_path))
-                        .expect("Failed to write object file");
-                    println!("✓ Object file written to: {}", out_path);
+                    let output = std::process::Command::new("rustc")
+                        .arg(&binary_rs_path)
+                        .arg("--emit=obj")
+                        .arg("-o")
+                        .arg(&out_path)
+                        .output()
+                        .expect("Failed to run rustc");
+
+                    if output.status.success() {
+                        println!("✓ Object file written to: {}", out_path);
+                    } else {
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        eprintln!("rustc failed:\n{}", stderr);
+                        std::process::exit(1);
+                    }
                 }
                 EmitTarget::Binary => {
-                    let obj_path = format!("{}.o", out_base);
-                    let target = DevvaniTarget::new_native().expect("Failed to init native target");
-                    target
-                        .machine
-                        .write_to_file(&emitter.module, FileType::Object, Path::new(&obj_path))
-                        .expect("Failed to write temporary object file");
-
                     let bin_path = out_base;
-                    let status = std::process::Command::new("cc")
-                        .arg(&obj_path)
+                    let output = std::process::Command::new("rustc")
+                        .arg(&binary_rs_path)
                         .arg("-o")
                         .arg(bin_path)
-                        .status()
-                        .expect("Failed to run linker (cc)");
+                        .output()
+                        .expect("Failed to run rustc");
 
-                    if status.success() {
+                    if output.status.success() {
                         println!("✓ Binary written to: {}", bin_path);
-                        let _ = fs::remove_file(obj_path);
                     } else {
-                        eprintln!("Linking failed");
+                        let stderr = String::from_utf8_lossy(&output.stderr);
+                        eprintln!("rustc failed:\n{}", stderr);
                         std::process::exit(1);
                     }
                 }

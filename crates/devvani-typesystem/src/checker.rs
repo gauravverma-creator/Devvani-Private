@@ -150,6 +150,14 @@ pub enum TypeCheckError {
     InvalidPackageName,
     /// D096 — सत्यभेदमहत्तरबुंद (SatyaBhedaRequiresMajorBump): satya-bheda declared while MAJOR >= 1 without a major-version bump
     SatyaBhedaRequiresMajorBump,
+    /// D100 — बाह्यधातुश्रद्धाबाह्यः (BahyaDhatuShraddhaBahyah): foreign (bahya-dhatu) function called outside a shraddha block
+    ForeignCallOutsideShraddha {
+        name: String,
+    },
+    /// D102 — निर्यातधातुद्वन्द्व (NiryataDhatuDvandva): duplicate exported (aptavakya) dhatu name in the same compilation unit
+    DuplicateExportedDhatu {
+        name: String,
+    },
 }
 
 impl fmt::Display for TypeCheckError {
@@ -379,10 +387,16 @@ impl fmt::Display for TypeCheckError {
                TypeCheckError::InvalidPackageName => {
                    write!(f, "Invalid-package-name: package name must be a non-empty ASCII identifier starting with a letter, containing only letters, digits, and hyphens, with no consecutive or trailing hyphens")
                }
-               TypeCheckError::SatyaBhedaRequiresMajorBump => {
-                   write!(f, "Satya-bheda-requires-major-bump: a breaking change (satya-bheda) at MAJOR >= 1 requires the naamadheya to reflect a major-version increment")
-               }
-           }
+                TypeCheckError::SatyaBhedaRequiresMajorBump => {
+                    write!(f, "Satya-bheda-requires-major-bump: a breaking change (satya-bheda) at MAJOR >= 1 requires the naamadheya to reflect a major-version increment")
+                }
+                TypeCheckError::ForeignCallOutsideShraddha { name } => {
+                    write!(f, "Bahya-dhatu-shraddha-bahyah: foreign function '{}' can only be called inside a shraddha {{ }} trust block", name)
+                }
+                TypeCheckError::DuplicateExportedDhatu { name } => {
+                    write!(f, "Niryata-dhatu-dvandva: duplicate exported dhatu '{}' — aptavakya dhatu names must be globally unique within the compilation unit", name)
+                }
+            }
       }
   }
 
@@ -616,6 +630,12 @@ pub struct TypeChecker {
     /// Temporary map for recording node types during DhatuDef body checking
     /// (used for return-type inference across branches).
     node_type_map: HashMap<*const ASTNode, DevvaniType>,
+    /// Set of bahya-dhatu (foreign function) names registered from aptavakya blocks
+    foreign_dhatus: HashSet<String>,
+    /// Whether the checker is currently inside a shraddha block body
+    in_shraddha_block: bool,
+    /// Set of exported (aptavakya) dhatu names seen so far (for D102 duplicate detection)
+    exported_dhatu_names: HashSet<String>,
 }
 
     impl TypeChecker {
@@ -638,6 +658,9 @@ pub struct TypeChecker {
             current_scope_vars: HashSet::new(),
             current_scope_vars_stack: Vec::new(),
             node_type_map: HashMap::new(),
+            foreign_dhatus: HashSet::new(),
+            in_shraddha_block: false,
+            exported_dhatu_names: HashSet::new(),
         }
     }
 
@@ -1158,6 +1181,7 @@ pub struct TypeChecker {
                 body,
                 return_type,
                 lakara,
+                is_exported,
                 ..
             } => {
                 let l_str = format!("{:?}", lakara);
@@ -1254,6 +1278,16 @@ pub struct TypeChecker {
                     self.errors.push(TypeCheckError::AnavasthaDosha {
                         dhatu_name: name.clone(),
                     });
+                }
+
+                if *is_exported {
+                    if self.exported_dhatu_names.contains(name) {
+                        self.errors.push(TypeCheckError::DuplicateExportedDhatu {
+                            name: name.clone(),
+                        });
+                    } else {
+                        self.exported_dhatu_names.insert(name.clone());
+                    }
                 }
 
                 match scope.return_wrapper {
@@ -1516,7 +1550,7 @@ pub struct TypeChecker {
                     .map(|p| !p.is_empty())
                     .unwrap_or(false);
 
-                if is_generic {
+                let kriya_result = if is_generic {
                     let generic_params_set: HashSet<String> = self
                         .function_generic_params
                         .get(kriya)
@@ -1566,15 +1600,24 @@ pub struct TypeChecker {
                                     param_name: missing.clone(),
                                 });
                             }
-                            return DevvaniType::Unknown;
+                            DevvaniType::Unknown
+                        } else {
+                            Self::substitute_samanya_in_type(declared_return.clone(), &inference)
                         }
-                        return Self::substitute_samanya_in_type(declared_return.clone(), &inference);
+                    } else {
+                        DevvaniType::Subject(kriya.clone())
                     }
-
-                    DevvaniType::Subject(kriya.clone())
                 } else {
                     DevvaniType::Subject(kriya.clone())
+                };
+
+                if self.foreign_dhatus.contains(kriya) && !self.in_shraddha_block {
+                    self.errors.push(TypeCheckError::ForeignCallOutsideShraddha {
+                        name: kriya.clone(),
+                    });
                 }
+
+                kriya_result
             }
 
             ASTNode::AvartanaNode { call, .. } => self.check(call),
@@ -2032,12 +2075,68 @@ ASTNode::SamprapatiNode { expr, .. } => {
                    DevvaniType::Subject("Bool".to_string())
                }
 
-               ASTNode::MrittikaNode { package_name, naamadheya, vikaras, .. } => {
-                   self.check_mrittika(package_name, naamadheya, vikaras);
-                   DevvaniType::Unknown
-               }
+                ASTNode::MrittikaNode { package_name, naamadheya, vikaras, .. } => {
+                    self.check_mrittika(package_name, naamadheya, vikaras);
+                    DevvaniType::Unknown
+                }
 
-                _ => DevvaniType::Unknown,
+                ASTNode::AptavakyaBlockNode { foreign_fns, .. } => {
+                    for fn_node in foreign_fns {
+                        if let ASTNode::BahyaDhatuNode {
+                            name,
+                            params,
+                            return_type,
+                            ..
+                        } = fn_node
+                        {
+                            for param in params {
+                                let ty = if self.current_generic_params.contains(&param.type_name) {
+                                    DevvaniType::Samanya(param.type_name.clone())
+                                } else {
+                                    self.resolve_type_name(&param.type_name)
+                                        .unwrap_or_else(|| DevvaniType::Parameter(param.name.clone()))
+                                };
+                            }
+                            if let Some(rt) = return_type {
+                                let resolved_rt = self.check(rt);
+                                self.function_return_types.insert(name.clone(), resolved_rt);
+                            }
+                            self.function_params.insert(name.clone(), params.clone());
+                            self.foreign_dhatus.insert(name.clone());
+                        }
+                    }
+                    DevvaniType::Unknown
+                }
+
+                ASTNode::BahyaDhatuNode { name, params, return_type, .. } => {
+                    for param in params {
+                        let ty = if self.current_generic_params.contains(&param.type_name) {
+                            DevvaniType::Samanya(param.type_name.clone())
+                        } else {
+                            self.resolve_type_name(&param.type_name)
+                                .unwrap_or_else(|| DevvaniType::Parameter(param.name.clone()))
+                        };
+                    }
+                    if let Some(rt) = return_type {
+                        let resolved_rt = self.check(rt);
+                        self.function_return_types.insert(name.clone(), resolved_rt);
+                    }
+                    self.function_params.insert(name.clone(), params.clone());
+                    self.foreign_dhatus.insert(name.clone());
+                    DevvaniType::Unknown
+                }
+
+                ASTNode::ShraddhaBlockNode { body, .. } => {
+                    let old_in_shraddha = self.in_shraddha_block;
+                    self.in_shraddha_block = true;
+                    for stmt in body {
+                        self.check(stmt);
+                    }
+                    self.in_shraddha_block = old_in_shraddha;
+                    DevvaniType::Unknown
+                }
+
+                 _ => DevvaniType::Unknown,
           };
           self.node_type_map.insert(node as *const ASTNode, ty.clone());
           ty
@@ -6020,6 +6119,298 @@ type_name: "sankhya".to_string(),
         assert!(
             checker.errors.is_empty(),
             "expected zero diagnostics for valid mrittika block, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // ===== FOREIGN FUNCTION INTEROP (APTavakya) TypeSystem Tests =====
+
+    fn bahya_dhatu_node(name: &str, params: Vec<(&str, &str)>, return_type: Option<ASTNode>) -> ASTNode {
+        ASTNode::BahyaDhatuNode {
+            name: name.to_string(),
+            params: params
+                .into_iter()
+                .map(|(n, t)| KarakaParam {
+                    name: n.to_string(),
+                    role: devvani_ast::KarakaRole::Karma,
+                    vibhakti: devvani_ast::Vibhakti::Dvitiya,
+                    is_borrowed: false,
+                    is_mutable_borrow: false,
+                    type_name: t.to_string(),
+                    span: span(),
+                })
+                .collect(),
+            return_type: return_type.map(Box::new),
+            span: span(),
+        }
+    }
+
+    fn aptavakya_block(foreign_fns: Vec<ASTNode>) -> ASTNode {
+        ASTNode::AptavakyaBlockNode {
+            abi: "C".to_string(),
+            foreign_fns,
+            span: span(),
+        }
+    }
+
+    fn shraddha_block(body: Vec<ASTNode>) -> ASTNode {
+        ASTNode::ShraddhaBlockNode {
+            body,
+            span: span(),
+        }
+    }
+
+    // --- D100: ForeignCallOutsideShraddha ---
+
+    #[test]
+    fn test_foreign_call_outside_shraddha_triggers_d100() {
+        let mut checker = TypeChecker::new();
+        let aptavakya = aptavakya_block(vec![bahya_dhatu_node(
+            "foreign_puts",
+            vec![("s", "vaak")],
+            Some(ASTNode::PurnaankLiteral { value: 0, span: span() }),
+        )]);
+        let _ = checker.check(&aptavakya);
+
+        let call = ASTNode::KriyaCall {
+            karta: None,
+            kriya: "foreign_puts".to_string(),
+            karma: vec![ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        };
+        let _ty = checker.check(&call);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::ForeignCallOutsideShraddha { .. })),
+            "expected ForeignCallOutsideShraddha D100, got: {:?}",
+            checker.errors
+        );
+        if let Some(TypeCheckError::ForeignCallOutsideShraddha { name }) = checker.errors.iter().find(|e| matches!(e, TypeCheckError::ForeignCallOutsideShraddha { .. })) {
+            assert_eq!(name, "foreign_puts");
+        }
+    }
+
+    #[test]
+    fn test_foreign_call_inside_shraddha_no_d100() {
+        let mut checker = TypeChecker::new();
+        let aptavakya = aptavakya_block(vec![bahya_dhatu_node(
+            "foreign_puts",
+            vec![("s", "vaak")],
+            Some(ASTNode::PurnaankLiteral { value: 0, span: span() }),
+        )]);
+        let _ = checker.check(&aptavakya);
+
+        let shraddha = shraddha_block(vec![ASTNode::KriyaCall {
+            karta: None,
+            kriya: "foreign_puts".to_string(),
+            karma: vec![ASTNode::VaakLiteral {
+                value: "hello".to_string(),
+                span: span(),
+            }],
+            karana: None,
+            sampradana: None,
+            apadan: None,
+            adhikarana: None,
+            span: span(),
+        }]);
+        let _ty = checker.check(&shraddha);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::ForeignCallOutsideShraddha { .. })),
+            "expected no D100 inside shraddha, got: {:?}",
+            checker.errors
+        );
+    }
+
+    #[test]
+    fn test_foreign_call_inside_shraddha_with_normal_statements_no_d100() {
+        let mut checker = TypeChecker::new();
+        let aptavakya = aptavakya_block(vec![bahya_dhatu_node(
+            "foreign_puts",
+            vec![("s", "vaak")],
+            Some(ASTNode::PurnaankLiteral { value: 0, span: span() }),
+        )]);
+        let _ = checker.check(&aptavakya);
+
+        let shraddha = shraddha_block(vec![
+            ASTNode::AstiNode {
+                naama: "x".to_string(),
+                mulya: Box::new(ASTNode::PurnaankLiteral { value: 5, span: span() }),
+            },
+            ASTNode::KriyaCall {
+                karta: None,
+                kriya: "foreign_puts".to_string(),
+                karma: vec![ASTNode::VaakLiteral {
+                    value: "hello".to_string(),
+                    span: span(),
+                }],
+                karana: None,
+                sampradana: None,
+                apadan: None,
+                adhikarana: None,
+                span: span(),
+            },
+        ]);
+        let _ty = checker.check(&shraddha);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::ForeignCallOutsideShraddha { .. })),
+            "expected no D100 for mixed normal+foreign inside shraddha, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // --- D102: DuplicateExportedDhatu ---
+
+    #[test]
+    fn test_duplicate_exported_dhatu_triggers_d102() {
+        let mut checker = TypeChecker::new();
+        let d1 = ASTNode::DhatuDef {
+            name: "shared_export".to_string(),
+            generic_params: vec![],
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: None,
+            body: vec![],
+            is_exported: true,
+            span: span(),
+        };
+        let d2 = ASTNode::DhatuDef {
+            name: "shared_export".to_string(),
+            generic_params: vec![],
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: None,
+            body: vec![],
+            is_exported: true,
+            span: span(),
+        };
+        let _ = checker.check(&d1);
+        let _ = checker.check(&d2);
+        assert!(
+            checker.errors.iter().any(|e| matches!(e, TypeCheckError::DuplicateExportedDhatu { .. })),
+            "expected DuplicateExportedDhatu D102, got: {:?}",
+            checker.errors
+        );
+        if let Some(TypeCheckError::DuplicateExportedDhatu { name }) = checker.errors.iter().find(|e| matches!(e, TypeCheckError::DuplicateExportedDhatu { .. })) {
+            assert_eq!(name, "shared_export");
+        }
+    }
+
+    #[test]
+    fn test_two_different_exported_dhatu_names_no_d102() {
+        let mut checker = TypeChecker::new();
+        let d1 = ASTNode::DhatuDef {
+            name: "export_one".to_string(),
+            generic_params: vec![],
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: None,
+            body: vec![],
+            is_exported: true,
+            span: span(),
+        };
+        let d2 = ASTNode::DhatuDef {
+            name: "export_two".to_string(),
+            generic_params: vec![],
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: None,
+            body: vec![],
+            is_exported: true,
+            span: span(),
+        };
+        let _ = checker.check(&d1);
+        let _ = checker.check(&d2);
+        assert!(
+            !checker.errors.iter().any(|e| matches!(e, TypeCheckError::DuplicateExportedDhatu { .. })),
+            "expected no D102 for different exported names, got: {:?}",
+            checker.errors
+        );
+    }
+
+    // --- Bahya-dhatu signature type-checking ---
+
+    #[test]
+    fn test_single_bahya_dhatu_signature_type_checks() {
+        let mut checker = TypeChecker::new();
+        let aptavakya = aptavakya_block(vec![bahya_dhatu_node(
+            "malloc",
+            vec![],
+            Some(ASTNode::VaakLiteral { value: "void*".to_string(), span: span() }),
+        )]);
+        let _ty = checker.check(&aptavakya);
+        assert!(checker.errors.is_empty(), "expected no errors for valid bahya-dhatu, got: {:?}", checker.errors);
+        assert!(checker.foreign_dhatus.contains("malloc"));
+        assert!(checker.function_params.contains_key("malloc"));
+    }
+
+    #[test]
+    fn test_multiple_bahya_dhatu_signatures_type_check() {
+        let mut checker = TypeChecker::new();
+        let aptavakya = aptavakya_block(vec![
+            bahya_dhatu_node("malloc", vec![], Some(ASTNode::VaakLiteral { value: "void*".to_string(), span: span() })),
+            bahya_dhatu_node("free", vec![("ptr", "sankhya")], Some(ASTNode::PurnaankLiteral { value: 0, span: span() })),
+        ]);
+        let _ty = checker.check(&aptavakya);
+        assert!(checker.errors.is_empty(), "expected no errors, got: {:?}", checker.errors);
+        assert!(checker.foreign_dhatus.contains("malloc"));
+        assert!(checker.foreign_dhatus.contains("free"));
+    }
+
+    #[test]
+    fn test_exported_dhatu_type_checks_normally() {
+        let mut checker = TypeChecker::new();
+        let body = vec![ASTNode::SamprapatiNode {
+            expr: Box::new(ASTNode::PhalamType {
+                success_type: "sankhya".to_string(),
+                error_type: "vaak".to_string(),
+                span: span(),
+            }),
+            span: span(),
+        }];
+        let exported = ASTNode::DhatuDef {
+            name: "my_export".to_string(),
+            generic_params: vec![],
+            lakara: Lakara::Lat,
+            gana: Gana::Bhvadi,
+            linga: Linga::Pullinga,
+            vacana: Vacana::Eka,
+            params: vec![],
+            upasargas: vec![],
+            return_karaka: None,
+            return_type: Some(Box::new(ASTNode::VaakLiteral { value: "unknown".to_string(), span: span() })),
+            body,
+            is_exported: true,
+            span: span(),
+        };
+        let _ty = checker.check(&exported);
+        assert!(checker.errors.iter().any(|e| matches!(e, TypeCheckError::SamprāptiAyogyatā)),
+            "expected SamprāptiAyogyatā for return type mismatch in exported dhatu, got: {:?}",
             checker.errors
         );
     }

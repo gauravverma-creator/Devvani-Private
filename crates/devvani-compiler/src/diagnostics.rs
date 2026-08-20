@@ -812,6 +812,52 @@ TypeCheckError::KramashahAprayukta { found } => Diagnostic {
                             .to_string(),
                     ),
                 },
+                TypeCheckError::ForeignCallOutsideShraddha { name } => Diagnostic {
+                    severity: Severity::Dosha,
+                    code: "D100".to_string(),
+                    sanskrit_title: "बाह्यधातुश्रद्धाबाह्यः".to_string(),
+                    roman_title: "Bahya Dhatu Shraddha Bahyah".to_string(),
+                    message: format!(
+                        "bahya-dhatu (foreign function) '{}' ko sirf shraddha {{ }} \
+                         trust block ke andar hi call kiya ja sakta hai. Shraddha \
+                         block ke bahar foreign functions call karna apashastra \
+                         (prohibited) hai. Mīmāṃsā vyākhyāna: śraddhā (trust) ka \
+                         visheṣa (specific context) avasyaka hai — bahya-dhatu ka \
+                         upayoga kevala śraddhā-gata (trusted) context mein hi \
+                         valid hai.",
+                        name
+                    ),
+                    sutra_ref: Some(
+                        "Mīmāṃsā Sūtra (śraddhā — trust/confidence doctrine for foreign interop)".to_string()
+                    ),
+                    hint: Some(
+                        "Is foreign call ko ek shraddha block ke andar likho: \
+                         `shraddha {{ ... <naam>(...) ; }}`."
+                            .to_string(),
+                    ),
+                },
+                TypeCheckError::DuplicateExportedDhatu { name } => Diagnostic {
+                    severity: Severity::Dosha,
+                    code: "D102".to_string(),
+                    sanskrit_title: "निर्यातधातुद्वन्द्व".to_string(),
+                    roman_title: "Niryata Dhatu Dvandva".to_string(),
+                    message: format!(
+                        "aptavakya dhatu '{}' do baar define ho raha hai — \
+                         exported (aptavakya) dhatu names must be globally \
+                         unique within the compilation unit. Rust ke #[no_mangle] \
+                         jaise uniqueness requirement ke anusaar, duplicate \
+                         exported function names allowed nahi hain.",
+                        name
+                    ),
+                    sutra_ref: Some(
+                        "Mīmāṃsā Sūtra (aptavakya — trusted-speech uniqueness doctrine)".to_string()
+                    ),
+                    hint: Some(
+                        "Doosri '{}' exported dhatu ka naam change karo ya \
+                         usko non-exported dhatu banado."
+                            .to_string(),
+                    ),
+                },
             }
        }
 
@@ -1721,5 +1767,37 @@ mod tests {
         assert!(diag.sanskrit_title.contains("सत्यभेदमहत्तरबुंद"));
         assert!(diag.message.contains("MAJOR"));
         assert!(diag.sutra_ref.unwrap().contains("Vacharambhana"));
+    }
+
+    // --- D100: ForeignCallOutsideShraddha ---
+
+    #[test]
+    fn test_from_type_error_foreign_call_outside_shraddha_d100() {
+        let err = TypeCheckError::ForeignCallOutsideShraddha {
+            name: "foreign_puts".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D100");
+        assert!(diag.display().contains("Bahya Dhatu Shraddha Bahyah"));
+        assert!(diag.sanskrit_title.contains("बाह्यधातुश्रद्धाबाह्यः"));
+        assert!(diag.message.contains("foreign_puts"));
+        assert!(diag.message.contains("shraddha"));
+        assert!(diag.sutra_ref.unwrap().contains("śraddhā"));
+    }
+
+    // --- D102: DuplicateExportedDhatu ---
+
+    #[test]
+    fn test_from_type_error_duplicate_exported_dhatu_d102() {
+        let err = TypeCheckError::DuplicateExportedDhatu {
+            name: "shared_export".to_string(),
+        };
+        let diag = DiagnosticEngine::from_type_error(&err);
+        assert_eq!(diag.code, "D102");
+        assert!(diag.display().contains("Niryata Dhatu Dvandva"));
+        assert!(diag.sanskrit_title.contains("निर्यातधातुद्वन्द्व"));
+        assert!(diag.message.contains("shared_export"));
+        assert!(diag.message.contains("globally unique"));
+        assert!(diag.sutra_ref.unwrap().contains("aptavakya"));
     }
 }

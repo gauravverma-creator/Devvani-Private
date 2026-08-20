@@ -691,6 +691,7 @@ impl Codegen {
                 lakara,
                 return_type,
                 generic_params,
+                is_exported,
                 ..
             } => {
                 self.flush_doc_comments();
@@ -776,10 +777,15 @@ impl Codegen {
                         }
                     }
 
-                    let async_kw = if scope.is_async { "async " } else { "" };
+                    if *is_exported {
+                        self.rust_output.push_str(&format!("{}#[no_mangle]\n", self.indent_str()));
+                    }
+                    let async_kw = if scope.is_async && !*is_exported { "async " } else { "" };
+                    let extern_c = if *is_exported { "extern \"C\" " } else { "" };
                     let line = format!(
-                        "{}pub {}fn {}({}){return_type_str} {{\n",
+                        "{}pub {}{}fn {}({}){return_type_str} {{\n",
                         self.indent_str(),
+                        extern_c,
                         async_kw,
                         sanitize_rust_ident(name),
                         rust_params.join(", ")
@@ -813,6 +819,7 @@ impl Codegen {
                                     &inference,
                                     Some(concrete_return),
                                     body,
+                                    *is_exported,
                                 );
                                 self.current_dhatu_context = prev_context;
                             }
@@ -1290,6 +1297,65 @@ impl Codegen {
                 self.emit(right)?;
                 self.rust_output.push_str(");\n");
             }
+            ASTNode::AptavakyaBlockNode { abi, foreign_fns, .. } => {
+                self.rust_output
+                    .push_str(&format!("{}extern \"{}\" {{\n", self.indent_str(), abi));
+                self.indent += 1;
+                for fn_node in foreign_fns {
+                    if let ASTNode::BahyaDhatuNode { name, params, return_type, .. } = fn_node {
+                        let mut rust_params = Vec::new();
+                        for param in params {
+                            let type_str = if param.is_borrowed {
+                                if param.is_mutable_borrow {
+                                    "&mut i64".to_string()
+                                } else {
+                                    "&i64".to_string()
+                                }
+                            } else if param.type_name.is_empty() {
+                                "i64".to_string()
+                            } else {
+                                self.type_name_to_rust_type(&param.type_name)
+                            };
+                            rust_params.push(format!(
+                                "{}: {}",
+                                sanitize_rust_ident(&param.name),
+                                type_str
+                            ));
+                        }
+                        let mut return_type_str = String::new();
+                        if let Some(rt) = return_type {
+                            match rt.as_ref() {
+                                ASTNode::PhalamType { success_type, error_type, .. } => {
+                                    let success_rust = self.type_name_to_rust_type(success_type);
+                                    let error_rust = self.type_name_to_rust_type(error_type);
+                                    return_type_str =
+                                        format!(" -> Result<{}, {}>", success_rust, error_rust);
+                                }
+                                other => {
+                                    return_type_str =
+                                        format!(" -> {}", self.generate_to_string(other)?);
+                                }
+                            }
+                        }
+                        self.rust_output.push_str(&format!(
+                            "{}fn {}({}){};\n",
+                            self.indent_str(),
+                            sanitize_rust_ident(name),
+                            rust_params.join(", "),
+                            return_type_str
+                        ));
+                    }
+                }
+                self.indent -= 1;
+                self.rust_output.push_str(&format!("{}}}\n", self.indent_str()));
+            }
+            ASTNode::ShraddhaBlockNode { body, .. } => {
+                self.rust_output.push_str("unsafe {\n");
+                self.indent += 1;
+                self.emit_body(body)?;
+                self.indent -= 1;
+                self.rust_output.push_str(&format!("{}}}\n", self.indent_str()));
+            }
             ASTNode::BhashyaNode { .. } => {}
             ASTNode::VrittiNode { text, .. } => {
                 self.pending_vritti.push(text.clone());
@@ -1399,7 +1465,7 @@ impl Codegen {
                 _ => {
                     self.flush_doc_comments();
                     self.emit(&body[i])?;
-                    if i < body.len() - 1 && !self.rust_output.ends_with(";\n") {
+                    if i < body.len() - 1 && !self.rust_output.ends_with(";\n") && self.indent > 0 {
                         self.rust_output.push_str(";\n");
                     }
                     i += 1;
@@ -1724,6 +1790,7 @@ impl Codegen {
         inference: &HashMap<String, DevvaniType>,
         return_type: Option<DevvaniType>,
         body: &[ASTNode],
+        is_exported: bool,
     ) {
         self.flush_doc_comments();
         let mut rust_params = Vec::new();
@@ -1766,9 +1833,14 @@ impl Codegen {
             }
         }
 
+        if is_exported {
+            self.rust_output.push_str(&format!("{}#[no_mangle]\n", self.indent_str()));
+        }
         let line = format!(
-            "{}pub fn {}({}){return_type_str} {{\n",
+            "{}pub {}{}fn {}({}){return_type_str} {{\n",
             self.indent_str(),
+            if is_exported { "extern \"C\" " } else { "" },
+            "",
             sanitize_rust_ident(mangled_name),
             rust_params.join(", ")
         );
@@ -5678,6 +5750,345 @@ mod tests {
             status.status.success(),
             "rustc failed for mrittika e2e:\n{}",
             stderr
+        );
+    }
+
+    // ===== FFI (Aptavakya / Shraddha) Codegen Tests =====
+
+    #[test]
+    fn test_aptavakya_block_single_foreign_fn_codegen() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::AptavakyaBlockNode {
+                abi: "C".to_string(),
+                foreign_fns: vec![ASTNode::BahyaDhatuNode {
+                    name: "my-foreign-fn".to_string(),
+                    params: vec![KarakaParam {
+                        name: "x".to_string(),
+                        role: KarakaRole::Karta,
+                        vibhakti: Vibhakti::Prathama,
+                        is_borrowed: false,
+                        is_mutable_borrow: false,
+                        type_name: String::new(),
+                        span: dummy_span(),
+                    }],
+                    return_type: None,
+                    span: dummy_span(),
+                }],
+                span: dummy_span(),
+            }],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("extern \"C\" {\n    fn my_foreign_fn(x: i64);\n}"),
+            "expected extern block with single foreign fn in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_aptavakya_block_multiple_foreign_fns_codegen() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::AptavakyaBlockNode {
+                abi: "C".to_string(),
+                foreign_fns: vec![
+                    ASTNode::BahyaDhatuNode {
+                        name: "puts".to_string(),
+                        params: vec![],
+                        return_type: Some(Box::new(ASTNode::PhalamType {
+                            success_type: "sankhya".to_string(),
+                            error_type: "vaak".to_string(),
+                            span: dummy_span(),
+                        })),
+                        span: dummy_span(),
+                    },
+                    ASTNode::BahyaDhatuNode {
+                        name: "malloc".to_string(),
+                        params: vec![KarakaParam {
+                            name: "size".to_string(),
+                            role: KarakaRole::Karma,
+                            vibhakti: Vibhakti::Dvitiya,
+                            is_borrowed: false,
+                            is_mutable_borrow: false,
+                            type_name: String::new(),
+                            span: dummy_span(),
+                        }],
+                        return_type: Some(Box::new(ASTNode::PhalamType {
+                            success_type: "vaak".to_string(),
+                            error_type: "sankhya".to_string(),
+                            span: dummy_span(),
+                        })),
+                        span: dummy_span(),
+                    },
+                ],
+                span: dummy_span(),
+            }],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(output.contains("extern \"C\" {"), "missing extern block in:\n{}", output);
+        assert!(
+            output.contains("fn puts() -> Result<i64, String>;"),
+            "missing puts declaration in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("fn malloc(size: i64) -> Result<String, i64>;"),
+            "missing malloc declaration in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_shraddha_block_codegen() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "wrapper".to_string(),
+                generic_params: vec![],
+                lakara: AstLakara::Lat,
+                gana: Gana::Bhvadi,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                params: vec![],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: None,
+                body: vec![ASTNode::ShraddhaBlockNode {
+                    body: vec![ASTNode::KriyaCall {
+                        karta: None,
+                        kriya: "foreign_fn".to_string(),
+                        karma: vec![],
+                        karana: None,
+                        sampradana: None,
+                        apadan: None,
+                        adhikarana: None,
+                        span: dummy_span(),
+                    }],
+                    span: dummy_span(),
+                }],
+                is_exported: false,
+                span: dummy_span(),
+            }],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("unsafe {"),
+            "expected unsafe block in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("foreign_fn();"),
+            "expected foreign call inside unsafe block in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_exported_dhatu_emits_no_mangle_extern_c() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "my-exported-fn".to_string(),
+                generic_params: vec![],
+                lakara: AstLakara::Lat,
+                gana: Gana::Bhvadi,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                params: vec![],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: None,
+                body: vec![],
+                is_exported: true,
+                span: dummy_span(),
+            }],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("#[no_mangle]"),
+            "expected #[no_mangle] attribute in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("pub extern \"C\" fn my_exported_fn()"),
+            "expected pub extern \"C\" fn in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_exported_dhatu_with_phalam_return_type_codegen() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "my-fn".to_string(),
+                generic_params: vec![],
+                lakara: AstLakara::Lat,
+                gana: Gana::Bhvadi,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                params: vec![],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: Some(Box::new(ASTNode::PhalamType {
+                    success_type: "sankhya".to_string(),
+                    error_type: "vaak".to_string(),
+                    span: dummy_span(),
+                })),
+                body: vec![],
+                is_exported: true,
+                span: dummy_span(),
+            }],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("#[no_mangle]"),
+            "expected #[no_mangle] in:\n{}",
+            output
+        );
+        assert!(
+            output.contains("pub extern \"C\" fn my_fn() -> Result<i64, String>"),
+            "expected Result return type in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_non_exported_dhatu_unchanged_codegen() {
+        let program = ASTNode::KaryakramNode {
+            shareera: vec![ASTNode::DhatuDef {
+                name: "my-func".to_string(),
+                generic_params: vec![],
+                lakara: AstLakara::Lat,
+                gana: Gana::Bhvadi,
+                linga: AstLinga::Pullinga,
+                vacana: AstVacana::Eka,
+                params: vec![],
+                upasargas: vec![],
+                return_karaka: None,
+                return_type: None,
+                body: vec![],
+                is_exported: false,
+                span: dummy_span(),
+            }],
+        };
+        let mut codegen = Codegen::new(CodegenTarget::RustSource);
+        assert!(codegen.emit(&program).is_ok());
+        let output = codegen.rust_source();
+        assert!(
+            output.contains("pub fn my_func()"),
+            "expected unchanged pub fn for non-exported dhatu in:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("#[no_mangle]"),
+            "non-exported dhatu must not have #[no_mangle] in:\n{}",
+            output
+        );
+        assert!(
+            !output.contains("extern \"C\""),
+            "non-exported dhatu must not have extern \"C\" in:\n{}",
+            output
+        );
+    }
+
+    #[test]
+    fn test_ffi_e2e_generated_rust_compiles_and_runs() {
+        use std::process::Command;
+        use tempfile::TempDir;
+
+        let source = "\
+aptavakya \"C\" {\n\
+    bahya-dhatu foreign_fn x ।\n\
+}\n\
+\n\
+aptavakya dhātu local_fn n karoti । n yoga 1 iti ।\n\
+\n\
+dhātu test_ffi karoti ।\n\
+    shraddha {\n\
+        local_fn 2 ।\n\
+    }\n\
+iti ।\n";
+
+        let tmp_dir = TempDir::new().expect("failed to create temp dir");
+        let src_path = tmp_dir.path().join("test_ffi.dvn");
+        std::fs::write(&src_path, source).expect("failed to write devvani source");
+
+        let rust_code = Compiler::new(&src_path)
+            .compile()
+            .expect("compilation failed");
+
+        assert!(
+            rust_code.contains("extern \"C\" {\n    fn foreign_fn(x: i64);\n}"),
+            "expected extern block in generated code:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("#[no_mangle]"),
+            "expected #[no_mangle] in generated code:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("pub extern \"C\" fn local_fn(n: i64) -> i64"),
+            "expected exported dhatu signature in generated code:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("unsafe {"),
+            "expected unsafe block in generated code:\n{}",
+            rust_code
+        );
+        assert!(
+            rust_code.contains("local_fn(2);"),
+            "expected function call inside unsafe block in:\n{}",
+            rust_code
+        );
+
+        let rust_path = tmp_dir.path().join("test_ffi.rs");
+        let out_path = tmp_dir.path().join("test_ffi_out");
+        let wrapped = format!("{}\nfn main() {{\n    test_ffi();\n    println!(\"FFI test passed\");\n}}", rust_code);
+        std::fs::write(&rust_path, wrapped).expect("failed to write temp rust file");
+
+        let status = Command::new("rustc")
+            .arg("--edition")
+            .arg("2021")
+            .arg("--crate-type")
+            .arg("bin")
+            .arg("--crate-name")
+            .arg("test_ffi_verify")
+            .arg(&rust_path)
+            .arg("-o")
+            .arg(&out_path)
+            .output()
+            .expect("failed to run rustc");
+
+        let stderr = String::from_utf8_lossy(&status.stderr);
+        assert!(
+            status.status.success(),
+            "rustc failed for FFI e2e:\n{}",
+            stderr
+        );
+
+        let run_status = Command::new(&out_path)
+            .output()
+            .expect("failed to run compiled binary");
+
+        let stdout = String::from_utf8_lossy(&run_status.stdout);
+        assert!(
+            run_status.status.success(),
+            "FFI binary execution failed:\n{}",
+            stdout
+        );
+        assert!(
+            stdout.contains("FFI test passed"),
+            "expected FFI test output, got:\n{}",
+            stdout
         );
     }
 }

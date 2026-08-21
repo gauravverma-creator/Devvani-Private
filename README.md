@@ -113,4 +113,4 @@ cargo test --workspace
 - [ ] Phase 6: Self-hosting — Devvani written in Devvani
 
 ## License
-MIT
+No license
